@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BridgeSign AI - Accessible Communication System</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-hand-peace"></i>
+                <span>BridgeSign AI</span>
+            </div>
+            <div class="nav-status">
+                <span class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connected</span>
+                </span>
+                <div class="nav-controls">
+                    <button class="nav-btn" id="settingsBtn" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="nav-btn" id="helpBtn" title="Help">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Dashboard Container -->
+    <div class="dashboard-container">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">Control Panel</h2>
+            </div>
+
+            <!-- Mode Selection -->
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-exchange-alt"></i> Mode
+                </h3>
+                <div class="mode-selector">
+                    <button class="mode-btn active" id="textToSignBtn" data-mode="text-to-sign">
+                        <i class="fas fa-keyboard"></i>
+                        <span>Text → Sign</span>
+                    </button>
+                    <button class="mode-btn" id="signToTextBtn" data-mode="sign-to-text">
+                        <i class="fas fa-video"></i>
+                        <span>Sign → Text</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Performance Metrics -->
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-tachometer-alt"></i> Performance
+                </h3>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">FPS</div>
+                        <div class="metric-value" id="fpsMeter">60</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Latency</div>
+                        <div class="metric-value" id="latencyMeter">45ms</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Confidence</div>
+                        <div class="metric-value" id="confidenceMeter">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prediction History -->
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-history"></i> Recent Predictions
+                </h3>
+                <div class="history-list" id="historyList">
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No predictions yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h3>
+                <button class="action-btn" id="repeatBtn" disabled>
+                    <i class="fas fa-redo"></i> Repeat
+                </button>
+                <button class="action-btn" id="clearBtn">
+                    <i class="fas fa-trash"></i> Clear
+                </button>
+                <button class="action-btn" id="recordBtn">
+                    <i class="fas fa-circle"></i> Record
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Avatar Display Area (Text-to-Sign mode) -->
+            <div class="viewport-container" id="avatarContainer">
+                <div id="avatar-screen" class="avatar-screen"></div>
+
+                <!-- Overlay Controls -->
+                <div class="viewport-overlay">
+                    <!-- Input Area -->
+                    <div class="input-panel">
+                        <div class="input-wrapper">
+                            <input 
+                                type="text" 
+                                id="textInput" 
+                                class="text-input" 
+                                placeholder="Type text or speak to translate..."
+                                autocomplete="off"
+                            >
+                            <button class="input-btn-speak" id="speakBtn" title="Speak">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <button class="input-btn-send" id="sendBtn" title="Send">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Feedback Panel -->
+                    <div class="feedback-panel">
+                        <div class="feedback-item">
+                            <span class="feedback-label">Current:</span>
+                            <span class="feedback-value" id="currentPrediction">-</span>
+                        </div>
+                        <div class="feedback-item">
+                            <span class="feedback-label">Confidence:</span>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" id="confidenceBar"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Webcam Display Area (Sign-to-Text mode, hidden by default) -->
+            <div class="webcam-container" id="webcamContainer" style="display:none;">
+                <div class="webcam-viewport">
+                    <video id="webcamFeedVisible" autoplay playsinline muted></video>
+                    <div class="webcam-placeholder" id="webcamPlaceholder">
+                        <i class="fas fa-video"></i>
+                        <p>Click Record to start signing</p>
+                    </div>
+                </div>
+                <div class="text-result-panel" id="textResultPanel">
+                    <div class="text-result-header">
+                        <i class="fas fa-font"></i>
+                        <span>Recognized Sign</span>
+                        <div class="header-actions">
+                            <button class="header-btn" id="signBackspaceBtn" title="Backspace (delete last letter)">
+                                <i class="fas fa-delete-left"></i>
+                            </button>
+                            <button class="header-btn" id="signSpaceBtn" title="Space (insert space)">
+                                <i class="fas fa-arrows-alt-h"></i> <span class="btn-label">SPACE</span>
+                            </button>
+                            <button class="header-btn" id="sentenceClearBtn" title="Clear all">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-result-content">
+                        <div class="text-result-sentence" id="textResultSentence">
+                            <span class="sentence-empty">Start spelling...</span>
+                        </div>
+                        <div class="text-result-spelling" id="textResultSpelling">
+                            <span class="spelling-placeholder">—</span>
+                        </div>
+                        <div class="text-result-confidence">
+                            <span class="conf-label">Confidence</span>
+                            <div class="conf-bar-track">
+                                <div class="conf-bar-fill" id="textResultConfBar"></div>
+                            </div>
+                            <span class="conf-value" id="textResultConfValue">0%</span>
+                        </div>
+                        <div class="text-result-status" id="textResultStatus"></div>
+                    </div>
+                    <div class="text-result-history" id="textResultHistory">
+                        <div class="text-result-history-header">History</div>
+                        <div class="text-result-history-list" id="resultHistoryList">
+                            <span class="empty-msg">No signs recognized yet</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Info Panel -->
+            <div class="info-panel">
+                <div class="info-item">
+                    <i class="fas fa-info-circle"></i>
+                    <span id="infoMessage">Ready to translate...</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar - Alternatives -->
+        <aside class="sidebar-right">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">Alternatives</h2>
+            </div>
+
+            <div class="alternatives-list" id="alternativesList">
+                <div class="empty-state">
+                    <i class="fas fa-lightbulb"></i>
+                    <p>Alternatives will appear here</p>
+                </div>
+            </div>
+
+            <!-- Settings Panel (Hidden by default) -->
+            <div class="settings-section" id="settingsPanel" style="display: none;">
+                <h3 class="section-title">
+                    <i class="fas fa-sliders-h"></i> Settings
+                </h3>
+                <div class="setting-group">
+                    <label for="confidenceThreshold">Confidence Threshold</label>
+                    <input type="range" id="confidenceThreshold" min="0" max="100" value="75">
+                    <span id="thresholdValue">75%</span>
+                </div>
+                <div class="setting-group">
+                    <label for="animationSpeed">Animation Speed</label>
+                    <input type="range" id="animationSpeed" min="0.5" max="2" step="0.1" value="1">
+                    <span id="speedValue">1x</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts (Loaded in correct order) -->
+    <script src="api-client.js"></script>
+    <script src="ui-manager.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

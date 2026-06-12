@@ -1,0 +1,30 @@
+# Minimal requirements for testing - compatible with Python 3.14
+
+# Core Framework (Essential)
+Flask>=3.0.0
+Flask-CORS>=4.0.0
+Flask-SQLAlchemy>=3.0.0
+flask-limiter>=3.5.0
+
+# ML & Computer Vision (Optional for now - can use local models)
+# tensorflow>=2.14.0
+# keras>=2.14.0
+opencv-python>=4.8.0
+# mediapipe>=0.10.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Web & API
+python-dotenv>=1.0.0
+requests>=2.31.0
+Werkzeug>=3.0.0
+
+# Database
+SQLAlchemy>=2.0.20
+
+# Logging
+python-json-logger>=2.0.7
+
+# Testing
+pytest>=7.4.0

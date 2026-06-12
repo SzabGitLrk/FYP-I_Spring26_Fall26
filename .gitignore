@@ -1,0 +1,45 @@
+# Python virtual environments
+venv/
+fyp_env/Lib/
+fyp_env/Scripts/
+fyp_env/Include/
+fyp_env/share/
+fyp_env/pyvenv.cfg
+fyp_env/datasets/
+fyp_env/extracted_data/
+fyp_env/*.csv
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+logs/
+*.log
+
+# Database
+instance/
+
+# IDE
+.vscode/
+.idea/
+.openclaude/
+*.swp
+*.swo
+
+# Temp PID files
+.flask_pid
+.pred_pid
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test output
+test_output.txt
+test_error.txt
+flask_*.log
+predserver.log
