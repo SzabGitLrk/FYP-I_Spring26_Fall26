@@ -1,4 +1,4 @@
-# Dual Sense AI
+# Signly AI
 
 An accessible communication system for bridging sign language and spoken language through real-time hand tracking, machine learning, and 3D avatar animation.
 
