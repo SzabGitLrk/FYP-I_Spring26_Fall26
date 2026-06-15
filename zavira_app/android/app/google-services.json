@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "279217268325",
+    "project_id": "zavira-app",
+    "storage_bucket": "zavira-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:279217268325:android:5ac18bf85cb1e459ad088c",
+        "android_client_info": {
+          "package_name": "com.zavira.example.zavira_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmQ6_UnPNpFkBgsMtK7X5BdmwvqfetxMQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
