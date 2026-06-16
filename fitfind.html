@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FitFind – Discover Your Style</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root { --cream:#FAF6EF;--warm-white:#FDF9F4;--gold:#B8892A;--gold-dark:#8B6520;--gold-light:#D4A84B;--charcoal:#2C2416;--muted:#7A6A52;--border:#E8DCC8;--card-bg:#FFF8ED;--rose:#C4736A; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--charcoal);overflow-x:hidden}
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:rgba(250,246,239,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  .nav-logo{display:flex;align-items:center;gap:10px;font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:var(--charcoal);text-decoration:none;letter-spacing:-0.5px}
+  .nav-logo-icon{width:32px;height:32px;border:2px solid var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--gold);font-weight:700}
+  .nav-links{display:flex;gap:36px;list-style:none}
+  .nav-links a{text-decoration:none;color:var(--muted);font-size:0.9rem;font-weight:500;letter-spacing:0.3px;transition:color 0.2s}
+  .nav-links a:hover,.nav-links a.active{color:var(--gold)}
+  .nav-actions{display:flex;gap:18px;align-items:center}
+  .nav-actions button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:1.1rem;transition:color 0.2s}
+  .nav-actions button:hover{color:var(--gold)}
+  .page{display:none;min-height:100vh;animation:fadeIn 0.5s ease}
+  .page.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  .hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding-top:72px}
+  .hero-bg{position:absolute;inset:0;background:linear-gradient(135deg,#E8D5B0 0%,#C9A96E 40%,#8B6520 100%)}
+  .hero-image-side{position:absolute;left:0;top:0;bottom:0;width:55%;overflow:hidden}
+  .hero-image-placeholder{width:100%;height:100%;background:linear-gradient(160deg,#D4956A 0%,#B87333 35%,#8B5E3C 65%,#5C3A1E 100%);display:flex;align-items:center;justify-content:center}
+  .outfit-silhouette{width:280px;height:480px;opacity:0.25}
+  .hero-content{position:relative;z-index:2;margin-left:auto;margin-right:6%;width:42%}
+  .hero-card{background:var(--card-bg);border-radius:20px;padding:48px 40px;box-shadow:0 32px 80px rgba(44,36,22,0.25);border:1px solid rgba(184,137,42,0.2)}
+  .hero-eyebrow{font-size:0.75rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:16px}
+  .hero-title{font-family:'Playfair Display',serif;font-size:2.8rem;line-height:1.15;color:var(--charcoal);margin-bottom:16px}
+  .hero-title em{color:var(--gold);font-style:italic}
+  .hero-subtitle{color:var(--muted);font-size:1rem;line-height:1.6;margin-bottom:32px}
+  .btn-primary{display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:white;border:none;border-radius:50px;padding:14px 28px;font-size:0.95rem;font-weight:500;cursor:pointer;transition:all 0.3s;font-family:'DM Sans',sans-serif;letter-spacing:0.3px}
+  .btn-primary:hover{background:var(--gold-dark);transform:translateY(-2px);box-shadow:0 8px 24px rgba(184,137,42,0.35)}
+  .btn-primary .icon{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:1rem}
+  .btn-secondary{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--charcoal);border:1.5px solid var(--border);border-radius:50px;padding:14px 28px;font-size:0.95rem;cursor:pointer;transition:all 0.3s;font-family:'DM Sans',sans-serif}
+  .btn-secondary:hover{border-color:var(--gold);color:var(--gold)}
+  .hero-actions{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:36px}
+  .hero-stats{display:flex;gap:28px;padding-top:28px;border-top:1px solid var(--border)}
+  .stat-num{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:var(--gold)}
+  .stat-label{font-size:0.75rem;color:var(--muted);margin-top:2px}
+  .features-strip{background:var(--charcoal);color:white;padding:20px 48px;display:flex;justify-content:center;gap:64px;flex-wrap:wrap}
+  .feature-item{display:flex;align-items:center;gap:10px;font-size:0.85rem;opacity:0.85}
+  .feature-item span:first-child{font-size:1.1rem}
+  .section{padding:80px 48px}
+  .section-header{text-align:center;margin-bottom:48px}
+  .section-eyebrow{font-size:0.72rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:12px}
+  .section-title{font-family:'Playfair Display',serif;font-size:2.2rem;color:var(--charcoal)}
+  .categories-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:900px;margin:0 auto}
+  .category-card{border-radius:16px;padding:32px 24px;text-align:center;cursor:pointer;transition:all 0.3s;border:1.5px solid var(--border);background:var(--card-bg)}
+  .category-card:hover{border-color:var(--gold);transform:translateY(-4px);box-shadow:0 12px 32px rgba(184,137,42,0.15)}
+  .category-icon{font-size:2.2rem;margin-bottom:12px}
+  .category-name{font-family:'Playfair Display',serif;font-size:1.05rem;color:var(--charcoal)}
+  .category-desc{font-size:0.8rem;color:var(--muted);margin-top:6px}
+  .upload-page{padding-top:72px;min-height:100vh;background:var(--warm-white)}
+  .upload-hero{background:linear-gradient(135deg,var(--charcoal) 0%,#4A3520 100%);padding:64px 48px;text-align:center;position:relative;overflow:hidden}
+  .upload-hero h1{font-family:'Playfair Display',serif;font-size:3rem;color:white;position:relative;margin-bottom:12px}
+  .upload-hero h1 em{color:var(--gold-light);font-style:italic}
+  .upload-hero p{color:rgba(255,255,255,0.6);font-size:1rem;position:relative}
+  .upload-container{max-width:700px;margin:-32px auto 0;padding:0 24px 80px}
+  .upload-card{background:white;border-radius:24px;box-shadow:0 24px 64px rgba(44,36,22,0.12);padding:48px;border:1px solid var(--border)}
+  .upload-zone{border:2.5px dashed var(--gold-light);border-radius:16px;padding:64px 32px;text-align:center;background:linear-gradient(135deg,rgba(184,137,42,0.04) 0%,rgba(184,137,42,0.08) 100%);cursor:pointer;transition:all 0.3s;position:relative}
+  .upload-zone:hover,.upload-zone.dragover{border-color:var(--gold);background:linear-gradient(135deg,rgba(184,137,42,0.08) 0%,rgba(184,137,42,0.14) 100%);transform:scale(1.01)}
+  .upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-icon{width:72px;height:72px;border-radius:50%;background:var(--gold);color:white;display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 20px;box-shadow:0 8px 24px rgba(184,137,42,0.35)}
+  .upload-zone h3{font-family:'Playfair Display',serif;font-size:1.4rem;color:var(--charcoal);margin-bottom:8px}
+  .upload-zone p{color:var(--muted);font-size:0.9rem}
+  .upload-zone .hint{margin-top:16px;font-size:0.78rem;color:var(--gold);font-weight:500;letter-spacing:0.5px}
+  .upload-preview{display:none;margin-top:24px;border-radius:12px;overflow:hidden;border:1.5px solid var(--border);position:relative}
+  .upload-preview img{width:100%;max-height:320px;object-fit:cover;display:block}
+  .preview-badge{position:absolute;top:12px;right:12px;background:var(--gold);color:white;border-radius:20px;padding:4px 12px;font-size:0.75rem;font-weight:500}
+  .upload-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:28px}
+  .option-select{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;background:white;color:var(--charcoal);font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23B8892A' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+  .option-select:focus{outline:none;border-color:var(--gold)}
+  .classify-btn{width:100%;margin-top:24px;background:var(--gold);color:white;border:none;border-radius:12px;padding:16px;font-family:'Playfair Display',serif;font-size:1.1rem;cursor:pointer;transition:all 0.3s;display:flex;align-items:center;justify-content:center;gap:10px}
+  .classify-btn:hover{background:var(--gold-dark);transform:translateY(-2px);box-shadow:0 8px 24px rgba(184,137,42,0.4)}
+  .classify-btn:disabled{opacity:0.7;cursor:not-allowed;transform:none}
+  .upload-tips{margin-top:24px;padding:20px;background:rgba(184,137,42,0.06);border-radius:12px;border-left:3px solid var(--gold-light)}
+  .upload-tips h4{font-size:0.85rem;color:var(--gold-dark);margin-bottom:10px;font-weight:600}
+  .upload-tips ul{list-style:none}
+  .upload-tips li{font-size:0.82rem;color:var(--muted);padding:3px 0;display:flex;align-items:center;gap:8px}
+  .upload-tips li::before{content:'✦';color:var(--gold);font-size:0.6rem}
+  .result-page{padding-top:72px;min-height:100vh;background:var(--cream)}
+  .result-header{background:linear-gradient(135deg,#3D2C10 0%,var(--gold-dark) 100%);padding:48px;display:flex;align-items:center;gap:20px}
+  .result-header-icon{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:1.5rem}
+  .result-header h1{font-family:'Playfair Display',serif;color:white;font-size:2rem}
+  .result-header p{color:rgba(255,255,255,0.65);font-size:0.9rem;margin-top:4px}
+  .result-container{max-width:1100px;margin:0 auto;padding:48px 24px}
+  .result-layout{display:grid;grid-template-columns:300px 1fr;gap:32px}
+  .result-image-panel{position:sticky;top:90px;align-self:start}
+  .result-image-card{background:white;border-radius:20px;overflow:hidden;border:1.5px solid var(--border);box-shadow:0 8px 32px rgba(44,36,22,0.08)}
+  .result-image-card img{width:100%;height:280px;object-fit:cover;display:block}
+  .result-image-info{padding:20px}
+  .result-image-info h3{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--charcoal);margin-bottom:12px}
+  .tag-list{display:flex;flex-wrap:wrap;gap:8px}
+  .tag{background:rgba(184,137,42,0.1);color:var(--gold-dark);border-radius:20px;padding:4px 12px;font-size:0.75rem;font-weight:500}
+  .tag.rose{background:rgba(196,115,106,0.1);color:var(--rose)}
+  .classification-card{background:white;border-radius:20px;padding:32px;border:1.5px solid var(--border);margin-bottom:24px;box-shadow:0 8px 32px rgba(44,36,22,0.06)}
+  .classification-card h2{font-family:'Playfair Display',serif;font-size:1.4rem;color:var(--charcoal);margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .confidence-item{margin-bottom:16px}
+  .conf-header{display:flex;justify-content:space-between;margin-bottom:6px}
+  .conf-label{font-size:0.9rem;font-weight:500;color:var(--charcoal)}
+  .conf-pct{font-size:0.9rem;font-weight:600;color:var(--gold)}
+  .conf-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+  .conf-fill{height:100%;background:linear-gradient(90deg,var(--gold-light),var(--gold));border-radius:3px;transition:width 1.2s cubic-bezier(0.4,0,0.2,1)}
+  .recs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .rec-card{background:white;border-radius:16px;overflow:hidden;border:1.5px solid var(--border);cursor:pointer;transition:all 0.3s;box-shadow:0 4px 16px rgba(44,36,22,0.06)}
+  .rec-card:hover{border-color:var(--gold);transform:translateY(-4px);box-shadow:0 12px 32px rgba(184,137,42,0.15)}
+  .rec-image{height:160px;display:flex;align-items:center;justify-content:center;font-size:3rem}
+  .rec-info{padding:16px}
+  .rec-name{font-weight:500;font-size:0.9rem;color:var(--charcoal)}
+  .rec-match{font-size:0.75rem;color:var(--gold);margin-top:4px;font-weight:500}
+  .about-page{padding-top:72px;min-height:100vh}
+  .about-hero{background:linear-gradient(135deg,var(--charcoal) 0%,#5C3D1E 60%,var(--gold-dark) 100%);padding:100px 48px;text-align:center;position:relative;overflow:hidden}
+  .about-hero h1{font-family:'Playfair Display',serif;font-size:3.5rem;color:white;margin-bottom:16px;position:relative}
+  .about-hero h1 em{color:var(--gold-light)}
+  .about-hero p{color:rgba(255,255,255,0.65);font-size:1.1rem;max-width:520px;margin:0 auto;line-height:1.7;position:relative}
+  .about-container{max-width:1000px;margin:0 auto;padding:80px 24px}
+  .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:64px}
+  .about-block{background:white;border-radius:20px;padding:36px;border:1.5px solid var(--border);box-shadow:0 4px 24px rgba(44,36,22,0.06)}
+  .about-block-icon{font-size:2rem;margin-bottom:16px}
+  .about-block h3{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--charcoal);margin-bottom:12px}
+  .about-block p{color:var(--muted);font-size:0.9rem;line-height:1.7}
+  .about-mission{background:linear-gradient(135deg,var(--charcoal),#4A3520);border-radius:24px;padding:56px;text-align:center;margin-bottom:64px;color:white}
+  .about-mission h2{font-family:'Playfair Display',serif;font-size:2rem;margin-bottom:16px}
+  .about-mission h2 em{color:var(--gold-light)}
+  .about-mission p{color:rgba(255,255,255,0.7);max-width:580px;margin:0 auto;line-height:1.8}
+  .team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .team-card{text-align:center;padding:32px 24px;background:white;border-radius:20px;border:1.5px solid var(--border)}
+  .team-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--gold-light),var(--gold));margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:white;font-weight:700;font-family:'Playfair Display',serif}
+  .team-name{font-family:'Playfair Display',serif;font-size:1.05rem;color:var(--charcoal);margin-bottom:4px}
+  .team-role{font-size:0.8rem;color:var(--gold);font-weight:500}
+  .team-desc{font-size:0.8rem;color:var(--muted);margin-top:10px;line-height:1.5}
+  footer{background:var(--charcoal);color:rgba(255,255,255,0.55);padding:32px 48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;font-size:0.82rem}
+  footer .footer-brand{font-family:'Playfair Display',serif;color:white;font-size:1.1rem}
+  .toast{position:fixed;bottom:32px;right:32px;background:var(--charcoal);color:white;padding:14px 24px;border-radius:12px;font-size:0.9rem;z-index:999;transform:translateY(80px);opacity:0;transition:all 0.4s cubic-bezier(0.4,0,0.2,1);display:flex;align-items:center;gap:10px;border-left:3px solid var(--gold)}
+  .toast.show{transform:translateY(0);opacity:1}
+  @media(max-width:768px){nav{padding:14px 20px}.nav-links{display:none}.hero-content{width:90%;margin:0 auto;padding:20px}.hero-image-side{display:none}.section{padding:48px 20px}.categories-grid{grid-template-columns:1fr 1fr}.result-layout{grid-template-columns:1fr}.recs-grid{grid-template-columns:1fr 1fr}.about-grid{grid-template-columns:1fr}.team-grid{grid-template-columns:1fr 1fr}.upload-options{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="#" onclick="showPage('home')">
+    <div class="nav-logo-icon">FF</div>FitFind
+  </a>
+  <ul class="nav-links">
+    <li><a href="#" class="active" onclick="showPage('home');setActive(this)">Home</a></li>
+    <li><a href="#" onclick="showPage('upload');setActive(this)">Upload</a></li>
+    <li><a href="#" onclick="showPage('about');setActive(this)">About</a></li>
+    <li><a href="#" onclick="showPage('result');setActive(this)">Results</a></li>
+  </ul>
+  <div class="nav-actions">
+  </div>
+</nav>
+
+<div class="toast" id="toast">✦ <span id="toast-msg"></span></div>
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-image-side">
+      <div class="hero-image-placeholder">
+        <svg viewBox="0 0 200 340" class="outfit-silhouette" fill="white">
+          <ellipse cx="100" cy="55" rx="36" ry="40"/>
+          <path d="M64 95 Q40 120 30 200 L60 205 Q65 160 80 140 L80 300 L120 300 L120 140 Q135 160 140 205 L170 200 Q160 120 136 95 Q118 105 100 105 Q82 105 64 95Z"/>
+          <path d="M30 200 Q20 240 25 260 L55 255 Q52 235 60 205Z"/>
+          <path d="M170 200 Q180 240 175 260 L145 255 Q148 235 140 205Z"/>
+        </svg>
+      </div>
+    </div>
+    <div class="hero-content">
+      <div class="hero-card">
+        <div class="hero-eyebrow">✦ AI-Powered Fashion Discovery</div>
+        <h1 class="hero-title">Discover Your <em>Perfect</em> Style</h1>
+        <p class="hero-subtitle">Upload any outfit image and let our AI classify it across 15 Pakistani and Indian fashion categories — instantly and accurately.</p>
+        <div class="hero-actions">
+          <button class="btn-primary" onclick="showPage('upload')"><div class="icon">+</div>Upload Image</button>
+          <button class="btn-secondary" onclick="showPage('about')">Learn More →</button>
+        </div>
+        <div class="hero-stats">
+          <div><div class="stat-num">15</div><div class="stat-label">Fashion Classes</div></div>
+          <div><div class="stat-num">2</div><div class="stat-label">AI Models Ensemble</div></div>
+          <div><div class="stat-num">94%</div><div class="stat-label">Accuracy Rate</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="features-strip">
+    <div class="feature-item"><span>🧵</span><span>15 Pakistani and Indian Categories</span></div>
+    <div class="feature-item"><span>⚡</span><span>ResNet50 + EfficientNet-B0</span></div>
+    <div class="feature-item"><span>🎯</span><span>Ensemble Soft Voting</span></div>
+    <div class="feature-item"><span>🚀</span><span>FastAPI Backend</span></div>
+  </div>
+
+  <div class="section" style="background:var(--warm-white)">
+    <div class="section-header">
+      <div class="section-eyebrow">Explore Categories</div>
+      <h2 class="section-title">15 Classes Our AI Recognises</h2>
+    </div>
+    <div class="categories-grid">
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👚</div><div class="category-name">Blouse</div><div class="category-desc">Traditional blouse styles</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👘</div><div class="category-name">Dhoti Pants</div><div class="category-desc">Draped dhoti silhouettes</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🧣</div><div class="category-name">Dupattas</div><div class="category-desc">Scarves &amp; dupattas</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👗</div><div class="category-name">Gowns</div><div class="category-desc">Formal &amp; fusion gowns</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👔</div><div class="category-name">Kurta (Men)</div><div class="category-desc">Men's kurtas &amp; kameez</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👖</div><div class="category-name">Leggings &amp; Salwars</div><div class="category-desc">Salwar, churidar &amp; leggings</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">💃</div><div class="category-name">Lehenga</div><div class="category-desc">Bridal &amp; festive lehengas</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👞</div><div class="category-name">Mojaris (Men)</div><div class="category-desc">Traditional men's footwear</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👡</div><div class="category-name">Mojaris (Women)</div><div class="category-desc">Traditional women's footwear</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🧥</div><div class="category-name">Nehru Jackets</div><div class="category-desc">Iconic structured jackets</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">👗</div><div class="category-name">Palazzos</div><div class="category-desc">Wide-leg palazzo trousers</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🩱</div><div class="category-name">Petticoats</div><div class="category-desc">Underskirts &amp; petticoats</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🥻</div><div class="category-name">Saree</div><div class="category-desc">Classic draped sarees</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🤵</div><div class="category-name">Sherwanis</div><div class="category-desc">Formal men's sherwanis</div></div>
+      <div class="category-card" onclick="showPage('upload')"><div class="category-icon">🌸</div><div class="category-name">Women Kurta</div><div class="category-desc">Women's kurtas &amp; suits</div></div>
+    </div>
+  </div>
+  <footer>
+    <span class="footer-brand">FitFind</span>
+    <span>© 2026 FitFind — AI Fashion Classification</span>
+    <span>Made with ♡ for Pakistani Fashion</span>
+  </footer>
+</div>
+
+<!-- UPLOAD -->
+<div class="page" id="page-upload">
+  <div class="upload-page">
+    <div class="upload-hero">
+      <h1><em>Upload</em> Images</h1>
+      <p>Upload images for classification — identify your outfit across different traditional categories</p>
+    </div>
+    <div class="upload-container">
+      <div class="upload-card">
+        <div class="upload-zone" id="dropzone" ondragover="handleDrag(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <input type="file" accept="image/jpeg,image/png,image/webp" id="file-input" onchange="handleFile(event)"/>
+          <div class="upload-icon">📷</div>
+          <h3>Drop your image here</h3>
+          <p>or click to browse from your device</p>
+          <div class="hint">✦ Supports JPG, PNG, WEBP up to 10MB</div>
+        </div>
+        <div class="upload-preview" id="upload-preview">
+          <img id="preview-img" src="" alt="Preview"/>
+          <div class="preview-badge">Ready to classify</div>
+        </div>
+        <div class="upload-options">
+        </div>
+        <button class="classify-btn" id="classify-btn" onclick="classifyImage()">
+          ✦ Classify My Outfit
+        </button>
+        <div class="upload-tips">
+          <h4>Tips for best results</h4>
+          <ul>
+            <li>Use clear, well-lit images of the full outfit</li>
+            <li>Avoid heavy filters or heavily cropped images</li>
+            <li>Plain background works best for accuracy</li>
+            <li>Works best with Asian traditional wear</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <footer><span class="footer-brand">FitFind</span><span>© 2026 FitFind</span></footer>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div class="page" id="page-result">
+  <div class="result-page">
+    <div class="result-header">
+      <div class="result-header-icon">✦</div>
+      <div><h1>Classification Results</h1><p>AI ensemble analysis complete — here's what we found</p></div>
+    </div>
+    <div class="result-container">
+      <div class="result-layout">
+        <div class="result-image-panel">
+          <div class="result-image-card">
+            <div id="result-img-wrap" style="height:280px;background:linear-gradient(135deg,#D4956A,#8B5E3C);display:flex;align-items:center;justify-content:center;font-size:5rem;">👗</div>
+            <div class="result-image-info">
+              <h3>Analyzed Outfit</h3>
+              <div class="tag-list" id="result-tags"><span class="tag">—</span></div>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding:20px;background:white;border-radius:16px;border:1.5px solid var(--border)">
+            <div style="font-size:0.75rem;color:var(--gold);font-weight:600;letter-spacing:1px;margin-bottom:12px">OVERALL CONFIDENCE</div>
+            <div id="overall-confidence" style="font-family:'Playfair Display',serif;font-size:2.5rem;color:var(--charcoal)">—</div>
+            <div id="confidence-label" style="font-size:0.82rem;color:var(--muted);margin-top:4px">Awaiting classification</div>
+          </div>
+        </div>
+        <div>
+          <div class="classification-card" id="breakdown-card">]
+            <h2>Classification Breakdown</h2>
+            <p style="color:var(--muted);font-size:0.9rem">Run a classification to see results here.</p>
+          </div>
+          <div class="classification-card" id="permodel-card" style="display:none">
+            <h2>Per-Model Results</h2>
+            <div id="permodel-content"></div>
+          </div>
+          <div class="classification-card">
+            <h2>Similar Categories to Explore</h2>
+            <div class="recs-grid" id="recs-grid"></div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="showPage('upload')"><div class="icon">+</div> Upload Another</button>
+            <button class="btn-secondary" onclick="showToast('Results saved to wishlist! ♡')">♡ Save Results</button>
+            <button class="btn-secondary" onclick="showToast('Link copied to clipboard!')">🔗 Share</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer><span class="footer-brand">FitFind</span><span>© 2026 FitFind</span></footer>
+  </div>
+</div>
+
+<!-- ABOUT -->
+<div class="page" id="page-about">
+  <div class="about-hero">
+    <h1>About <em>FitFind</em></h1>
+    <p>We're building the smartest fashion classification engine for Pakistani — blending AI with deep cultural fashion knowledge.</p>
+  </div>
+  <div class="about-container">
+    <div class="about-mission">
+      <h2>Our <em>Mission</em></h2>
+      <p>FitFind bridges the gap between traditional Pakistani fashion and modern AI-powered discovery. We believe finding the perfect outfit should be effortless — just upload, classify, and explore.</p>
+    </div>]
+    <div class="section-header" style="margin-bottom:32px">
+      <div class="section-eyebrow">The Team</div>
+      <h2 class="section-title">Built With Passion</h2>
+    </div>
+    <div class="team-grid">
+      <div class="team-card"><div class="team-avatar">K</div><div class="team-name">Kashish Vijay Gemnani</div><div class="team-role">Backend and Model Training</div><div class="team-desc">Trained ResNet50 on Indian fashion datasets &amp; Built the FastAPI classification pipeline.</div></div>
+      <div class="team-card"><div class="team-avatar">Q</div><div class="team-name">Qurat-ul-ain Aftab</div><div class="team-role">Styling and Model Training</div><div class="team-desc">MobileNet on Indian fashion datasets &amp; built the frontend pipeline</div></div>
+      <div class="team-card"><div class="team-avatar">K</div><div class="team-name">Kashish Nandlal Chhabria</div><div class="team-role">frontend and Model Training</div><div class="team-desc">EfficientNet-B0 on Indian fashion datasets. and did styling of interface</div></div>
+    </div>
+  </div>
+  <footer>
+    <span class="footer-brand">FitFind</span>
+    <span>© 2026 FitFind — AI Fashion Classification</span>
+    <span>Made with ♡ in Larkana, Sindh Pakistan</span>
+  </footer>
+</div>
+
+<script>
+  // ── NAVIGATION
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + id).classList.add('active');
+    window.scrollTo(0, 0);
+    const map = { home:0, upload:1, about:2, result:3 };
+    document.querySelectorAll('.nav-links a').forEach((a, i) => a.classList.toggle('active', i === map[id]));
+  }
+  function setActive(el) {
+    document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  // ── TOAST
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ── FILE HANDLING  (single definition — no duplication)
+  let lastFile = null;
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    lastFile = file;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.getElementById('preview-img');
+      img.src = ev.target.result;
+      document.getElementById('upload-preview').style.display = 'block';
+      document.getElementById('result-img-wrap').innerHTML =
+        '<img src="' + ev.target.result + '" style="width:100%;height:280px;object-fit:cover;display:block;" alt="Outfit"/>';
+    };
+    reader.readAsDataURL(file);
+    showToast('Image ready! Click "Classify My Outfit" ✦');
+  }
+
+  function handleDrag(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('dragover'); }
+  function handleDragLeave() { document.getElementById('dropzone').classList.remove('dragover'); }
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const input = document.getElementById('file-input');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleFile({ target: input });
+  }
+
+  // ── API
+  const API_URL = 'http://localhost:8000';
+
+  async function classifyImage() {
+    if (!lastFile) { showToast('Please upload an image first!'); return; }
+    const btn = document.getElementById('classify-btn');
+    btn.textContent = '⏳ Classifying…';
+    btn.disabled = true;
+    showToast('Sending to AI models…');
+    try {
+      const fd = new FormData();
+      fd.append('file', lastFile);
+      const res = await fetch(API_URL + '/classify', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Server error ' + res.status);
+      }
+      const data = await res.json();
+      renderResults(data);
+      showPage('result');
+      showToast('Done! ' + data.top_class + ' — ' + data.confidence.toFixed(1) + '% confidence ✦');
+    } catch (err) {
+      showToast('⚠ ' + err.message);
+      console.error(err);
+    } finally {
+      btn.textContent = '✦ Classify My Outfit';
+      btn.disabled = false;
+    }
+  }
+
+  // ── RENDER RESULTS
+  const CLASS_EMOJI = {
+    'Blouse':'👚','Dhoti Pants':'👘','Dupattas':'🧣','Gowns':'👗',
+    'Kurta (Men)':'👔','Leggings & Salwars':'👖','Lehenga':'💃',
+    'Mojaris (Men)':'👞','Mojaris (Women)':'👡','Nehru Jackets':'🧥',
+    'Palazzos':'👗','Petticoats':'🩱','Saree':'🥻',
+    'Sherwanis':'🤵','Women Kurta':'🌸'
+  };
+
+  function renderResults(data) {
+    // Tags
+    const top2 = (data.breakdown || []).slice(1, 3).map(b => '<span class="tag rose">' + b.label + '</span>').join('');
+    const mTags = (data.models_used || []).map(m => '<span class="tag">' + m + '</span>').join('');
+    document.getElementById('result-tags').innerHTML = '<span class="tag">' + data.top_class + '</span>' + top2 + mTags;
+
+    // Confidence
+    document.getElementById('overall-confidence').textContent = data.confidence.toFixed(1) + '%';
+    document.getElementById('confidence-label').textContent =
+      data.confidence >= 80 ? 'High confidence match' :
+      data.confidence >= 55 ? 'Moderate confidence' : 'Low confidence — try a clearer image';
+
+    // Breakdown bars (top 5)
+    const bars = (data.breakdown || []).slice(0, 5).map(item =>
+      '<div class="confidence-item"><div class="conf-header"><span class="conf-label">' + item.label +
+      '</span><span class="conf-pct">' + item.confidence.toFixed(1) + '%</span></div>' +
+      '<div class="conf-bar"><div class="conf-fill" style="width:' + item.confidence + '%"></div></div></div>'
+    ).join('');
+    document.getElementById('breakdown-card').innerHTML = '<h2>Classification Breakdown</h2>' + bars;
+
+    // Per-model
+    const pc = document.getElementById('permodel-card');
+    if (data.per_model && Object.keys(data.per_model).length) {
+      document.getElementById('permodel-content').innerHTML = Object.entries(data.per_model).map(([name, res]) =>
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;' +
+        'background:rgba(184,137,42,0.06);border-radius:8px;border-left:3px solid var(--gold-light);margin-bottom:8px;">' +
+        '<span style="font-size:0.85rem;font-weight:600;color:var(--charcoal);">' + name + '</span>' +
+        '<span style="font-size:0.82rem;color:var(--gold);">' + res.top_class + ' &nbsp;·&nbsp; ' + res.confidence + '%</span></div>'
+      ).join('');
+      pc.style.display = 'block';
+    } else {
+      pc.style.display = 'none';
+    }
+
+    // Recommendation cards (next 3 classes)
+    document.getElementById('recs-grid').innerHTML = (data.breakdown || []).slice(1, 4).map(r =>
+      '<div class="rec-card" onclick="showToast(\'Exploring ' + r.label + '…\')">' +
+      '<div class="rec-image" style="background:linear-gradient(135deg,rgba(184,137,42,0.15),rgba(184,137,42,0.35));">' +
+      (CLASS_EMOJI[r.label] || '👗') + '</div>' +
+      '<div class="rec-info"><div class="rec-name">' + r.label + '</div>' +
+      '<div class="rec-match">✦ ' + r.confidence.toFixed(1) + '% similarity</div></div></div>'
+    ).join('');
+  }
+</script>
+</body>
+</html>
