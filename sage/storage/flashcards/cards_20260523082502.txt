@@ -1,0 +1,22 @@
+FLASHCARDS — 20260523082502
+==================================================
+
+Card 1
+Q: What is the purpose of recording a voice note according to the context provided?
+A: To confirm that the voice task description is being captured correctly.
+
+Card 2
+Q: In what setting was this test for the voice note feature conducted?
+A: The scenario suggests it's in an academic or testing environment, though not specified further.
+
+Card 3
+Q: What does capturing a correct voice task description involve according to the context given?
+A: Ensuring that the recorded audio accurately reflects what was intended to be described verbally for tasks requiring vocal input.
+
+Card 4
+Q: Why might it be important to verify if voice notes are being captured correctly in an academic setting?
+A: To ensure clear communication and accurate recording of information, which is essential for learning or assessment purposes where verbal instructions may need transcription into written form later on.
+
+Card 5
+Q: How does the context describe the act of testing a new feature like a voice note function within this scenario?
+A: By using it as an exercise to confirm that students can effectively record and capture their spoken descriptions for academic tasks, ensthyphones are being tested in practice usage rather than theory.

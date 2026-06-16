@@ -1,0 +1,23 @@
+SUMMARY — Final Year Project Proposal SAGE.docx
+Generated: 20260523081926
+==================================================
+
+DOCUMENT OVERVIEW: This academic summary tool is designed to assist university students in organizing and synthesizing study material, particularly research articles. It aims at streamlining various aspects of student life from information management to productivity tracking for better learning outcomes.
+
+MAIN TOPICS COVERED: 
+- Organization tools (browser/PPT capture)
+- Flashcard creation & spaced repetition systems
+- Context awareness and study detection mechanisms
+- Productivity analytics with daily reports
+- Academic advising based on student transcripts and plans
+- Browser scraping, PDF summarizing, PowerPoint integration for content management
+- psutil usage for system monitoring in a learning context
+
+KEY CONCEPTS & DEFINITIONS: 
+1. Organization Tools - Software or methods used to categorize study materials efficiently (e.g., browser/PPT capture).
+2. Flashcard Creation – A technique involving the use of flashcards for memorizing and reviewing key concepts, often with spaced repetition features.
+3. Context Awareness & Study Tracking - Systems that monitor a student's study habits to provide insights into their learning patterns (e.g., psutil integration).
+4. Productivity Analytics – The analysis of productive activities and time management, often with the goal of optimizing academic performance through daily reports.
+5. Academic Advising - A process where students receive guidance based on comprehensive understanding from transcripts or study plans to make informed decisions about their education pathway (e.g., integration into a tool that uses context for recommendations).
+6. Browser/PPT Capture – The automated extraction of information and summaries directly from web pages and presentation slides, which are then organized within the academic summary system.
+7. psutil - A

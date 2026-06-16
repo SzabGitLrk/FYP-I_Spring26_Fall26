@@ -1,0 +1,600 @@
+[2026-05-19 19:17:11] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-19 19:18:50] INFO rag.embeddings — Embedding model loaded.
+[2026-05-19 19:41:20] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmpj6fvzjr7\test.txt
+[2026-05-19 19:41:20] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-19 19:41:20] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-19 19:41:20] INFO rag.pipeline — Split into 1 chunks
+[2026-05-19 19:41:20] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-19 19:41:20] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-19 19:41:52] INFO rag.embeddings — Embedding model loaded.
+[2026-05-19 19:41:57] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-19 19:42:01] ERROR rag.pipeline — RAG failed: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/generate (Caused by NewConnectionError("HTTPConnection(host='localhost', port=11434): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+[2026-05-19 19:43:12] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmp867456qn\test.txt
+[2026-05-19 19:43:12] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 00:09:46] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 00:09:47] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 00:15:57] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmpfsjonn7p\test.txt
+[2026-05-20 00:15:57] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 00:16:02] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 00:16:02] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 00:16:02] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 00:16:02] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 00:16:02] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 00:16:29] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 00:16:31] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-20 00:16:34] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (3.5 GiB) than is available (2.4 GiB)"}
+[2026-05-20 00:16:52] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmpp6pnfex1\test.txt
+[2026-05-20 00:16:52] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 00:16:56] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 00:16:56] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 00:16:56] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 00:16:56] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 00:16:56] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 00:17:17] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 00:17:18] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-20 00:17:20] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (3.5 GiB) than is available (2.2 GiB)"}
+[2026-05-20 00:43:38] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-0\test_save_note_writes_files0\transcripts\transcript_2026-05-20_00-43-38.txt
+[2026-05-20 00:43:38] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-0\test_save_note_writes_files0\notes\note_2026-05-20_00-43-38.txt
+[2026-05-20 00:44:04] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmplefl9ho1\test.txt
+[2026-05-20 00:44:04] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 00:44:08] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-1\test_save_note_writes_files0\transcripts\transcript_2026-05-20_00-44-08.txt
+[2026-05-20 00:44:08] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-1\test_save_note_writes_files0\notes\note_2026-05-20_00-44-08.txt
+[2026-05-20 02:33:44] INFO rag.pipeline — RAG start — collection: smoke_1779226424, k=2, chars=252
+[2026-05-20 02:33:44] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 02:33:44] INFO rag.vectorstore — Creating vectorstore: smoke_1779226424 with 1 docs
+[2026-05-20 02:33:44] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 02:34:28] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 02:34:30] INFO rag.vectorstore — Vectorstore saved: smoke_1779226424
+[2026-05-20 02:34:30] INFO rag.pipeline — Initializing Ollama LLM with model: tinyllama
+[2026-05-20 02:34:43] INFO rag.pipeline — RAG complete — output length: 269
+[2026-05-20 02:35:16] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 02:35:16] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 02:35:32] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 04:29:47] INFO features.voice_notes — Recording started.
+[2026-05-20 04:29:55] WARNING features.voice_notes — Moonshine unavailable, will try Whisper fallback: No module named 'moonshine_onnx'
+[2026-05-20 04:33:28] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 04:33:28] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 04:34:08] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 04:34:14] INFO features.voice_notes — Recording started.
+[2026-05-20 04:34:18] WARNING features.voice_notes — Moonshine unavailable, will try Whisper fallback: No module named 'moonshine_onnx'
+[2026-05-20 04:34:42] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 04:34:42] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 04:34:53] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 04:35:14] INFO features.voice_notes — Recording started.
+[2026-05-20 04:35:17] WARNING features.voice_notes — Moonshine unavailable, will try Whisper fallback: No module named 'moonshine_onnx'
+[2026-05-20 05:02:30] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:02:31] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:03:27] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:06:36] INFO features.voice_notes — Recording started.
+[2026-05-20 05:06:43] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 05:06:43] ERROR features.voice_notes — Transcription failed: load_audio() takes 1 positional argument but 2 were given
+[2026-05-20 05:06:43] INFO rag.pipeline — RAG start — collection: voice_note_20260520050643, k=4, chars=80
+[2026-05-20 05:06:43] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 05:06:43] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520050643 with 1 docs
+[2026-05-20 05:06:45] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520050643
+[2026-05-20 05:06:45] INFO rag.pipeline — Initializing Ollama LLM with model: tinyllama
+[2026-05-20 05:18:21] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:18:21] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:18:34] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:18:39] INFO features.voice_notes — Recording started.
+[2026-05-20 05:18:44] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 05:27:48] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:27:48] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:28:00] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:43:11] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmpp3jv7z80\test.txt
+[2026-05-20 05:43:11] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 05:44:49] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-2\test_save_note_writes_files0\transcripts\transcript_2026-05-20_05-44-49.txt
+[2026-05-20 05:44:49] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-2\test_save_note_writes_files0\notes\note_2026-05-20_05-44-49.txt
+[2026-05-20 05:44:59] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:44:59] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 05:44:59] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 05:44:59] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 05:44:59] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:45:00] ERROR rag.pipeline — RAG failed: Could not import sentence_transformers python package. Please install it with `pip install sentence-transformers`.
+[2026-05-20 05:49:14] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:49:14] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 05:49:14] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 05:49:14] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 05:49:14] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:49:37] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:49:37] ERROR rag.pipeline — RAG failed: Could not import chromadb python package. Please install it with `pip install chromadb`.
+[2026-05-20 05:51:18] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:51:18] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 05:51:18] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 05:51:18] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 05:51:18] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:51:34] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:51:36] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-20 05:51:36] INFO rag.pipeline — Initializing Ollama LLM with model: tinyllama
+[2026-05-20 05:51:46] INFO rag.pipeline — RAG complete — output length: 85
+[2026-05-20 05:52:33] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmp7u74ibri\test.txt
+[2026-05-20 05:52:33] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 05:52:37] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 05:52:37] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 05:52:37] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 05:52:37] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 05:52:37] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 05:52:55] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 05:52:55] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-20 05:52:55] INFO rag.pipeline — Initializing Ollama LLM with model: tinyllama
+[2026-05-20 05:52:59] INFO rag.pipeline — RAG complete — output length: 142
+[2026-05-20 05:52:59] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-3\test_save_note_writes_files0\transcripts\transcript_2026-05-20_05-52-59.txt
+[2026-05-20 05:52:59] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-3\test_save_note_writes_files0\notes\note_2026-05-20_05-52-59.txt
+[2026-05-20 06:12:29] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\tmpoab0qnhv\test.txt
+[2026-05-20 06:12:29] ERROR utils.file_utils — Failed to read /nonexistent/path/file.txt: [Errno 2] No such file or directory: '/nonexistent/path/file.txt'
+[2026-05-20 06:12:33] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:12:33] INFO rag.pipeline — RAG start — collection: test_photosynthesis, k=4, chars=79
+[2026-05-20 06:12:33] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:12:33] INFO rag.vectorstore — Creating vectorstore: test_photosynthesis with 1 docs
+[2026-05-20 06:12:33] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:12:49] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:12:51] INFO rag.vectorstore — Vectorstore saved: test_photosynthesis
+[2026-05-20 06:12:51] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 06:13:25] INFO rag.pipeline — RAG complete — output length: 160
+[2026-05-20 06:13:25] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-4\test_save_note_writes_files0\transcripts\transcript_2026-05-20_06-13-25.txt
+[2026-05-20 06:13:25] INFO utils.file_utils — Saved file: C:\Users\ABBAS\AppData\Local\Temp\pytest-of-ABBAS\pytest-4\test_save_note_writes_files0\notes\note_2026-05-20_06-13-25.txt
+[2026-05-20 06:13:43] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:18:53] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:22:46] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:22:47] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:23:22] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:25:53] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:25:54] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:26:05] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:27:42] INFO features.voice_notes — Recording started.
+[2026-05-20 06:27:48] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 06:28:15] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-20 06:30:32] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:30:33] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:30:44] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:32:54] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:32:55] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:33:08] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:33:14] INFO features.voice_notes — Recording started.
+[2026-05-20 06:33:20] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 06:33:27] INFO features.voice_notes — Transcribed 28 chars.
+[2026-05-20 06:33:27] INFO rag.pipeline — RAG start — collection: voice_note_20260520063327, k=4, chars=28
+[2026-05-20 06:33:27] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:33:27] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520063327 with 1 docs
+[2026-05-20 06:33:28] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520063327
+[2026-05-20 06:33:28] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 06:34:28] INFO rag.pipeline — RAG complete — output length: 1036
+[2026-05-20 06:35:08] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\transcripts\transcript_2026-05-20_06-35-08.txt
+[2026-05-20 06:35:08] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\notes\note_2026-05-20_06-35-08.txt
+[2026-05-20 06:35:18] INFO rag.pipeline — RAG start — collection: flashcards_20260520063518, k=4, chars=28
+[2026-05-20 06:35:18] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:35:18] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520063518 with 1 docs
+[2026-05-20 06:35:19] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520063518
+[2026-05-20 06:36:16] INFO rag.pipeline — RAG complete — output length: 1381
+[2026-05-20 06:36:16] INFO features.flashcards — Raw flashcard output length: 1381
+[2026-05-20 06:36:16] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-20 06:36:16] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260520063518.txt
+[2026-05-20 06:36:54] ERROR gui.summarize_tab — Summarizer failed: cannot import name 'llm' from 'rag.pipeline' (D:\FYP PROJECT DEMO\sage\rag\pipeline.py)
+[2026-05-20 06:37:34] INFO features.voice_notes — Recording started.
+[2026-05-20 06:37:38] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-20 06:37:40] INFO features.voice_notes — Recording started.
+[2026-05-20 06:37:43] INFO features.voice_notes — Transcribed 23 chars.
+[2026-05-20 06:37:43] INFO rag.pipeline — RAG start — collection: voice_note_20260520063743, k=4, chars=23
+[2026-05-20 06:37:43] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:37:43] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520063743 with 1 docs
+[2026-05-20 06:37:43] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520063743
+[2026-05-20 06:38:24] INFO rag.pipeline — RAG complete — output length: 950
+[2026-05-20 06:44:15] INFO rag.vectorstore — Creating vectorstore: smoke_telemetry_check with 1 docs
+[2026-05-20 06:44:15] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:44:31] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:44:33] INFO rag.vectorstore — Vectorstore saved: smoke_telemetry_check
+[2026-05-20 06:45:19] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:45:20] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:46:01] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:46:29] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 06:46:29] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 06:46:29] INFO rag.pipeline — RAG start — collection: doc_20260520064629, k=5, chars=681
+[2026-05-20 06:46:29] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 06:46:29] INFO rag.vectorstore — Creating vectorstore: doc_20260520064629 with 2 docs
+[2026-05-20 06:46:29] INFO rag.vectorstore — Vectorstore saved: doc_20260520064629
+[2026-05-20 06:46:29] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 06:49:29] INFO rag.pipeline — RAG complete — output length: 3221
+[2026-05-20 06:49:29] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260520064629.txt
+[2026-05-20 06:49:29] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-20 06:54:11] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:54:24] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:55:47] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 06:55:48] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 06:55:55] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 06:56:07] INFO features.voice_notes — Recording started.
+[2026-05-20 06:56:13] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 06:56:21] INFO features.voice_notes — Transcribed 22 chars.
+[2026-05-20 06:56:21] INFO rag.pipeline — RAG start — collection: voice_note_20260520065621, k=4, chars=22
+[2026-05-20 06:56:21] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:56:21] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520065621 with 1 docs
+[2026-05-20 06:56:22] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520065621
+[2026-05-20 06:56:22] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 06:57:43] INFO rag.pipeline — RAG complete — output length: 1554
+[2026-05-20 06:58:06] INFO rag.pipeline — RAG start — collection: flashcards_20260520065806, k=4, chars=22
+[2026-05-20 06:58:06] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 06:58:06] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520065806 with 1 docs
+[2026-05-20 06:58:07] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520065806
+[2026-05-20 06:59:00] INFO rag.pipeline — RAG complete — output length: 1445
+[2026-05-20 06:59:00] INFO features.flashcards — Raw flashcard output length: 1445
+[2026-05-20 06:59:00] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-20 06:59:00] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260520065806.txt
+[2026-05-20 06:59:55] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\transcripts\transcript_2026-05-20_06-59-55.txt
+[2026-05-20 06:59:55] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\notes\note_2026-05-20_06-59-55.txt
+[2026-05-20 08:09:20] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 08:09:23] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 08:09:48] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 08:10:03] INFO features.voice_notes — Recording started.
+[2026-05-20 08:10:10] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 08:10:23] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-20 08:10:29] INFO features.voice_notes — Recording started.
+[2026-05-20 08:10:33] INFO features.voice_notes — Transcribed 18 chars.
+[2026-05-20 08:10:33] INFO rag.pipeline — RAG start — collection: voice_note_20260520081033, k=4, chars=18
+[2026-05-20 08:10:33] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:10:33] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520081033 with 1 docs
+[2026-05-20 08:10:36] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520081033
+[2026-05-20 08:10:36] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 08:11:42] INFO rag.pipeline — RAG complete — output length: 1185
+[2026-05-20 08:13:46] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 08:13:46] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 08:13:46] INFO rag.pipeline — RAG start — collection: doc_20260520081346, k=5, chars=681
+[2026-05-20 08:13:46] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 08:13:46] INFO rag.vectorstore — Creating vectorstore: doc_20260520081346 with 2 docs
+[2026-05-20 08:13:47] INFO rag.vectorstore — Vectorstore saved: doc_20260520081346
+[2026-05-20 08:14:01] INFO features.voice_notes — Recording started.
+[2026-05-20 08:14:08] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-20 08:14:12] INFO features.voice_notes — Recording started.
+[2026-05-20 08:14:29] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-20 08:14:35] INFO features.voice_notes — Recording started.
+[2026-05-20 08:14:41] INFO features.voice_notes — Transcribed 39 chars.
+[2026-05-20 08:14:41] INFO rag.pipeline — RAG start — collection: voice_note_20260520081441, k=4, chars=39
+[2026-05-20 08:14:41] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:14:41] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520081441 with 1 docs
+[2026-05-20 08:14:41] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520081441
+[2026-05-20 08:15:34] INFO rag.pipeline — RAG complete — output length: 1899
+[2026-05-20 08:15:34] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260520081346.txt
+[2026-05-20 08:15:34] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-20 08:16:28] INFO rag.pipeline — RAG complete — output length: 1310
+[2026-05-20 08:16:39] INFO rag.pipeline — RAG start — collection: flashcards_20260520081639, k=4, chars=39
+[2026-05-20 08:16:39] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:16:39] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520081639 with 1 docs
+[2026-05-20 08:16:39] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520081639
+[2026-05-20 08:17:44] INFO rag.pipeline — RAG complete — output length: 1541
+[2026-05-20 08:17:44] INFO features.flashcards — Raw flashcard output length: 1541
+[2026-05-20 08:17:44] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-20 08:17:44] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260520081639.txt
+[2026-05-20 08:20:20] INFO features.voice_notes — Recording started.
+[2026-05-20 08:20:26] INFO features.voice_notes — Transcribed 41 chars.
+[2026-05-20 08:20:26] INFO rag.pipeline — RAG start — collection: voice_note_20260520082026, k=4, chars=41
+[2026-05-20 08:20:26] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:20:26] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520082026 with 1 docs
+[2026-05-20 08:20:26] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520082026
+[2026-05-20 08:21:24] INFO rag.pipeline — RAG complete — output length: 1317
+[2026-05-20 08:21:58] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\transcripts\transcript_2026-05-20_08-21-58.txt
+[2026-05-20 08:21:58] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\notes\note_2026-05-20_08-21-58.txt
+[2026-05-20 08:33:41] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 08:33:44] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 08:34:10] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 08:34:21] INFO features.voice_notes — Recording started.
+[2026-05-20 08:34:28] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 08:34:38] INFO features.voice_notes — Transcribed 33 chars.
+[2026-05-20 08:34:38] INFO rag.pipeline — RAG start — collection: voice_note_20260520083438, k=4, chars=33
+[2026-05-20 08:34:38] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:34:38] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520083438 with 1 docs
+[2026-05-20 08:34:41] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520083438
+[2026-05-20 08:34:41] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 08:35:04] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 08:35:04] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 08:35:04] INFO rag.pipeline — RAG start — collection: doc_20260520083504, k=5, chars=681
+[2026-05-20 08:35:04] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 08:35:04] INFO rag.vectorstore — Creating vectorstore: doc_20260520083504 with 2 docs
+[2026-05-20 08:35:05] INFO rag.vectorstore — Vectorstore saved: doc_20260520083504
+[2026-05-20 08:35:05] ERROR rag.pipeline — RAG failed: "Ollama" object has no field "streaming"
+[2026-05-20 08:35:05] ERROR gui.summarize_tab — Summarizer failed: AI processing failed: "Ollama" object has no field "streaming"
+[2026-05-20 08:36:22] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 08:36:25] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 08:36:58] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 08:37:11] INFO features.voice_notes — Recording started.
+[2026-05-20 08:37:18] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 08:37:29] INFO features.voice_notes — Transcribed 33 chars.
+[2026-05-20 08:37:29] INFO rag.pipeline — RAG start — collection: voice_note_20260520083729, k=4, chars=33
+[2026-05-20 08:37:29] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:37:29] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520083729 with 1 docs
+[2026-05-20 08:37:32] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520083729
+[2026-05-20 08:37:32] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 08:37:42] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 08:37:42] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 08:37:42] INFO rag.pipeline — RAG start — collection: doc_20260520083742, k=5, chars=681
+[2026-05-20 08:37:42] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 08:37:42] INFO rag.vectorstore — Creating vectorstore: doc_20260520083742 with 2 docs
+[2026-05-20 08:37:42] INFO rag.vectorstore — Vectorstore saved: doc_20260520083742
+[2026-05-20 08:37:42] ERROR rag.pipeline — RAG failed: cannot import name 'StreamingStdOutCallbackHandler' from 'langchain_community.callbacks' (D:\FYP PROJECT DEMO\sage\sage_env\lib\site-packages\langchain_community\callbacks\__init__.py)
+[2026-05-20 08:37:42] ERROR gui.summarize_tab — Summarizer failed: AI processing failed: cannot import name 'StreamingStdOutCallbackHandler' from 'langchain_community.callbacks' (D:\FYP PROJECT DEMO\sage\sage_env\lib\site-packages\langchain_community\callbacks\__init__.py)
+[2026-05-20 08:38:26] INFO rag.pipeline — RAG complete — output length: 1064
+[2026-05-20 08:41:17] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 08:41:20] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 08:41:52] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 08:42:11] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 08:42:11] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 08:42:11] INFO rag.pipeline — RAG start — collection: doc_20260520084211, k=5, chars=681
+[2026-05-20 08:42:11] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 08:42:11] INFO rag.vectorstore — Creating vectorstore: doc_20260520084211 with 2 docs
+[2026-05-20 08:42:14] INFO rag.vectorstore — Vectorstore saved: doc_20260520084211
+[2026-05-20 08:42:14] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 08:44:29] INFO rag.pipeline — RAG complete — output length: 1900
+[2026-05-20 08:44:29] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260520084211.txt
+[2026-05-20 08:44:29] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-20 08:53:48] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 08:53:52] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 08:54:31] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 08:54:44] INFO features.voice_notes — Recording started.
+[2026-05-20 08:54:50] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 08:55:01] INFO features.voice_notes — Transcribed 20 chars.
+[2026-05-20 08:55:01] INFO rag.pipeline — RAG start — collection: voice_note_20260520085501, k=4, chars=20
+[2026-05-20 08:55:01] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:55:01] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520085501 with 1 docs
+[2026-05-20 08:55:03] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520085501
+[2026-05-20 08:55:03] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 08:56:19] INFO rag.pipeline — RAG complete — output length: 889
+[2026-05-20 08:56:43] INFO rag.pipeline — RAG start — collection: flashcards_20260520085643, k=4, chars=20
+[2026-05-20 08:56:43] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 08:56:43] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520085643 with 1 docs
+[2026-05-20 08:56:45] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520085643
+[2026-05-20 08:58:10] INFO rag.pipeline — RAG complete — output length: 1368
+[2026-05-20 08:58:10] INFO features.flashcards — Raw flashcard output length: 1368
+[2026-05-20 08:58:10] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-20 08:58:10] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260520085643.txt
+[2026-05-20 13:46:16] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 13:46:19] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 13:46:52] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 13:47:05] INFO features.voice_notes — Recording started.
+[2026-05-20 13:47:12] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 13:47:22] INFO features.voice_notes — Transcribed 33 chars.
+[2026-05-20 13:47:22] INFO rag.pipeline — RAG start — collection: voice_note_20260520134722, k=4, chars=33
+[2026-05-20 13:47:22] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 13:47:22] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520134722 with 1 docs
+[2026-05-20 13:47:24] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520134722
+[2026-05-20 13:47:24] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 13:48:04] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 13:48:04] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 13:48:04] INFO rag.pipeline — RAG start — collection: doc_20260520134804, k=5, chars=681
+[2026-05-20 13:48:04] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 13:48:04] INFO rag.vectorstore — Creating vectorstore: doc_20260520134804 with 2 docs
+[2026-05-20 13:48:05] INFO rag.vectorstore — Vectorstore saved: doc_20260520134804
+[2026-05-20 13:48:30] INFO rag.pipeline — RAG complete — output length: 760
+[2026-05-20 13:48:36] INFO rag.pipeline — RAG start — collection: flashcards_20260520134836, k=4, chars=33
+[2026-05-20 13:48:36] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 13:48:36] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520134836 with 1 docs
+[2026-05-20 13:48:36] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520134836
+[2026-05-20 13:49:33] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\transcripts\transcript_2026-05-20_13-49-33.txt
+[2026-05-20 13:49:33] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\notes\note_2026-05-20_13-49-33.txt
+[2026-05-20 13:50:09] INFO rag.pipeline — RAG complete — output length: 1798
+[2026-05-20 13:50:09] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260520134804.txt
+[2026-05-20 13:50:09] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-20 19:54:37] INFO utils.health_check — Ollama health check passed.
+[2026-05-20 19:54:38] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-20 19:54:55] INFO rag.embeddings — Embedding model loaded.
+[2026-05-20 19:55:05] INFO features.voice_notes — Recording started.
+[2026-05-20 19:55:13] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-20 19:55:21] INFO features.voice_notes — Transcribed 28 chars.
+[2026-05-20 19:55:21] INFO rag.pipeline — RAG start — collection: voice_note_20260520195521, k=4, chars=28
+[2026-05-20 19:55:21] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 19:55:21] INFO rag.vectorstore — Creating vectorstore: voice_note_20260520195521 with 1 docs
+[2026-05-20 19:55:22] INFO rag.vectorstore — Vectorstore saved: voice_note_20260520195521
+[2026-05-20 19:55:22] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-20 19:55:57] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-20 19:55:58] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-20 19:55:58] INFO rag.pipeline — RAG start — collection: doc_20260520195557, k=5, chars=681
+[2026-05-20 19:55:58] INFO rag.pipeline — Split into 2 chunks
+[2026-05-20 19:55:58] INFO rag.vectorstore — Creating vectorstore: doc_20260520195557 with 2 docs
+[2026-05-20 19:56:00] INFO rag.vectorstore — Vectorstore saved: doc_20260520195557
+[2026-05-20 19:56:25] INFO rag.pipeline — RAG complete — output length: 526
+[2026-05-20 19:57:12] INFO rag.pipeline — RAG start — collection: flashcards_20260520195712, k=4, chars=28
+[2026-05-20 19:57:12] INFO rag.pipeline — Split into 1 chunks
+[2026-05-20 19:57:12] INFO rag.vectorstore — Creating vectorstore: flashcards_20260520195712 with 1 docs
+[2026-05-20 19:57:13] INFO rag.vectorstore — Vectorstore saved: flashcards_20260520195712
+[2026-05-20 19:58:18] INFO rag.pipeline — RAG complete — output length: 1850
+[2026-05-20 19:58:18] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260520195557.txt
+[2026-05-20 19:58:18] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-20 19:59:08] INFO rag.pipeline — RAG complete — output length: 753
+[2026-05-20 19:59:08] INFO features.flashcards — Raw flashcard output length: 753
+[2026-05-20 19:59:08] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-20 19:59:08] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260520195712.txt
+[2026-05-22 04:04:54] INFO utils.health_check — Ollama health check passed.
+[2026-05-22 04:04:58] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-22 04:05:50] INFO rag.embeddings — Embedding model loaded.
+[2026-05-22 04:09:05] INFO features.voice_notes — Recording started.
+[2026-05-22 04:09:15] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-22 04:10:11] INFO features.voice_notes — Transcribed 30 chars.
+[2026-05-22 04:10:11] INFO rag.pipeline — RAG start — collection: voice_note_20260522041011, k=4, chars=30
+[2026-05-22 04:10:11] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 04:10:11] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522041011 with 1 docs
+[2026-05-22 04:10:14] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522041011
+[2026-05-22 04:10:14] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-22 04:10:16] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.9 GiB)"}
+[2026-05-22 04:10:16] ERROR gui.voice_tab — Processing failed: AI processing failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.9 GiB)"}
+[2026-05-22 04:10:36] INFO features.voice_notes — Recording started.
+[2026-05-22 04:10:40] INFO features.voice_notes — Transcribed 27 chars.
+[2026-05-22 04:10:40] INFO rag.pipeline — RAG start — collection: voice_note_20260522041040, k=4, chars=27
+[2026-05-22 04:10:40] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 04:10:40] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522041040 with 1 docs
+[2026-05-22 04:10:40] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522041040
+[2026-05-22 04:10:42] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.8 GiB)"}
+[2026-05-22 04:10:42] ERROR gui.voice_tab — Processing failed: AI processing failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.8 GiB)"}
+[2026-05-22 17:16:16] INFO utils.health_check — Ollama health check passed.
+[2026-05-22 17:16:22] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-22 17:18:22] INFO rag.embeddings — Embedding model loaded.
+[2026-05-22 17:18:48] INFO features.voice_notes — Recording started.
+[2026-05-22 17:18:56] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-22 17:19:12] INFO features.voice_notes — Transcribed 24 chars.
+[2026-05-22 17:19:12] INFO rag.pipeline — RAG start — collection: voice_note_20260522171912, k=4, chars=24
+[2026-05-22 17:19:12] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 17:19:12] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522171912 with 1 docs
+[2026-05-22 17:19:14] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522171912
+[2026-05-22 17:19:14] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-22 17:19:17] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.3 GiB)"}
+[2026-05-22 17:19:17] ERROR gui.voice_tab — Processing failed: AI processing failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.3 GiB)"}
+[2026-05-22 17:36:13] INFO utils.health_check — Ollama health check passed.
+[2026-05-22 17:36:17] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-22 17:38:15] INFO rag.embeddings — Embedding model loaded.
+[2026-05-22 17:38:34] INFO features.voice_notes — Recording started.
+[2026-05-22 17:38:42] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-22 17:38:56] INFO features.voice_notes — Transcribed 28 chars.
+[2026-05-22 17:38:56] INFO rag.pipeline — RAG start — collection: voice_note_20260522173856, k=4, chars=28
+[2026-05-22 17:38:56] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 17:38:56] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522173856 with 1 docs
+[2026-05-22 17:38:59] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522173856
+[2026-05-22 17:38:59] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-22 17:39:02] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.7 GiB)"}
+[2026-05-22 17:39:02] ERROR gui.voice_tab — Processing failed: AI processing failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (1.7 GiB)"}
+[2026-05-22 17:39:23] INFO utils.health_check — Ollama health check passed.
+[2026-05-22 17:39:27] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-22 17:39:50] INFO rag.embeddings — Embedding model loaded.
+[2026-05-22 17:41:06] INFO features.voice_notes — Recording started.
+[2026-05-22 17:41:11] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-22 17:41:18] INFO features.voice_notes — Transcribed 27 chars.
+[2026-05-22 17:41:18] INFO rag.pipeline — RAG start — collection: voice_note_20260522174118, k=4, chars=27
+[2026-05-22 17:41:18] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 17:41:18] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522174118 with 1 docs
+[2026-05-22 17:41:20] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522174118
+[2026-05-22 17:41:20] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-22 17:41:22] ERROR rag.pipeline — RAG failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (2.1 GiB)"}
+[2026-05-22 17:41:22] ERROR gui.voice_tab — Processing failed: AI processing failed: Ollama call failed with status code 500. Details: {"error":"model requires more system memory (2.7 GiB) than is available (2.1 GiB)"}
+[2026-05-22 18:15:08] INFO utils.health_check — Ollama health check passed.
+[2026-05-22 18:15:11] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-22 18:15:37] INFO rag.embeddings — Embedding model loaded.
+[2026-05-22 18:16:07] INFO features.voice_notes — Recording started.
+[2026-05-22 18:16:12] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-22 18:16:21] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-22 18:16:28] INFO features.voice_notes — Recording started.
+[2026-05-22 18:16:31] INFO features.voice_notes — Transcribed 23 chars.
+[2026-05-22 18:16:31] INFO rag.pipeline — RAG start — collection: voice_note_20260522181631, k=4, chars=23
+[2026-05-22 18:16:31] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 18:16:31] INFO rag.vectorstore — Creating vectorstore: voice_note_20260522181631 with 1 docs
+[2026-05-22 18:16:34] INFO rag.vectorstore — Vectorstore saved: voice_note_20260522181631
+[2026-05-22 18:16:34] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-22 18:17:39] INFO rag.pipeline — RAG complete — output length: 1143
+[2026-05-22 18:17:44] INFO rag.pipeline — RAG start — collection: flashcards_20260522181744, k=4, chars=23
+[2026-05-22 18:17:44] INFO rag.pipeline — Split into 1 chunks
+[2026-05-22 18:17:44] INFO rag.vectorstore — Creating vectorstore: flashcards_20260522181744 with 1 docs
+[2026-05-22 18:17:44] INFO rag.vectorstore — Vectorstore saved: flashcards_20260522181744
+[2026-05-22 18:18:36] INFO rag.pipeline — RAG complete — output length: 1278
+[2026-05-22 18:18:36] INFO features.flashcards — Raw flashcard output length: 1278
+[2026-05-22 18:18:36] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-22 18:18:36] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260522181744.txt
+[2026-05-22 18:19:04] INFO features.summarizer — Loading PowerPoint: C:/Users/ABBAS/Downloads/Artify Studio_ Transforming Photos into Art with Deep Learning.pptx
+[2026-05-22 18:19:15] ERROR gui.summarize_tab — Summarizer failed: HTTP Error 403: Forbidden
+[2026-05-22 18:20:27] INFO features.summarizer — Loading PowerPoint: C:/Users/ABBAS/Downloads/Artify Studio_ Transforming Photos into Art with Deep Learning.pptx
+[2026-05-22 18:20:28] ERROR gui.summarize_tab — Summarizer failed: HTTP Error 403: Forbidden
+[2026-05-22 18:20:37] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Netflix.docx
+[2026-05-22 18:20:37] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-22 18:20:37] INFO rag.pipeline — RAG start — collection: doc_20260522182037, k=5, chars=2394
+[2026-05-22 18:20:37] INFO rag.pipeline — Split into 6 chunks
+[2026-05-22 18:20:37] INFO rag.vectorstore — Creating vectorstore: doc_20260522182037 with 6 docs
+[2026-05-22 18:20:38] INFO rag.vectorstore — Vectorstore saved: doc_20260522182037
+[2026-05-22 18:23:12] INFO rag.pipeline — RAG complete — output length: 1952
+[2026-05-22 18:23:12] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Netflix_summary_20260522182037.txt
+[2026-05-22 18:23:12] INFO features.summarizer — Summary complete for: Case study_Netflix.docx
+[2026-05-23 08:16:39] INFO utils.health_check — Ollama health check passed.
+[2026-05-23 08:16:44] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-05-23 08:18:18] INFO rag.embeddings — Embedding model loaded.
+[2026-05-23 08:19:26] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Final Year Project Proposal SAGE.docx
+[2026-05-23 08:19:26] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-23 08:19:26] INFO rag.pipeline — RAG start — collection: doc_20260523081926, k=5, chars=19219
+[2026-05-23 08:19:26] INFO rag.pipeline — Split into 51 chunks
+[2026-05-23 08:19:26] INFO rag.vectorstore — Creating vectorstore: doc_20260523081926 with 51 docs
+[2026-05-23 08:19:32] INFO rag.vectorstore — Vectorstore saved: doc_20260523081926
+[2026-05-23 08:19:32] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-05-23 08:22:02] INFO rag.pipeline — RAG complete — output length: 1809
+[2026-05-23 08:22:02] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Final_Year_Project_Proposal_SAGE_summary_20260523081926.txt
+[2026-05-23 08:22:02] INFO features.summarizer — Summary complete for: Final Year Project Proposal SAGE.docx
+[2026-05-23 08:23:34] INFO features.voice_notes — Recording started.
+[2026-05-23 08:23:51] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-05-23 08:24:10] INFO features.voice_notes — Transcribed 161 chars.
+[2026-05-23 08:24:10] INFO rag.pipeline — RAG start — collection: voice_note_20260523082410, k=4, chars=161
+[2026-05-23 08:24:10] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 08:24:10] INFO rag.vectorstore — Creating vectorstore: voice_note_20260523082410 with 1 docs
+[2026-05-23 08:24:11] INFO rag.vectorstore — Vectorstore saved: voice_note_20260523082410
+[2026-05-23 08:24:53] INFO rag.pipeline — RAG complete — output length: 972
+[2026-05-23 08:25:02] INFO rag.pipeline — RAG start — collection: flashcards_20260523082502, k=4, chars=161
+[2026-05-23 08:25:02] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 08:25:02] INFO rag.vectorstore — Creating vectorstore: flashcards_20260523082502 with 1 docs
+[2026-05-23 08:25:02] INFO rag.vectorstore — Vectorstore saved: flashcards_20260523082502
+[2026-05-23 08:25:48] INFO rag.pipeline — RAG complete — output length: 1190
+[2026-05-23 08:25:48] INFO features.flashcards — Raw flashcard output length: 1190
+[2026-05-23 08:25:48] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-23 08:25:48] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260523082502.txt
+[2026-05-23 11:25:38] INFO features.voice_notes — Recording started.
+[2026-05-23 11:25:43] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-23 11:25:45] INFO features.voice_notes — Recording started.
+[2026-05-23 11:25:50] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-23 11:25:52] INFO features.voice_notes — Recording started.
+[2026-05-23 11:25:56] INFO features.voice_notes — Transcribed 19 chars.
+[2026-05-23 11:25:56] INFO rag.pipeline — RAG start — collection: voice_note_20260523112556, k=4, chars=19
+[2026-05-23 11:25:56] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 11:25:56] INFO rag.vectorstore — Creating vectorstore: voice_note_20260523112556 with 1 docs
+[2026-05-23 11:25:56] INFO rag.vectorstore — Vectorstore saved: voice_note_20260523112556
+[2026-05-23 11:26:36] INFO rag.pipeline — RAG complete — output length: 513
+[2026-05-23 11:27:01] INFO rag.pipeline — RAG start — collection: flashcards_20260523112701, k=4, chars=19
+[2026-05-23 11:27:01] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 11:27:01] INFO rag.vectorstore — Creating vectorstore: flashcards_20260523112701 with 1 docs
+[2026-05-23 11:27:01] INFO rag.vectorstore — Vectorstore saved: flashcards_20260523112701
+[2026-05-23 11:27:39] INFO rag.pipeline — RAG complete — output length: 811
+[2026-05-23 11:27:39] INFO features.flashcards — Raw flashcard output length: 811
+[2026-05-23 11:27:39] INFO features.flashcards — Parsed 5 flashcards.
+[2026-05-23 11:27:39] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260523112701.txt
+[2026-05-23 11:28:30] INFO features.summarizer — Loading PowerPoint: C:/Users/ABBAS/Downloads/Artify Studio_ Transforming Photos into Art with Deep Learning.pptx
+[2026-05-23 11:28:38] ERROR gui.summarize_tab — Summarizer failed: <urlopen error [Errno 11001] getaddrinfo failed>
+[2026-05-23 11:28:47] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/Case study_Uber.docx
+[2026-05-23 11:28:47] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-23 11:28:47] INFO rag.pipeline — RAG start — collection: doc_20260523112847, k=5, chars=681
+[2026-05-23 11:28:47] INFO rag.pipeline — Split into 2 chunks
+[2026-05-23 11:28:47] INFO rag.vectorstore — Creating vectorstore: doc_20260523112847 with 2 docs
+[2026-05-23 11:28:47] INFO rag.vectorstore — Vectorstore saved: doc_20260523112847
+[2026-05-23 11:30:19] INFO rag.pipeline — RAG complete — output length: 1826
+[2026-05-23 11:30:19] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\Case_study_Uber_summary_20260523112847.txt
+[2026-05-23 11:30:19] INFO features.summarizer — Summary complete for: Case study_Uber.docx
+[2026-05-23 11:43:49] INFO features.summarizer — Loading Word document: C:/Users/ABBAS/Downloads/exam_notes (1).docx
+[2026-05-23 11:43:49] INFO features.summarizer — Loaded 1 document sections.
+[2026-05-23 11:43:49] INFO rag.pipeline — RAG start — collection: doc_20260523114349, k=5, chars=6168
+[2026-05-23 11:43:49] INFO rag.pipeline — Split into 14 chunks
+[2026-05-23 11:43:49] INFO rag.vectorstore — Creating vectorstore: doc_20260523114349 with 14 docs
+[2026-05-23 11:43:50] INFO rag.vectorstore — Vectorstore saved: doc_20260523114349
+[2026-05-23 11:46:07] INFO rag.pipeline — RAG complete — output length: 1873
+[2026-05-23 11:46:07] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\summaries\exam_notes_(1)_summary_20260523114349.txt
+[2026-05-23 11:46:07] INFO features.summarizer — Summary complete for: exam_notes (1).docx
+[2026-05-23 14:28:33] INFO features.voice_notes — Recording started.
+[2026-05-23 14:28:35] INFO features.voice_notes — Transcribed 0 chars.
+[2026-05-23 14:28:48] INFO features.voice_notes — Recording started.
+[2026-05-23 14:28:54] INFO features.voice_notes — Transcribed 43 chars.
+[2026-05-23 14:28:54] INFO rag.pipeline — RAG start — collection: voice_note_20260523142854, k=4, chars=43
+[2026-05-23 14:28:54] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 14:28:54] INFO rag.vectorstore — Creating vectorstore: voice_note_20260523142854 with 1 docs
+[2026-05-23 14:28:54] INFO rag.vectorstore — Vectorstore saved: voice_note_20260523142854
+[2026-05-23 14:29:56] INFO rag.pipeline — RAG complete — output length: 1285
+[2026-05-23 14:30:14] INFO features.voice_notes — Recording started.
+[2026-05-23 14:30:17] INFO features.voice_notes — Transcribed 15 chars.
+[2026-05-23 14:30:17] INFO rag.pipeline — RAG start — collection: voice_note_20260523143017, k=4, chars=15
+[2026-05-23 14:30:17] INFO rag.pipeline — Split into 1 chunks
+[2026-05-23 14:30:17] INFO rag.vectorstore — Creating vectorstore: voice_note_20260523143017 with 1 docs
+[2026-05-23 14:30:18] INFO rag.vectorstore — Vectorstore saved: voice_note_20260523143017
+[2026-05-23 14:30:59] INFO rag.pipeline — RAG complete — output length: 1095
+[2026-06-16 04:09:38] INFO utils.health_check — Ollama health check passed.
+[2026-06-16 04:09:42] INFO rag.embeddings — Loading embedding model: sentence-transformers/all-MiniLM-L6-v2
+[2026-06-16 04:10:59] INFO rag.embeddings — Embedding model loaded.
+[2026-06-16 04:11:14] INFO features.voice_notes — Recording started.
+[2026-06-16 04:11:22] INFO features.voice_notes — Moonshine loaded: moonshine/tiny
+[2026-06-16 04:11:37] INFO features.voice_notes — Transcribed 21 chars.
+[2026-06-16 04:11:37] INFO rag.pipeline — RAG start — collection: voice_note_20260616041137, k=4, chars=21
+[2026-06-16 04:11:37] INFO rag.pipeline — Split into 1 chunks
+[2026-06-16 04:11:37] INFO rag.vectorstore — Creating vectorstore: voice_note_20260616041137 with 1 docs
+[2026-06-16 04:11:39] INFO rag.vectorstore — Vectorstore saved: voice_note_20260616041137
+[2026-06-16 04:11:39] INFO rag.pipeline — Initializing Ollama LLM with model: phi3.5
+[2026-06-16 04:12:40] INFO rag.pipeline — RAG complete — output length: 1181
+[2026-06-16 04:15:50] INFO rag.pipeline — RAG start — collection: flashcards_20260616041550, k=4, chars=21
+[2026-06-16 04:15:50] INFO rag.pipeline — Split into 1 chunks
+[2026-06-16 04:15:50] INFO rag.vectorstore — Creating vectorstore: flashcards_20260616041550 with 1 docs
+[2026-06-16 04:15:51] INFO rag.vectorstore — Vectorstore saved: flashcards_20260616041550
+[2026-06-16 04:16:48] INFO rag.pipeline — RAG complete — output length: 1451
+[2026-06-16 04:16:48] INFO features.flashcards — Raw flashcard output length: 1451
+[2026-06-16 04:16:48] INFO features.flashcards — Parsed 5 flashcards.
+[2026-06-16 04:16:48] INFO utils.file_utils — Saved file: D:\FYP PROJECT DEMO\sage\storage\flashcards\cards_20260616041550.txt
