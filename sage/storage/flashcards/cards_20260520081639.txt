@@ -1,0 +1,22 @@
+FLASHCARDS — 20260520081639
+==================================================
+
+Card 1
+Q: What are the main differences between Samsung and iPhone phones?
+A: iPhones typically offer a seamless ecosystem with iOS, while Samsung offers Android OS; Apple' extranet is often considered more secure. Performance can vary based on hardware specifications of each brand’s models.
+
+Card 2
+Q: Which operating system does the iPhone use and how does it affect user experience?
+A: The iPhone uses iOS (iOS), which tends to provide a consistent, integrated user interface across all Apple devices; this often results in an intuitive and streamlined interaction for users familiar with their ecosystem.
+
+Card 3
+Q: How do Samsung's Android phones compare when it comes to customization options?
+A: Samsung’s Android phones generally offer more extensive customization through themes, launchers, and third-party apps compared to iPhones which have a locked down system with limited user modifications.
+
+Card 4
+Q: Can I use my iPhone on non-Apple devices or services that are not part of the Apple ecosystem?
+A: While you can technically connect an iPhone via USB for charging and data transfer, it may be more challenging to integrate fully due to compatibility issues with apps designed specifically for iOS.
+
+Card 5
+Q: What factors should I consider when choosing between a Samsung phone and an iPhone based on performance capabilities?
+A: Consider the processor speed, RAM size, camera quality, battery life, and whether your preferred software applications are available or compatible; these aspects can significantly impact user experience depending on brand choice.

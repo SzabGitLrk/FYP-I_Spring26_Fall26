@@ -1,0 +1,20 @@
+SUMMARY — Case study_Netflix.docx
+Generated: 20260522182037
+==================================================
+
+DOCUMENT OVERVIEW:
+This academic summary outlines Netflix's use of Apache Kafka and Spark for real-time data processing to enhance user experience through personalized content recommendation, streaming quality monitoring, immediate behavior analysis, and failure detection.
+
+MAIN TOPICS COVERED:
+- Implementation of a simplified architecture involving Apache Kafka and Apache Spark at Netflix
+- Real-world example where sudden drop in movie watching prompts data processing for improved recommendations
+- The role of each component (Kafka as the initial pipeline, followed by Spark's analysis) within this system
+- Benefits realized from real-time streaming: personalized suggestions and quality adjustments based on user behavior patterns
+- Impact assessment including customer experience enhancement, increased watch time, revenue generation through recommendations retention
+
+KEY CONCEPTS & DEFINITIONS:
+- Apache Kafka (Data Streaming): A distributed system for handling real-time data streams as a continuous flow of records. It acts like a message broker that collects and processes user interactions with Netflix's platform, such as clicks or view history.
+   - User Activity → Event Collection/Streaming: The initial step where all the streaming events from users are gathered by Kafka into real-time data processing pipelines.
+   
+- Apache Spark (Data Processing): A fast and general-purpose cluster computing system that processes streamed data for analysis, including user preferences assessment based on their view history or search activity. It is capable of handling large volumes of streaming information with low latency to provide immediate insights into the collected streams.
+   - Analytics & Recommendations: The process where Spark analyzes real-time and historical data from Kafka, applying machine learning algorithms for generating personalized content recommendations based on user behavior patterns such as most watched content

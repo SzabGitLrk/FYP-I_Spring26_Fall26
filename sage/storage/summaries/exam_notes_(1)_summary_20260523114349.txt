@@ -1,0 +1,28 @@
+SUMMARY — exam_notes (1).docx
+Generated: 20260523114349
+==================================================
+
+DOCUMENT OVERVIEW: This lecture series provides an in-depth look at research methods, focusing on objectivity and systematic analysis within scientific inquiry. It also touches upon academic honesty by defining key terms related to the development of a research question.
+
+MAIN TOPICS COVERED:
+
+- The Scientific Method as a structured approach for knowledge acquisition in science
+
+- Characteristics essential to objectivity and systematic analysis within scientific inquiry
+
+- Different types of Research Designs (Quantitative, Qualitative, Mixed Methods)
+
+- Key Building Blocks: Theory, Concept/Construct, Proposition, Hypothesis; Levels of Abstraction from Observations through Theories
+
+- Transitioning Data into Knowledge and the role it plays in research methods
+
+KEY CONCEPTS & DEFINITIONS:
+
+Objective - Unbiased approach to knowledge acquisition.
+Systematic Analysis – A methodical examination of phenomena or data sets, often using a structured framework like experiments or surveys.
+Theory – An explanatory set that accounts for various observations and relationships within the research scope; it's an abstract representation derived from concrete experiences (observations).
+Concept/Construct - General ideas used to categorize phenomena in qualitative studies, not directly measurable by numbers but essential for understanding.
+Proposition – A statement proposing a relationship between concepts or constructs within the theory framework; testable through research methods.
+Hypothesis – An initial assumption about variables that can be tested and potentially falsified during empirical investigation.
+Level of Abstraction - Refers to how closely an idea is tied to specific, tangible instances (low) versus broad generalizations or principles applicable across situations (high).
+Data vs Knowledge: Data refers to raw measurements collected from observations

@@ -1,0 +1,22 @@
+FLASHCARDS — 20260616041550
+==================================================
+
+Card 1
+Q: What is the primary focus of quantum physics?
+A: The study of matter and energy at the smallest scales, such as atoms and subatomic particles.
+
+Card 2
+Q: How does quantum mechanics differ from classical physics in terms of scale?
+A: Quantum mechanics deals with phenomena on a microscopic level where classical laws do not apply accurately; it' extrinsic to everyday human experience size range, unlike classical physics which describes macroscopic objects.
+
+Card 3
+Q: What is wave-particle duality in quantum theory?
+A: Wave-particle duality refers to the concept that particles can exhibit both particle and wavelike behaviors under different conditions; a fundamental principle of quantum mechanics where entities like electrons display properties of waves as well as discrete, localized particles.
+
+Card 4
+Q: Can you explain Heisenberg's uncertainty principle?
+A: The Heisenberg’s Uncertainty Principle states that it is impossible to simultaneously know both the exact position and momentum of a particle; this reflects inherent limitations in measurement at quantum scales rather than technological constraints.
+
+Card 5
+Q: What role do superposition principles play in understanding quarks within protons?
+A: Superposition allows for multiple configurations or 'states' wherein particles like quarks can exist simultaneously, contributing to the probabilistic nature of their positions and momenta inside a proton; this principle is essential for quantum chromodynamics.
