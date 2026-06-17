@@ -1,0 +1,1156 @@
+{
+  "origins": [
+    {
+      "name": "VIP Rd",
+      "lat": 27.55578913530727,
+      "lng": 68.20881156148,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "KFC | Larkana",
+      "lat": 27.551091413984285,
+      "lng": 68.21139105516265,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Bakrani Rd",
+      "lat": 27.499761942235015,
+      "lng": 68.19881600750082,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Taimoor Hospital",
+      "lat": 27.559867356180902,
+      "lng": 68.19559105103237,
+      "category": "Hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Professor Colony",
+      "lat": 27.57021623934916,
+      "lng": 68.18917747889913,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Leela Abad",
+      "lat": 27.550718037035885,
+      "lng": 68.21726101349145,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Bunder Rd",
+      "lat": 27.55440917844181,
+      "lng": 68.2155729375407,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Old Lahori Muhalla",
+      "lat": 27.56030889132802,
+      "lng": 68.20968140428168,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Sachal Colony",
+      "lat": 27.5590374303033,
+      "lng": 68.19786733496265,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Bank Square",
+      "lat": 27.558381710591995,
+      "lng": 68.21822308950868,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Resham Gali",
+      "lat": 27.554647425601672,
+      "lng": 68.21787572099693,
+      "category": "street",
+      "city": "larkana"
+    },
+    {
+      "name": "Hyderabad Darbar",
+      "lat": 27.5644672980124,
+      "lng": 68.15676614232764,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Karma Bagh Rd",
+      "lat": 27.550732281614795,
+      "lng": 68.21801202838286,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Charcoal BBQ n Grill",
+      "lat": 27.55089344712498,
+      "lng": 68.20388619581091,
+      "category": "Resturant",
+      "city": "larkana"
+    },
+    {
+      "name": "Chandka Medical College Hospital",
+      "city": "larkana",
+      "lat": 27.562,
+      "lng": 68.215,
+      "type": "hospital"
+    },
+    {
+      "name": "Larkana Railway Station",
+      "city": "larkana",
+      "lat": 27.547,
+      "lng": 68.208,
+      "type": "transit"
+    },
+    {
+      "name": "Bachal Shah Market",
+      "city": "larkana",
+      "lat": 27.559,
+      "lng": 68.212,
+      "type": "market"
+    },
+    {
+      "name": "Jamia Masjid Larkana",
+      "city": "larkana",
+      "lat": 27.5575,
+      "lng": 68.2135,
+      "type": "mosque"
+    },
+    {
+      "name": "NED University Karachi",
+      "city": "karachi",
+      "lat": 24.9314,
+      "lng": 67.1142,
+      "type": "university"
+    },
+    {
+      "name": "Aga Khan University Hospital",
+      "city": "karachi",
+      "lat": 24.8927,
+      "lng": 67.0815,
+      "type": "hospital"
+    },
+    {
+      "name": "Karachi Cantonment Station",
+      "city": "karachi",
+      "lat": 24.8478,
+      "lng": 67.0339,
+      "type": "transit"
+    },
+    {
+      "name": "Empress Market Karachi",
+      "city": "karachi",
+      "lat": 24.8628,
+      "lng": 67.0223,
+      "type": "market"
+    },
+    {
+      "name": "Gulshan-e-Iqbal NIPA",
+      "city": "karachi",
+      "lat": 24.9189,
+      "lng": 67.0986,
+      "type": "residential"
+    }
+  ],
+  "city_landmarks": [
+    {
+      "name": "Hyderabad City",
+      "city": "hyderabad",
+      "lat": 25.396,
+      "lng": 68.3578,
+      "category": "city_center"
+    },
+    {
+      "name": "Sukkur City",
+      "city": "sukkur",
+      "lat": 27.7058,
+      "lng": 68.8574,
+      "category": "city_center"
+    },
+    {
+      "name": "Mirpur Khas City",
+      "city": "mirpurkhas",
+      "lat": 25.5276,
+      "lng": 69.0119,
+      "category": "city_center"
+    },
+    {
+      "name": "Nawabshah City",
+      "city": "nawabshah",
+      "lat": 26.2442,
+      "lng": 68.41,
+      "category": "city_center"
+    },
+    {
+      "name": "Thatta City",
+      "city": "thatta",
+      "lat": 24.7464,
+      "lng": 67.9243,
+      "category": "city_center"
+    },
+    {
+      "name": "Jacobabad City",
+      "city": "jacobabad",
+      "lat": 28.2769,
+      "lng": 68.4514,
+      "category": "city_center"
+    },
+    {
+      "name": "Shikarpur City",
+      "city": "shikarpur",
+      "lat": 27.9556,
+      "lng": 68.6383,
+      "category": "city_center"
+    },
+    {
+      "name": "Khairpur City",
+      "city": "khairpur",
+      "lat": 27.5295,
+      "lng": 68.7592,
+      "category": "city_center"
+    },
+    {
+      "name": "Dadu City",
+      "city": "dadu",
+      "lat": 26.73,
+      "lng": 67.7758,
+      "category": "city_center"
+    },
+    {
+      "name": "Badin City",
+      "city": "badin",
+      "lat": 24.6557,
+      "lng": 68.837,
+      "category": "city_center"
+    },
+    {
+      "name": "Sanghar City",
+      "city": "sanghar",
+      "lat": 26.0469,
+      "lng": 68.9482,
+      "category": "city_center"
+    },
+    {
+      "name": "Tando Adam City",
+      "city": "tandoadam",
+      "lat": 25.7669,
+      "lng": 68.6612,
+      "category": "city_center"
+    },
+    {
+      "name": "Tando Allahyar City",
+      "city": "tandoallahyar",
+      "lat": 25.4604,
+      "lng": 68.718,
+      "category": "city_center"
+    },
+    {
+      "name": "Kandhkot City",
+      "city": "kandhkot",
+      "lat": 28.2378,
+      "lng": 69.1828,
+      "category": "city_center"
+    },
+    {
+      "name": "Kashmore City",
+      "city": "kashmore",
+      "lat": 28.4344,
+      "lng": 69.5824,
+      "category": "city_center"
+    },
+    {
+      "name": "Mithi City",
+      "city": "mithi",
+      "lat": 24.7349,
+      "lng": 69.7958,
+      "category": "city_center"
+    },
+    {
+      "name": "Umerkot City",
+      "city": "umerkot",
+      "lat": 25.3613,
+      "lng": 69.7411,
+      "category": "city_center"
+    },
+    {
+      "name": "Matiari City",
+      "city": "matiari",
+      "lat": 25.595,
+      "lng": 68.4496,
+      "category": "city_center"
+    },
+    {
+      "name": "Jamshoro City",
+      "city": "jamshoro",
+      "lat": 25.4297,
+      "lng": 68.281,
+      "category": "city_center"
+    }
+  ],
+  "places": [
+    {
+      "name": "Mazar-e-Quaid",
+      "lat": 24.8757,
+      "lng": 67.0431,
+      "category": "landmark",
+      "city": "karachi"
+    },
+    {
+      "name": "Empress Market",
+      "lat": 24.8628,
+      "lng": 67.0223,
+      "category": "market",
+      "city": "karachi"
+    },
+    {
+      "name": "Karachi Saddar",
+      "lat": 24.86,
+      "lng": 67.03,
+      "category": "area",
+      "city": "karachi"
+    },
+    {
+      "name": "Clifton Beach",
+      "lat": 24.7991,
+      "lng": 67.0254,
+      "category": "beach",
+      "city": "karachi"
+    },
+    {
+      "name": "Sea View",
+      "lat": 24.798,
+      "lng": 67.0454,
+      "category": "beach",
+      "city": "karachi"
+    },
+    {
+      "name": "Frere Hall",
+      "lat": 24.8512,
+      "lng": 67.0357,
+      "category": "landmark",
+      "city": "karachi"
+    },
+    {
+      "name": "Jinnah International Airport",
+      "lat": 24.9066,
+      "lng": 67.1607,
+      "category": "airport",
+      "city": "karachi"
+    },
+    {
+      "name": "Port Grand",
+      "lat": 24.8447,
+      "lng": 67.0107,
+      "category": "restaurant",
+      "city": "karachi"
+    },
+    {
+      "name": "Tariq Road",
+      "lat": 24.877,
+      "lng": 67.057,
+      "category": "shopping",
+      "city": "karachi"
+    },
+    {
+      "name": "Karachi Zoo",
+      "lat": 24.8654,
+      "lng": 67.0186,
+      "category": "park",
+      "city": "karachi"
+    },
+    {
+      "name": "Dolmen Mall Clifton",
+      "lat": 24.809,
+      "lng": 67.0285,
+      "category": "mall",
+      "city": "karachi"
+    },
+    {
+      "name": "Lucky One Mall",
+      "lat": 24.9136,
+      "lng": 67.0851,
+      "category": "mall",
+      "city": "karachi"
+    },
+    {
+      "name": "NED University",
+      "lat": 24.9314,
+      "lng": 67.1142,
+      "category": "university",
+      "city": "karachi"
+    },
+    {
+      "name": "Aga Khan University Hospital",
+      "lat": 24.8927,
+      "lng": 67.0815,
+      "category": "hospital",
+      "city": "karachi"
+    },
+    {
+      "name": "Civil Hospital Karachi",
+      "lat": 24.8702,
+      "lng": 67.0117,
+      "category": "hospital",
+      "city": "karachi"
+    },
+    {
+      "name": "JPMC",
+      "lat": 24.8654,
+      "lng": 67.0408,
+      "category": "hospital",
+      "city": "karachi"
+    },
+    {
+      "name": "Karachi Cantonment Station",
+      "lat": 24.8478,
+      "lng": 67.0339,
+      "category": "train_station",
+      "city": "karachi"
+    },
+    {
+      "name": "Karachi Press Club",
+      "lat": 24.8546,
+      "lng": 67.0269,
+      "category": "landmark",
+      "city": "karachi"
+    },
+    {
+      "name": "Quaid-e-Azam House Museum",
+      "lat": 24.8474,
+      "lng": 67.0294,
+      "category": "museum",
+      "city": "karachi"
+    },
+    {
+      "name": "FAST NUCES Karachi",
+      "lat": 24.8567,
+      "lng": 67.2647,
+      "category": "university",
+      "city": "karachi"
+    },
+    {
+      "name": "Civil Hospital Larkana",
+      "lat": 27.558,
+      "lng": 68.212,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "SZABIST Larkana",
+      "lat": 27.560981946211456,
+      "lng": 68.19515865767235,
+      "category": "university",
+      "city": "larkana"
+    },
+    {
+      "name": "City Mart Larkana",
+      "lat": 27.5605,
+      "lng": 68.218,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "Al-Fatah Mart",
+      "lat": 27.559,
+      "lng": 68.22,
+      "category": "supermarket",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Railway Station",
+      "lat": 27.561,
+      "lng": 68.215,
+      "category": "train_station",
+      "city": "larkana"
+    },
+    {
+      "name": "Royal Road",
+      "lat": 27.552864553630165,
+      "lng": 68.21293980821756,
+      "category": "road",
+      "city": "larkana"
+    },
+    {
+      "name": "Sambara Inn",
+      "lat": 27.550693583841582,
+      "lng": 68.20452410561218,
+      "category": "Resturant",
+      "city": "larkana"
+    },
+    {
+      "name": "Charcoal BBQ n Grill",
+      "lat": 27.55089344712498,
+      "lng": 68.20388619581091,
+      "category": "Resturant",
+      "city": "larkana"
+    },
+    {
+      "name": "Sindh High Court Larkana",
+      "lat": 27.55110343976255,
+      "lng": 68.20166859642345,
+      "category": "courthouse",
+      "city": "larkana"
+    },
+    {
+      "name": "SIUT Day Care Dialysis Center Larkano",
+      "lat": 27.548906611290974,
+      "lng": 68.19593639826972,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "College of Nursing (Male) Larkana",
+      "lat": 27.54857254906289,
+      "lng": 68.19745479031496,
+      "category": "college",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Press Club",
+      "lat": 27.554159198048076,
+      "lng": 68.21244058292916,
+      "category": "press_club",
+      "city": "larkana"
+    },
+    {
+      "name": "Govt. Pilot Higher Secondary School Larkana",
+      "lat": 27.555776210256095,
+      "lng": 68.2073443862017,
+      "category": "school",
+      "city": "larkana"
+    },
+    {
+      "name": "KFC | Larkana",
+      "lat": 27.551091413984285,
+      "lng": 68.21139105516265,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Chandka Medical Hospital",
+      "lat": 27.555057442803196,
+      "lng": 68.20061434146801,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "indus hospital and health network larkana office",
+      "lat": 27.557966584131552,
+      "lng": 68.19466300121783,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Khora Complex Hockey Field",
+      "lat": 27.556843971667114,
+      "lng": 68.19676026757435,
+      "category": "sports_field",
+      "city": "larkana"
+    },
+    {
+      "name": "Khuhra Sports Complex کھوڑا اسپورٹس کمپلیکس",
+      "lat": 27.556677660719707,
+      "lng": 68.19601939950508,
+      "category": "sports_complex",
+      "city": "larkana"
+    },
+    {
+      "name": "Shaheed Mohtarma Benazir Bhutto Medical University (CMC)",
+      "lat": 27.553224863547406,
+      "lng": 68.19673823146454,
+      "category": "university",
+      "city": "larkana"
+    },
+    {
+      "name": "Almas Medical Centre",
+      "lat": 27.556754489143543,
+      "lng": 68.2191517784156,
+      "category": "clinic",
+      "city": "larkana"
+    },
+    {
+      "name": "R Orthodontist and Aesthetic dental clinic By Almas Sarfaraz Rahujo",
+      "lat": 27.56129242956145,
+      "lng": 68.19705201089852,
+      "category": "dentist",
+      "city": "larkana"
+    },
+    {
+      "name": "Sachal Colony",
+      "lat": 27.5590374303033,
+      "lng": 68.19786733496265,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Shah Nawaz Bhutto Colony",
+      "lat": 25.000836194522975,
+      "lng": 67.05176271898111,
+      "category": "Area",
+      "city": "karachi"
+    },
+    {
+      "name": "Gajanpur Street",
+      "lat": 27.561788712605733,
+      "lng": 68.22010325167878,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Civil Lines Police Station",
+      "lat": 27.54867521330819,
+      "lng": 68.20577603941771,
+      "category": "police_station",
+      "city": "larkana"
+    },
+    {
+      "name": "VIP Rd",
+      "lat": 27.55578913530727,
+      "lng": 68.20881156148,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Jinnah bagh",
+      "lat": 27.553449216097157,
+      "lng": 68.21317819741279,
+      "category": "park",
+      "city": "larkana"
+    },
+    {
+      "name": "District & Sessions Court Larkana",
+      "lat": 27.552555087460288,
+      "lng": 68.20735243989066,
+      "category": "courthouse",
+      "city": "larkana"
+    },
+    {
+      "name": "Burj Al Marjan Inn larkana",
+      "lat": 27.56122926529988,
+      "lng": 68.20706391538002,
+      "category": "hotel",
+      "city": "larkana"
+    },
+    {
+      "name": "LINAR Cancer Hospital",
+      "lat": 27.561168164670676,
+      "lng": 68.20261843966398,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Royal Taj Restaurant Larkana",
+      "lat": 27.558999070301713,
+      "lng": 68.20134338073765,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Bank Square",
+      "lat": 27.558381710591995,
+      "lng": 68.21822308950868,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Kambar Shahdadkot Wagan Service",
+      "lat": 27.565190151583742,
+      "lng": 68.2024598167354,
+      "category": "bus_station",
+      "city": "larkana"
+    },
+    {
+      "name": "Qambar Bus Stop",
+      "lat": 27.56470509201787,
+      "lng": 68.20251346091148,
+      "category": "bus_stop",
+      "city": "larkana"
+    },
+    {
+      "name": "Ali Hospital Larkana",
+      "lat": 27.5639917652328,
+      "lng": 68.19883347043249,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Dua medical center",
+      "lat": 27.56722547619693,
+      "lng": 68.1991875219946,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Al Madina Hotel",
+      "lat": 27.568623551142025,
+      "lng": 68.19702029728103,
+      "category": "hotel",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Pearl Gas",
+      "lat": 27.56810080662959,
+      "lng": 68.19728513748564,
+      "category": "fuel_station",
+      "city": "larkana"
+    },
+    {
+      "name": "Bilal masjid MUNWAR ABAD LARKANA",
+      "lat": 27.5686065349995,
+      "lng": 68.20189312685264,
+      "category": "mosque",
+      "city": "larkana"
+    },
+    {
+      "name": "Chandka children hospital larkana",
+      "lat": 27.563263330546363,
+      "lng": 68.20541678130019,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Mehfil Tonight Larkana",
+      "lat": 27.5597164724164,
+      "lng": 68.20240253566394,
+      "category": "Resturant",
+      "city": "larkana"
+    },
+    {
+      "name": "The City Hospital Larkana",
+      "lat": 27.56026270454559,
+      "lng": 68.19843608053752,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Shaikh Zayed Hospital For Women شيخ زيد وومين اسپتال",
+      "lat": 27.56247036504385,
+      "lng": 68.20548327750969,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Muncipal Stadium Larkana",
+      "lat": 27.560239944927805,
+      "lng": 68.21333916921637,
+      "category": "stadium",
+      "city": "larkana"
+    },
+    {
+      "name": "BITE RESTAURANT and BBQ larkana",
+      "lat": 27.55875653388372,
+      "lng": 68.20262927251683,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Hasnain medical center",
+      "lat": 27.55818584190271,
+      "lng": 68.19805878871492,
+      "category": "center",
+      "city": "larkana"
+    },
+    {
+      "name": "Sindh Medical Center",
+      "lat": 27.556876325726307,
+      "lng": 68.21028035177243,
+      "category": "center",
+      "city": "larkana"
+    },
+    {
+      "name": "Resham Gali",
+      "lat": 27.554647425601672,
+      "lng": 68.21787572099693,
+      "category": "street",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Darbar Restaurant",
+      "lat": 27.553734282835862,
+      "lng": 68.21463561276178,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Stylo",
+      "lat": 27.553620139456232,
+      "lng": 68.2165024300893,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "Green Palace Hotel larkana",
+      "lat": 27.552450162974456,
+      "lng": 68.21385240779102,
+      "category": "hotel",
+      "city": "larkana"
+    },
+    {
+      "name": "Old Lahori Muhalla",
+      "lat": 27.56030889132802,
+      "lng": 68.20968140428168,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "Pakistan Chowk",
+      "lat": 27.553408513088712,
+      "lng": 68.2168038545138,
+      "category": "Chowk",
+      "city": "larkana"
+    },
+    {
+      "name": "Bakrani Rd",
+      "lat": 27.499761942235015,
+      "lng": 68.19881600750082,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Ratodero Rd",
+      "lat": 27.805954846437032,
+      "lng": 68.28991216702717,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Rice Canal Larkana",
+      "lat": 27.5668217881177,
+      "lng": 68.2151248301889,
+      "category": "canal",
+      "city": "larkana"
+    },
+    {
+      "name": "New Bus Stand",
+      "lat": 27.58084403559554,
+      "lng": 68.22258706148072,
+      "category": "bus_station",
+      "city": "larkana"
+    },
+    {
+      "name": "Moen-Jo-Daro Rd",
+      "lat": 27.348234110808562,
+      "lng": 68.12421210934271,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Sachal Banquet.",
+      "lat": 27.563362209266863,
+      "lng": 68.1894315156018,
+      "category": "banquet",
+      "city": "larkana"
+    },
+    {
+      "name": "Garhi Khuda Bakhsh ",
+      "lat": 27.69384701031704,
+      "lng": 68.33697474890045,
+      "category": "Area",
+      "city": "larkana"
+    },
+    {
+      "name": "SIR SHAHNAWAZ BHUTTO MEMORIAL LIBRARY Larkana",
+      "lat": 27.548226506881516,
+      "lng": 68.20474236914615,
+      "category": "Library",
+      "city": "larkana"
+    },
+    {
+      "name": "Sagar Book Store",
+      "lat": 27.55564660019515,
+      "lng": 68.21482797866736,
+      "category": "store",
+      "city": "larkana"
+    },
+    {
+      "name": "Latif Medical Complex",
+      "lat": 27.553592036988906,
+      "lng": 68.21167370111394,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "SICVD Larkana",
+      "lat": 27.5550967084132,
+      "lng": 68.20988871701695,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Ali & Kamran Kiryana Store",
+      "lat": 27.551869996624013,
+      "lng": 68.22684115533129,
+      "category": "Store",
+      "city": "larkana"
+    },
+    {
+      "name": "Hussaini medical center larkana",
+      "lat": 27.569700885909818,
+      "lng": 68.25558909086342,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Karma Bagh Rd",
+      "lat": 27.550732281614795,
+      "lng": 68.21801202838286,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Fish Market Larkana",
+      "lat": 27.552833679759214,
+      "lng": 68.2183713203846,
+      "category": "market",
+      "city": "larkana"
+    },
+    {
+      "name": "City Book Store",
+      "lat": 27.555658623761655,
+      "lng": 68.2147402633265,
+      "category": "store",
+      "city": "larkana"
+    },
+    {
+      "name": "Sweet Creme - Larkana",
+      "lat": 27.552101161663373,
+      "lng": 68.21345280310061,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Bin Khaleel Super Market Larkana",
+      "lat": 27.57051495470065,
+      "lng": 68.19065909159336,
+      "category": "supermarket",
+      "city": "larkana"
+    },
+    {
+      "name": "Ajwa Super Mart",
+      "lat": 27.56084195714555,
+      "lng": 68.19810485192967,
+      "category": "supermarket",
+      "city": "larkana"
+    },
+    {
+      "name": "SNT SUPER MART LARKANA",
+      "lat": 27.55952918373857,
+      "lng": 68.19927235532954,
+      "category": "mart",
+      "city": "larkana"
+    },
+    {
+      "name": "The Educators Larkana",
+      "lat": 27.56071043509395,
+      "lng": 68.1947562516789,
+      "category": "school",
+      "city": "larkana"
+    },
+    {
+      "name": "Sabzi mandi 02, Larkana, Pakistan",
+      "lat": 27.558147345649747,
+      "lng": 68.22147064983226,
+      "category": "market",
+      "city": "larkana"
+    },
+    {
+      "name": "Shah Baharo Tomb Larkana",
+      "lat": 27.55871803783085,
+      "lng": 68.22412067213055,
+      "category": "historical",
+      "city": "larkana"
+    },
+    {
+      "name": "Jamia Masjid Hydri Ghulam Bhutto",
+      "lat": 27.558156857210403,
+      "lng": 68.22716766133182,
+      "category": "mosque",
+      "city": "larkana"
+    },
+    {
+      "name": "Zulfiqar Bagh Larkana",
+      "lat": 27.55977381054552,
+      "lng": 68.21648174145695,
+      "category": "park",
+      "city": "larkana"
+    },
+    {
+      "name": "Government Girls Degree College Larkano",
+      "lat": 27.554704401746516,
+      "lng": 68.21395203875305,
+      "category": "college",
+      "city": "larkana"
+    },
+    {
+      "name": "Hyderabad Darbar",
+      "lat": 27.5644672980124,
+      "lng": 68.15676614232764,
+      "category": "RESTAURANT",
+      "city": "larkana"
+    },
+    {
+      "name": "Sum Academy",
+      "lat": 27.551432273388578,
+      "lng": 68.21655914571046,
+      "category": "accademy",
+      "city": "larkana"
+    },
+    {
+      "name": "Kababjees Fried Chicken Larkana",
+      "lat": 27.551287516943688,
+      "lng": 68.21247580139413,
+      "category": "restaurant",
+      "city": "larkana"
+    },
+    {
+      "name": "Batool Medical Centre Larkana",
+      "lat": 27.550298248338166,
+      "lng": 68.21932079826178,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Azeem Medical Store",
+      "lat": 27.54766332598328,
+      "lng": 68.21387054997219,
+      "category": "store",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Medical Center لاڙڪاڻو ميڊيڪل سينٽر",
+      "lat": 27.546794858511003,
+      "lng": 68.21103149509867,
+      "category": "hospital",
+      "city": "larkana"
+    },
+    {
+      "name": "Government Degree College Larkana",
+      "lat": 27.5480014872393,
+      "lng": 68.20240011488835,
+      "category": "college",
+      "city": "larkana"
+    },
+    {
+      "name": "Para-medical Institute Larkana",
+      "lat": 27.549013381367267,
+      "lng": 68.19812512464708,
+      "category": "institute",
+      "city": "larkana"
+    },
+    {
+      "name": "ILIM Cambridge Academy Nazar Mohalla Lakana",
+      "lat": 27.54610912680538,
+      "lng": 68.19604752885611,
+      "category": "accademy",
+      "city": "larkana"
+    },
+    {
+      "name": "Al-Rafiu mobile's Accessories & General Store",
+      "lat": 27.54966148581026,
+      "lng": 68.21288790135002,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "J.",
+      "lat": 27.82557147273095,
+      "lng": 68.23963230335718,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "Taimoor Hospital",
+      "lat": 27.559867356180902,
+      "lng": 68.19559105103237,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Professor Colony",
+      "lat": 27.57021623934916,
+      "lng": 68.18917747889913,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Leela Abad",
+      "lat": 27.550718037035885,
+      "lng": 68.21726101349145,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "Bunder Rd",
+      "lat": 27.55440917844181,
+      "lng": 68.2155729375407,
+      "category": "Road",
+      "city": "larkana"
+    },
+    {
+      "name": "AlKaram Studio - Larkana",
+      "lat": 27.649492661491646,
+      "lng": 68.86568889267384,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "Ideas - Larkana",
+      "lat": 27.54786567560632,
+      "lng": 68.21073381119541,
+      "category": "shop",
+      "city": "larkana"
+    },
+    {
+      "name": "Mosque, PHQ",
+      "lat": 27.550167664781718,
+      "lng": 68.20809451773232,
+      "category": "mosque",
+      "city": "larkana"
+    },
+    {
+      "name": "Allied Bank Ltd. (ABL) - Larkana Br.",
+      "lat": 27.545723283872825,
+      "lng": 68.21400839018638,
+      "category": "bank",
+      "city": "larkana"
+    },
+    {
+      "name": "Aqsa Masjid (Murad Wahan Muhalla)",
+      "lat": 27.546698252556133,
+      "lng": 68.21902956513505,
+      "category": "mosque",
+      "city": "larkana"
+    },
+    {
+      "name": "Dr Naeem Akhtar Katpar Eye Clinic",
+      "lat": 27.568805525268886,
+      "lng": 68.19018177497475,
+      "category": "clinic",
+      "city": "larkana"
+    },
+    {
+      "name": "Larkana Eye Care Center",
+      "lat": 27.547241551435306,
+      "lng": 68.21096240508707,
+      "category": "center",
+      "city": "larkana"
+    },
+    {
+      "name": "Bakhtawar Bhutto park larkana",
+      "lat": 27.560253208630062,
+      "lng": 68.19718217990304,
+      "category": "park",
+      "city": "larkana"
+    }
+  ]
+}

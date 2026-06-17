@@ -1,0 +1,57 @@
+name: eyris_app
+description: "EYRIS - AI Navigation System for Visually Impaired"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # MAP & ROUTING (offline)
+  flutter_map: ^8.3.0
+  flutter_map_mbtiles: ^1.0.4
+  mbtiles: ^0.4.2
+  latlong2: ^0.9.0
+  geolocator: ^14.0.2
+
+  # AI & VISION
+  tflite_flutter: ^0.11.0
+  camera: ^0.10.5
+  image: ^4.0.0
+
+  # STORAGE
+  path_provider: ^2.1.0
+  shared_preferences: ^2.5.5
+
+  # UTILITIES
+  permission_handler: ^12.0.1
+  flutter_tts: ^4.0.2
+  http: ^1.2.2
+
+  # UI
+  flutter_spinkit: ^5.2.0
+  intl: ^0.19.0
+
+  # DEVICE
+  battery_plus: ^4.0.0
+  device_info_plus: ^9.1.1
+  provider: ^6.1.1
+
+  speech_to_text: ^7.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/maps/pakistan.mbtiles
+    - assets/places.json
+    - assets/routes/
+    - assets/models/labels.txt
+    - assets/models/yolov8n_float32.tflite
