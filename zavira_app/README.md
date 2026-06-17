@@ -37,17 +37,6 @@ The wearable device is built around an ESP32 microcontroller that handles event-
 - OpenStreetMap (location visualization)
 - AES-128 encryption with Base64 encoding (secure SMS data transmission)
 
-## Team
-
-| Member | Role |
-|---|---|
-| Munawar Ali | ESP32 programming, sensor integration, firmware development for emergency logic |
-| Maryam | ESP32 programming, IoT integration, mobile app development |
-| Ifrah Saeed | Flutter mobile app development, scenario-based testing, documentation |
-
-**Supervisor:** Mr. Muhammad Bakhsh Soomro
-**Institution:** SZABIST University, Larkana Campus
-
 ## Project Structure
 
 ```
