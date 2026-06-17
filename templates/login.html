@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Digital Meter Reading</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="portrait-card">
+        <div class="card-header">
+            <i class="fas fa-bolt"></i>
+            <h1>Welcome</h1>
+            <p>Digital Meter Reading System</p>
+        </div>
+
+        <form action="{{ url_for('login') }}" method="POST">
+            <div class="input-group">
+                <i class="fas fa-user"></i>
+                <input type="text" name="username" placeholder="Username" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" name="password" placeholder="Password" required>
+            </div>
+            <button type="submit" class="prime-btn">Login to Dashboard</button>
+        </form>
+
+        <div class="footer-text">
+            New here? <a href="{{ url_for('signup') }}">Create Account</a>
+        </div>
+    </div>
+</body>
+</html>

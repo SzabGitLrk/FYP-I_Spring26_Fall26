@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+
+:root {
+    --bg-dark: #0f172a;
+    --card-bg: #1e293b;
+    --accent-cyan: #38bdf8;
+    --text-white: #ffffff;
+    --text-dim: #94a3b8;
+    --input-bg: #0f172a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-white);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Common Portrait Card */
+.portrait-card {
+    background: var(--card-bg);
+    padding: 50px 40px;
+    border-radius: 30px;
+    width: 100%;
+    max-width: 460px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.6s ease-out;
+}
+
+.card-header i { font-size: 45px; color: var(--accent-cyan); margin-bottom: 20px; }
+.card-header h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.5px; }
+.card-header p { color: var(--text-dim); font-size: 14px; margin-bottom: 35px; }
+
+/* Form & Inputs */
+.input-group { position: relative; margin-bottom: 18px; text-align: left; }
+.input-group i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-dim); }
+.input-group input {
+    width: 100%; padding: 15px 15px 15px 45px;
+    background: var(--input-bg); border: 1px solid #334155;
+    border-radius: 14px; color: white; outline: none; transition: 0.3s;
+}
+.input-group input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 12px rgba(56, 189, 248, 0.15); }
+
+/* The Fixed Processing Box (Drop Zone) */
+.drop-zone {
+    border: 2px dashed #334155; border-radius: 20px;
+    padding: 50px 20px; margin-bottom: 25px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+    background: rgba(15, 23, 42, 0.3); transition: 0.3s;
+}
+.drop-zone:hover { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.05); }
+.drop-zone i { font-size: 40px; color: var(--accent-cyan); margin-bottom: 15px; }
+.drop-zone p { font-size: 14px; color: var(--text-dim); }
+
+#imagePreview { max-width: 100%; max-height: 180px; border-radius: 12px; display: none; margin-top: 10px; }
+
+/* Buttons */
+.prime-btn {
+    width: 100%; padding: 16px; border-radius: 16px; border: none;
+    background: var(--accent-cyan); color: #0f172a;
+    font-weight: 700; font-size: 16px; cursor: pointer; transition: 0.3s;
+}
+.prime-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(56, 189, 248, 0.3); }
+
+/* Results */
+.prediction-item { background: #0f172a; padding: 12px; border-radius: 10px; margin-top: 10px; border-left: 4px solid var(--accent-cyan); text-align: left; font-size: 14px; }
+#labeledImage { width: 100%; border-radius: 15px; margin-bottom: 15px; border: 1px solid #334155; }
+
+.footer-text { margin-top: 25px; font-size: 14px; color: var(--text-dim); }
+.footer-text a { color: var(--accent-cyan); text-decoration: none; font-weight: 600; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

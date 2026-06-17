@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Digital Meter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="main-wrapper">
+        <div id="uploadSection" class="portrait-card">
+            <div class="card-header">
+                <i class="fas fa-microchip"></i>
+                <h1>Digital Meter</h1>
+                <p>Automated High-Precision Detection</p>
+            </div>
+
+            <form id="uploadForm" enctype="multipart/form-data">
+                <label for="imageInput" class="drop-zone">
+                    <input type="file" name="image" id="imageInput" hidden>
+                    <i class="fas fa-camera" id="iconBox"></i>
+                    <p id="fileText">Click to Upload Meter Image</p>
+                    <img id="imagePreview" src="" style="display:none; max-width:100%; border-radius:12px; margin-top:10px;">
+                </label>
+                <button type="submit" class="prime-btn" id="analyzeBtn">Process Reading</button>
+            </form>
+        </div>
+
+        <div id="resultSection" class="portrait-card" style="display:none;">
+            <div class="card-header">
+                <h1>Analysis Output</h1>
+            </div>
+            <img id="labeledImage" src="" style="width:100%; border-radius:15px; margin-bottom:15px;">
+            <div id="predictionList"></div>
+            <button onclick="window.location.reload()" class="prime-btn" style="margin-top:20px;">New Scan</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
