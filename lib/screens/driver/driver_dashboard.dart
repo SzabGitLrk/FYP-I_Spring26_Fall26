@@ -19,7 +19,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   List<RouteModel> _assignedRoutes = [];
   List<Bus> _availableBuses = [];
-  Bus? _selectedBus;
   bool _isTracking = false;
   Position? _currentPosition;
   RouteModel? _selectedRoute;
@@ -52,7 +51,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     try {
       final driverName = user?.userMetadata?['name'] ?? '';
-      final driverId = user?.id ?? '';
 
       // Load all routes
       final universities = await _service.getUniversities();
@@ -134,7 +132,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final bus = routeBuses.first;
 
     setState(() {
-      _selectedBus = bus;
       _isTracking = true;
       _tripStartTime = DateTime.now();
       _totalDistance = 0.0;

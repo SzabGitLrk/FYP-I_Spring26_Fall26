@@ -164,19 +164,23 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _subscribeToBusLocations() {
-    _busSubscription = _service.subscribeToBusLocations(widget.route.id).listen((locations) {
-      if (mounted) {
-        final routeBusIds = _buses.map((b) => b.id).toSet();
-        setState(() {
-          _busLocations = routeBusIds.isEmpty
-              ? locations
-              : locations.where((loc) => routeBusIds.contains(loc.busId)).toList();
-        });
-        _updateBusMarkers();
-        _updateETAInfo();
-        _checkNotifications();
-      }
-    });
+    _busSubscription = _service.subscribeToBusLocations(widget.route.id).listen(
+      (locations) {
+        if (mounted) {
+          final routeBusIds = _buses.map((b) => b.id).toSet();
+          setState(() {
+            _busLocations = routeBusIds.isEmpty
+                ? locations
+                : locations
+                      .where((loc) => routeBusIds.contains(loc.busId))
+                      .toList();
+          });
+          _updateBusMarkers();
+          _updateETAInfo();
+          _checkNotifications();
+        }
+      },
+    );
   }
 
   void _updateBusMarkers() {
@@ -1048,7 +1052,7 @@ class _MapScreenState extends State<MapScreen> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: widget.pickupPoints.length,
-                  separatorBuilder: (_, __) => const Divider(),
+                  separatorBuilder: (_, _) => const Divider(),
                   itemBuilder: (context, index) {
                     final point = widget.pickupPoints[index];
                     final isFirst = index == 0;

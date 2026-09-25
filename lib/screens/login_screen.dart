@@ -84,16 +84,16 @@ class _LoginScreenState extends State<LoginScreen> {
       String message;
       if (e.message.toLowerCase().contains('already registered')) {
         message = 'Already registered with this email';
-      } else if (e.message.toLowerCase().contains('database error saving new user')) {
-        message = 'Database error creating profile. Run the SQL migration in Supabase SQL Editor to fix the trigger function.';
+      } else if (e.message.toLowerCase().contains(
+        'database error saving new user',
+      )) {
+        message =
+            'Database error creating profile. Run the SQL migration in Supabase SQL Editor to fix the trigger function.';
       } else {
         message = e.message;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     } catch (e) {
       if (!mounted) return;
@@ -225,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         // Role Selection for Registration
                         DropdownButtonFormField<String>(
-                          value: _selectedRole,
+                          initialValue: _selectedRole,
                           decoration: InputDecoration(
                             labelText: 'I am a',
                             prefixIcon: const Icon(Icons.people),
