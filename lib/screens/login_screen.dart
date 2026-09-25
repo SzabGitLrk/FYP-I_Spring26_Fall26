@@ -57,8 +57,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 'id': response.user!.id,
                 'name': _nameController.text,
                 'email': _emailController.text,
+                // Only 'student' / 'driver' are selectable above, and the
+                // database guard re-validates this regardless: a client can
+                // never self-assign 'admin' or self-approve.
                 'role': _selectedRole,
-                'is_approved': _selectedRole == 'admin' ? true : false,
+                'is_approved': false,
               });
             }
           } catch (_) {

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/models/pickup_point.dart';
@@ -26,12 +28,21 @@ class BusTrackingScreen extends StatefulWidget {
 
 class _BusTrackingScreenState extends State<BusTrackingScreen> {
   final SupabaseService _service = SupabaseService();
-  GoogleMapController? _mapController;
+
+  /// Created up-front and passed to [FlutterMap] (flutter_map has no
+  /// `onMapCreated`).
+  final MapController _mapController = MapController();
+
+  /// Set by [MapOptions.onMapReady]. The controller throws if any camera call
+  /// happens before the map has rendered at least once.
+  bool _mapReady = false;
+
   StreamSubscription? _busSubscription;
 
-  final Set<Marker> _pickupMarkers = {};
-  final Set<Marker> _busMarkers = {};
-  final Set<Polyline> _polylines = {};
+  // flutter_map layers take Lists; Google Maps took Sets.
+  final List<Marker> _pickupMarkers = [];
+  final List<Marker> _busMarkers = [];
+  final List<Polyline> _polylines = [];
 
   List<Bus> _buses = [];
   List<BusLocation> _busLocations = [];
@@ -53,6 +64,8 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
   @override
   void dispose() {
     _busSubscription?.cancel();
+    // We own the controller; FlutterMap (our child) has already disposed.
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -61,35 +74,35 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
       for (var i = 0; i < widget.pickupPoints.length; i++) {
         final point = widget.pickupPoints[i];
 
-        // Determine marker color based on stop position
-        BitmapDescriptor markerIcon;
+        // Marker colour by stop position (mirrors the old Google hues:
+        // green = first, red = last, blue = intermediate).
+        final Color markerColor;
         if (i == 0) {
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen, // First stop
-          );
+          markerColor = Colors.green;
         } else if (i == widget.pickupPoints.length - 1) {
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed, // Last stop
-          );
+          markerColor = Colors.red;
         } else {
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueBlue, // Intermediate stops
-          );
+          markerColor = Colors.blue;
         }
 
         _pickupMarkers.add(
           Marker(
-            markerId: MarkerId('stop_${point.id}'),
-            position: LatLng(point.latitude, point.longitude),
-            icon: markerIcon,
-            infoWindow: InfoWindow(
-              title: point.pointName,
-              snippet: 'Stop #${point.orderIndex}',
+            point: LatLng(point.latitude, point.longitude),
+            width: 36,
+            height: 36,
+            // No InfoWindow in flutter_map; tapping still opens the detail
+            // sheet, and Tooltip preserves the hover/press label.
+            child: GestureDetector(
+              onTap: () {
+                setState(() {});
+                _showStopDetails(point);
+              },
+              child: Tooltip(
+                message:
+                    '${point.pointName} • Stop #${point.orderIndex}',
+                child: Icon(Icons.location_on, color: markerColor, size: 36),
+              ),
             ),
-            onTap: () {
-              setState(() {});
-              _showStopDetails(point);
-            },
           ),
         );
       }
@@ -102,13 +115,15 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
     setState(() {
       _polylines.add(
         Polyline(
-          polylineId: const PolylineId('route'),
           points: widget.pickupPoints
               .map((p) => LatLng(p.latitude, p.longitude))
               .toList(),
           color: Colors.blue,
-          width: 4,
-          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+          strokeWidth: 4,
+          // Equivalent to Google's [dash(20), gap(10)]. Not `const` because
+          // StrokePattern.dashed asserts on `segments.length`, which cannot be
+          // evaluated in a constant expression.
+          pattern: StrokePattern.dashed(segments: const [20, 10]),
         ),
       );
     });
@@ -175,37 +190,45 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
           ),
         );
 
-        // Custom bus marker with color based on speed
-        final markerColor = loc.isMoving
-            ? BitmapDescriptor
-                  .hueAzure // Moving buses are azure
-            : BitmapDescriptor.hueViolet; // Stopped buses are violet
+        // Custom bus marker with colour based on speed (mirrors the old Google
+        // hues: azure when moving, violet when stopped).
+        final Color markerColor = loc.isMoving
+            ? Colors.cyan
+            : Colors.deepPurple;
 
         _busMarkers.add(
           Marker(
-            markerId: MarkerId('bus_${loc.busId}'),
-            position: LatLng(loc.latitude, loc.longitude),
-            icon: BitmapDescriptor.defaultMarkerWithHue(markerColor),
-            rotation: loc.heading,
-            infoWindow: InfoWindow(
-              title: 'Bus ${bus.busNumber}',
-              snippet:
-                  '${loc.statusText} • Speed: ${loc.speed.toStringAsFixed(0)} km/h',
+            point: LatLng(loc.latitude, loc.longitude),
+            width: 40,
+            height: 40,
+            // flutter_map has no `rotation:` field — rotate the icon ourselves.
+            child: GestureDetector(
+              onTap: () => _showBusDetails(bus, loc),
+              child: Tooltip(
+                message:
+                    'Bus ${bus.busNumber}\n'
+                    '${loc.statusText} • '
+                    'Speed: ${loc.speed.toStringAsFixed(0)} km/h',
+                child: Transform.rotate(
+                  angle: loc.heading * math.pi / 180,
+                  child: Icon(
+                    Icons.directions_bus,
+                    color: markerColor,
+                    size: 40,
+                  ),
+                ),
+              ),
             ),
-            onTap: () {
-              _showBusDetails(bus, loc);
-            },
           ),
         );
       }
     });
 
     // Follow first bus if enabled
-    if (_followBus && _busLocations.isNotEmpty) {
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLng(
-          LatLng(_busLocations[0].latitude, _busLocations[0].longitude),
-        ),
+    if (_followBus && _busLocations.isNotEmpty && _mapReady) {
+      _mapController.move(
+        LatLng(_busLocations[0].latitude, _busLocations[0].longitude),
+        _mapController.camera.zoom, // CameraUpdate.newLatLng kept the zoom
       );
     }
   }
@@ -654,20 +677,20 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
   }
 
   void _centerOnStop(PickupPoint point) {
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(LatLng(point.latitude, point.longitude), 16),
-    );
+    if (_mapReady) {
+      _mapController.move(LatLng(point.latitude, point.longitude), 16);
+    }
     setState(() {});
   }
 
   void _centerOnLocation(double lat, double lng) {
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
-    );
+    if (!_mapReady) return;
+    _mapController.move(LatLng(lat, lng), 16);
   }
 
   void _zoomToFitAllStops() {
     if (widget.pickupPoints.isEmpty) return;
+    if (!_mapReady) return;
 
     double minLat = widget.pickupPoints
         .map((p) => p.latitude)
@@ -682,13 +705,14 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
         .map((p) => p.longitude)
         .reduce((a, b) => a > b ? a : b);
 
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
+    // Google's newLatLngBounds(bounds, 50) -> CameraFit with 50px padding.
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds(
+          LatLng(minLat, minLng),
+          LatLng(maxLat, maxLng),
         ),
-        50,
+        padding: const EdgeInsets.all(50),
       ),
     );
   }
@@ -743,25 +767,41 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
           ? Center(child: Text('Error: $_error'))
           : Stack(
               children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: widget.pickupPoints.isNotEmpty
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: widget.pickupPoints.isNotEmpty
                         ? LatLng(
                             widget.pickupPoints[0].latitude,
                             widget.pickupPoints[0].longitude,
                           )
                         : const LatLng(27.5580, 68.2120),
-                    zoom: 13,
+                    initialZoom: 13,
+                    // Gates every camera call via _mapReady.
+                    onMapReady: () {
+                      if (mounted) {
+                        setState(() => _mapReady = true);
+                      }
+                    },
                   ),
-                  markers: {..._pickupMarkers, ..._busMarkers},
-                  polylines: _polylines,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  trafficEnabled: false,
-                  mapType: MapType.normal,
+                  children: [
+                    // OpenStreetMap — no API key, no billing. OSM's tile usage
+                    // policy requires an identifying User-Agent plus visible
+                    // attribution, both provided here.
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName:
+                          'com.example.university_point_locator',
+                    ),
+                    PolylineLayer(polylines: _polylines),
+                    MarkerLayer(
+                      markers: [..._pickupMarkers, ..._busMarkers],
+                    ),
+                    const SimpleAttributionWidget(
+                      source: Text('OpenStreetMap contributors'),
+                    ),
+                  ],
                 ),
 
                 // Bus count indicator

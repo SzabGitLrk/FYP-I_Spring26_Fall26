@@ -42,6 +42,10 @@
 # Miscellaneous
 *.log
 *.lock
+# ...but pubspec.lock MUST be versioned for an application. It pins resolved
+# package versions (e.g. flutter_map 8.3.2), so a fresh clone builds the same
+# way this machine does. Flutter's guidance is to commit it for apps.
+!pubspec.lock
 *.pid
 *.pid.lock
 *.sqlite

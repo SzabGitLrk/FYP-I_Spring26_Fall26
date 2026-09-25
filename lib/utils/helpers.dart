@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class Helpers {
   static String formatDuration(Duration duration) {
@@ -37,33 +36,5 @@ class Helpers {
   static int? estimateTimeMinutes(double distanceKm, double speedKmh) {
     if (speedKmh <= 1) return null;
     return (distanceKm / speedKmh * 60).round();
-  }
-
-  static BitmapDescriptor? _cachedGreen;
-  static BitmapDescriptor? _cachedBlue;
-  static BitmapDescriptor? _cachedRed;
-  static BitmapDescriptor? _cachedAzure;
-  static BitmapDescriptor? _cachedViolet;
-
-  static BitmapDescriptor getStopMarker(bool isFirst, bool isLast) {
-    if (isFirst) {
-      _cachedGreen ??= BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
-      return _cachedGreen!;
-    }
-    if (isLast) {
-      _cachedRed ??= BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
-      return _cachedRed!;
-    }
-    _cachedBlue ??= BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
-    return _cachedBlue!;
-  }
-
-  static BitmapDescriptor getBusMarker(bool isMoving) {
-    if (isMoving) {
-      _cachedAzure ??= BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
-      return _cachedAzure!;
-    }
-    _cachedViolet ??= BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
-    return _cachedViolet!;
   }
 }

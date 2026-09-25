@@ -8,7 +8,7 @@
 
 ## 📱 Project Overview
 
-University Point Locator is a mobile application designed to solve the critical problem faced by university students in Larkana who wait endlessly at roadside pickup points without knowing when their transport vehicle will arrive. The app provides real-time GPS tracking of university transport buses across multiple routes, allowing students to view live bus locations on an interactive Google Map, receive accurate Estimated Time of Arrival (ETA) calculations, and get push notifications when buses approach their designated stops.
+University Point Locator is a mobile application designed to solve the critical problem faced by university students in Larkana who wait endlessly at roadside pickup points without knowing when their transport vehicle will arrive. The app provides real-time GPS tracking of university transport buses across multiple routes, allowing students to view live bus locations on an interactive map, receive accurate Estimated Time of Arrival (ETA) calculations, and get push notifications when buses approach their designated stops.
 
 ## 🎯 Problem Statement
 
@@ -26,9 +26,9 @@ University Point Locator is a mobile application designed to solve the critical 
 - View The University of Larkana
 - Select from 3 routes (PTS, Nae Dare → PTS, OPP Colony)
 - View 8 pickup points with order numbers and landmarks
-- Real-time bus tracking on Google Maps
+- Real-time bus tracking on OpenStreetMap (flutter_map)
 - Color-coded markers (Green=First, Blue=Intermediate, Red=Last)
-- Bus markers (Azure=Moving, Purple=Stopped)
+- Bus markers (Azure=Moving, Purple=Stopped) rotated to the bus heading
 - ETA (Estimated Time of Arrival) calculation using Haversine formula
 - Push notifications for approaching buses
 - SOS Emergency button with location sharing
@@ -64,7 +64,7 @@ University Point Locator is a mobile application designed to solve the critical 
 |-----------|------------|
 | **Frontend** | Flutter (Dart) |
 | **Backend** | Supabase (PostgreSQL) |
-| **Maps** | Google Maps API |
+| **Maps** | flutter_map + OpenStreetMap (**no API key, no billing**) |
 | **Notifications** | OneSignal |
 | **Location** | Geolocator Plugin |
 | **State Management** | setState + StreamBuilder |
@@ -97,21 +97,22 @@ university_point_locator/
 │   │   ├── pickup_point.dart
 │   │   ├── bus.dart
 │   │   └── bus_location.dart
+│   ├── config/
+│   │   └── app_config.dart
 │   ├── screens/
 │   │   ├── login_screen.dart
-│   │   ├── otp_login_screen.dart
 │   │   ├── role_router.dart
 │   │   ├── university_list_screen.dart
 │   │   ├── routes_list_screen.dart
 │   │   ├── pickup_points_screen.dart
+│   │   ├── map_screen.dart
 │   │   ├── bus_tracking_screen.dart
 │   │   ├── driver_dashboard.dart
 │   │   ├── admin_dashboard.dart
 │   │   └── profile_screen.dart
 │   ├── services/
 │   │   ├── supabase_service.dart
-│   │   ├── notification_service.dart
-│   │   └── otp_service.dart
+│   │   └── notification_service.dart
 │   └── main.dart
 ├── assets/
 │   └── icons/
@@ -128,7 +129,13 @@ university_point_locator/
 - Android Studio / VS Code
 - Android SDK (min API 21)
 - Supabase account
-- Google Maps API key
+
+> **No maps API key or billing account is required.** Maps are rendered with
+> `flutter_map` against OpenStreetMap's public tile servers, so there is no
+> Google Cloud setup step. Note that OSM's
+> [tile usage policy](https://operations.osmfoundation.org/policies/tiles/)
+> applies: attribution is built in, and a dedicated tile host should be used
+> before production-scale traffic.
 
 ### Clone Repository
 \\\ash

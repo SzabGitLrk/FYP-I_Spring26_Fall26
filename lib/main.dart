@@ -5,10 +5,7 @@ import 'package:university_point_locator/screens/role_router.dart';
 import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/screens/student/profile_screen.dart';
 import 'package:university_point_locator/screens/driver/trip_history.dart';
-
-const String supabaseUrl = 'https://wstuufgiapgkskkcrdjx.supabase.co';
-const String supabaseAnonKey =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzdHV1ZmdpYXBna3Nra2NyZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MjI3MzIsImV4cCI6MjA4ODE5ODczMn0.LLDQ1PPFJJRVowZ_PaOWMBNeNJVepVC6W8LTmpZX6pg'; // ← Add your key here
+import 'package:university_point_locator/config/app_config.dart';
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -20,8 +17,8 @@ void main() async {
   try {
     // Initialize Supabase with PKCE for better security
     await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
+      url: AppConfig.supabaseUrl,
+      anonKey: AppConfig.supabaseAnonKey,
       authOptions: const FlutterAuthClientOptions(
         authFlowType: AuthFlowType.pkce,
       ),

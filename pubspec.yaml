@@ -18,13 +18,8 @@ dependencies:
   supabase_flutter: ^2.12.0
   supabase_auth_ui: ^0.5.5
   
-  # Google Maps
-  google_maps_flutter: ^2.5.0
-  google_maps_flutter_web: ^0.5.4
-  
   # Location
   geolocator: ^10.1.0
-  geocoding: ^2.1.1
 
   # Device info
   device_info_plus: ^10.0.0
@@ -40,6 +35,8 @@ dependencies:
   
   # Deep linking - ADDED HERE (inside dependencies, NOT inside flutter)
   app_links: ^6.0.0
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
 
 # ✅ DEV DEPENDENCIES SECTION
 dev_dependencies:
