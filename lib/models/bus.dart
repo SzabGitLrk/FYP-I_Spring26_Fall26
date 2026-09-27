@@ -22,7 +22,10 @@ class Bus {
   factory Bus.fromJson(Map<String, dynamic> json) {
     return Bus(
       id: json['id'] as int,
-      routeId: json['route_id'] as int,
+      // Nullable FK: this table is never written by the app (buses are created
+      // in the Supabase dashboard), so a row saved without a route would
+      // otherwise crash every screen that loads buses. 0 matches no route.
+      routeId: json['route_id'] as int? ?? 0,
       busNumber: json['bus_number'] as String,
       driverName: json['driver_name'] as String?,
       driverPhone: json['driver_phone'] as String?,

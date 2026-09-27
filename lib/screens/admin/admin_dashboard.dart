@@ -29,6 +29,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _loadBuses();
   }
 
+  /// Surfaces a failed admin action/load to the admin.
+  ///
+  /// Every method below used to swallow errors with `catch (_) {}`. Because
+  /// the success SnackBar lived *inside* the `try`, a rejected write showed
+  /// nothing at all: approving a driver or resolving an SOS alert simply
+  /// appeared to do nothing, and a failed `_loadSOSAlerts` rendered an empty
+  /// emergency-alert list as if there were no alerts.
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   Future<void> _loadStats() async {
     try {
       if (!mounted) return;
@@ -54,7 +68,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _activeTrips = trips.length;
         _pendingDrivers = drivers.where((d) => d['is_approved'] == false).length;
       });
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not load dashboard stats: $e');
+    }
   }
 
   Future<void> _loadSOSAlerts() async {
@@ -68,7 +84,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (mounted) {
         setState(() => _sosAlerts = List<Map<String, dynamic>>.from(alerts));
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not load SOS alerts: $e');
+    }
   }
 
   Future<void> _loadDrivers() async {
@@ -81,7 +99,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (mounted) {
         setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not load drivers: $e');
+    }
   }
 
   Future<void> _approveDriver(String driverId) async {
@@ -99,7 +119,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not approve driver: $e');
+    }
   }
 
   Future<void> _resolveSOS(int alertId) async {
@@ -120,7 +142,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not resolve SOS alert: $e');
+    }
   }
 
   Future<void> _rejectDriver(String driverId) async {
@@ -138,7 +162,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not reject driver: $e');
+    }
   }
 
   Future<void> _loadBuses() async {
@@ -147,7 +173,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (mounted) {
         setState(() => _buses = List<Map<String, dynamic>>.from(buses));
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not load buses: $e');
+    }
   }
 
   Future<void> _deleteBus(int busId) async {
@@ -163,7 +191,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      _showError('Could not delete bus: $e');
+    }
   }
 
   Future<bool> _confirmDeleteBus(Map<String, dynamic> bus) async {
@@ -203,10 +233,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await supabase.auth.signOut();
-              if (mounted) {
-                Navigator.pushReplacementNamed(context, '/');
+              // Capture before the await: both outlive this State, so they
+              // stay valid even if the widget is disposed mid-request.
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await supabase.auth.signOut();
+              } catch (e) {
+                // Without this the failure escaped as an unhandled async
+                // error and the admin saw no feedback at all.
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Could not sign out: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
               }
+              navigator.pushReplacementNamed('/');
             },
           ),
         ],

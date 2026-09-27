@@ -232,10 +232,33 @@ GRANT SELECT ON public.profiles TO authenticated;
 GRANT UPDATE ON public.profiles TO authenticated;
 
 
+-- -----------------------------------------------------------------------------
+-- SECTION 7. Trips: stop exposing every user's travel history
+--
+-- `trips` had `FOR SELECT USING (true)` in BOTH supabase_final.sql and
+-- supabase_patch.sql, so anyone holding the anon key could read every trip
+-- ever recorded - who drove which route, and when. INSERT/UPDATE were already
+-- scoped to `auth.uid() = driver_id`; only SELECT was left wide open.
+--
+-- Consumers, checked against lib/ before tightening:
+--   * admin/admin_dashboard.dart      reads active trips -> needs is_admin().
+--   * driver/trip_history.dart        reads own history  -> driver_id match.
+--   * driver/driver_dashboard.dart    same as above.
+--   * services/supabase_service.dart  insert + update, unchanged (already safe).
+--
+-- No student-facing screen queries `trips` - student/profile_screen.dart only
+-- renders hardcoded sample rows - so tightening this breaks nobody.
+-- -----------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Trips select" ON public.trips;
+CREATE POLICY "Trips select" ON public.trips
+  FOR SELECT
+  USING (public.is_admin() OR auth.uid() = driver_id);
+
+
 -- =============================================================================
 --  VERIFICATION - run these afterwards.
 --
---  All four must FAIL (HTTP 403/401 or zero rows) when called with the anon
+--  All five must FAIL (HTTP 403/401 or zero rows) when called with the anon
 --  key, and the first must succeed only as an authenticated non-admin user:
 --
 --    1. Self-escalate:
@@ -250,6 +273,9 @@ GRANT UPDATE ON public.profiles TO authenticated;
 --    4. Tamper with a SOS alert:
 --         PATCH /rest/v1/sos_alerts?id=eq.1  {"status":"resolved"}
 --       Expect: 403.
+--    5. Read everyone's trip history:
+--         GET  /rest/v1/trips?select=*
+--       Expect: [] for anon. (Before Section 7 this returned the full table.)
 --
 --  TO GRANT ADMIN (there is no in-app way to do this, by design):
 --      UPDATE public.profiles

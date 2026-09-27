@@ -105,39 +105,53 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
   void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      // Named `dialogContext` instead of `context` on purpose: the State's own
+      // `context` must stay visible below, because the dialog's context is
+      // deactivated the moment the dialog pops and must not be used again
+      // after the `await`.
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Logout'),
           content: const Text('Are you sure you want to logout?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(context); // Close dialog
+                // Capture stable references first — both outlive the dialog
+                // and the await below, unlike the dialog's own context.
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                navigator.pop(); // Close confirm dialog
 
-                // Show loading indicator
+                // Show loading indicator. Deliberately NOT awaited: this
+                // future only completes when the dialog is popped, below.
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (context) =>
+                  builder: (_) =>
                       const Center(child: CircularProgressIndicator()),
                 );
 
                 try {
                   await _service.signOut();
                 } catch (e) {
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  navigator.pop(); // dismiss the loading dialog
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('Error logging out: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
+                  return;
                 }
+
+                // RoleRouter rebuilds to the login screen on sign-out, but the
+                // loading dialog is a *separate route* on the Navigator —
+                // without this pop it would spin forever over the login screen.
+                navigator.pop();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

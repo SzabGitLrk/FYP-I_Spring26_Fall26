@@ -16,7 +16,8 @@ class RouteModel {
   factory RouteModel.fromJson(Map<String, dynamic> json) {
     return RouteModel(
       id: json['id'] as int,
-      universityId: json['university_id'] as int,
+      // Nullable FK (never written by the app) — see `Bus.fromJson`.
+      universityId: json['university_id'] as int? ?? 0,
       routeName: json['route_name'] as String,
       description: json['description'] as String?,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now(),

@@ -65,7 +65,7 @@ University Point Locator is a mobile application designed to solve the critical 
 | **Frontend** | Flutter (Dart) |
 | **Backend** | Supabase (PostgreSQL) |
 | **Maps** | flutter_map + OpenStreetMap (**no API key, no billing**) |
-| **Notifications** | OneSignal |
+| **Notifications** | flutter_local_notifications (local only) |
 | **Location** | Geolocator Plugin |
 | **State Management** | setState + StreamBuilder |
 
@@ -73,32 +73,34 @@ University Point Locator is a mobile application designed to solve the critical 
 
 ### Tables (13)
 - universities (1 record)
-- outes (3 records)
+- routes (3 records)
 - pickup_points (8 records)
-- uses (4 records)
-- us_locations (4 records)
+- buses (4 records)
+- bus_locations (4 records)
 - profiles (User profiles)
 - sos_alerts (Emergency alerts)
 - otp_verification (OTP codes)
-- dmin_settings (Admin configuration)
+- admin_settings (Admin configuration)
 - stop_notifications (User preferences)
-- user_devices (OneSignal tokens)
-- 	rips (Driver history)
-- us_notifications (Notification logs)
+- user_devices (Device registration)
+- trips (Driver history)
+- bus_notifications (Notification logs)
 
 ## 📁 Project Structure
 
-\\\
+```
 university_point_locator/
 ├── lib/
+│   ├── main.dart
+│   ├── config/
+│   │   └── app_config.dart
 │   ├── models/
 │   │   ├── university.dart
 │   │   ├── route_model.dart
 │   │   ├── pickup_point.dart
 │   │   ├── bus.dart
-│   │   └── bus_location.dart
-│   ├── config/
-│   │   └── app_config.dart
+│   │   ├── bus_location.dart
+│   │   └── profile.dart
 │   ├── screens/
 │   │   ├── login_screen.dart
 │   │   ├── role_router.dart
@@ -106,21 +108,37 @@ university_point_locator/
 │   │   ├── routes_list_screen.dart
 │   │   ├── pickup_points_screen.dart
 │   │   ├── map_screen.dart
-│   │   ├── bus_tracking_screen.dart
-│   │   ├── driver_dashboard.dart
-│   │   ├── admin_dashboard.dart
-│   │   └── profile_screen.dart
+│   │   ├── admin/
+│   │   │   └── admin_dashboard.dart
+│   │   ├── driver/
+│   │   │   ├── driver_dashboard.dart
+│   │   │   └── trip_history.dart
+│   │   └── student/
+│   │       └── profile_screen.dart
 │   ├── services/
 │   │   ├── supabase_service.dart
-│   │   └── notification_service.dart
-│   └── main.dart
+│   │   ├── notification_service.dart
+│   │   └── device_service.dart
+│   ├── utils/
+│   │   ├── app_theme.dart
+│   │   └── helpers.dart
+│   └── widgets/
+│       ├── map_legend.dart
+│       ├── bus_count_indicator.dart
+│       ├── loading_error.dart
+│       ├── sos_button.dart
+│       ├── logout_dialog.dart
+│       ├── info_row.dart
+│       └── stat_card.dart
+├── test/
+│   └── widget_test.dart
 ├── assets/
 │   └── icons/
 ├── android/
-├── build/
+├── supabase_security_fix.sql
 ├── pubspec.yaml
 └── README.md
-\\\
+```
 
 ## 🚀 Installation Guide
 
@@ -138,25 +156,25 @@ university_point_locator/
 > before production-scale traffic.
 
 ### Clone Repository
-\\\ash
+```bash
 git clone https://github.com/SzabGitLrk/FYP-I_Spring26_Fall26.git
 cd FYP-I_Spring26_Fall26/university_point_locator
-\\\
+```
 
 ### Get Dependencies
-\\\ash
+```bash
 flutter pub get
-\\\
+```
 
 ### Run the App
-\\\ash
+```bash
 flutter run
-\\\
+```
 
 ### Build APK
-\\\ash
+```bash
 flutter build apk --release
-\\\
+```
 
 ## 📊 Statistics
 

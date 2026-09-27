@@ -24,11 +24,14 @@ class BusLocation {
   factory BusLocation.fromJson(Map<String, dynamic> json) {
     return BusLocation(
       id: json['id'] as int,
-      busId: json['bus_id'] as int,
+      // `bus_id`, `speed` and `heading` are all nullable in the schema
+      // (plain FK, and `DEFAULT 0` without NOT NULL), so a hand-inserted row
+      // would otherwise throw a TypeError and take the whole bus list down.
+      busId: json['bus_id'] as int? ?? 0,
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
-      speed: (json['speed'] as num).toDouble(),
-      heading: (json['heading'] as num).toDouble(),
+      speed: (json['speed'] as num?)?.toDouble() ?? 0,
+      heading: (json['heading'] as num?)?.toDouble() ?? 0,
       nextStopIndex: json['next_stop_index'] as int? ?? 0,
       timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp'] as String) : DateTime.now(),
     );

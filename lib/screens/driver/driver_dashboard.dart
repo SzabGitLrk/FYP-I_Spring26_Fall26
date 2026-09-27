@@ -111,6 +111,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   void _startTracking() async {
     if (_selectedRoute == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,6 +148,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       _totalDistance = 0.0;
       _pickupCount = 0;
       _lastPosition = null;
+      // Drop the previous trip's last fix, otherwise the Live Tracking card
+      // shows the OLD trip's coordinates until the first new fix arrives.
+      _currentPosition = null;
     });
 
     try {
@@ -212,7 +226,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (_currentTripId != null) {
       try {
         await _service.endTrip(_currentTripId!, _totalDistance);
-      } catch (_) {}
+      } catch (e) {
+        // Silently swallowing this lost the trip's end time and distance
+        // with no trace at all — the driver was told "Trip ended!" while
+        // nothing was written.
+        _showErrorSnackBar('Trip ended, but saving it failed: $e');
+      }
     }
     setState(() => _isTracking = false);
     _positionSubscription?.cancel();
@@ -230,39 +249,53 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Future<void> _showLogoutDialog() async {
     return showDialog(
       context: context,
-      builder: (BuildContext context) {
+      // Named `dialogContext` instead of `context` on purpose: the State's own
+      // `context` must stay visible below, because the dialog's context is
+      // deactivated the moment the dialog pops and must not be used again
+      // after the `await`.
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Logout'),
           content: const Text('Are you sure you want to logout?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(context); // Close dialog
+                // Capture stable references first — both outlive the dialog
+                // and the await below, unlike the dialog's own context.
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                navigator.pop(); // Close confirm dialog
 
-                // Show loading
+                // Show loading. Deliberately NOT awaited: this future only
+                // completes when the dialog is popped, which happens below.
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (context) =>
+                  builder: (_) =>
                       const Center(child: CircularProgressIndicator()),
                 );
 
                 try {
                   await _service.signOut();
                 } catch (e) {
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  navigator.pop(); // dismiss the loading dialog
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('Error logging out: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
+                  return;
                 }
+
+                // RoleRouter rebuilds to the login screen on sign-out, but the
+                // loading dialog is a *separate route* on the Navigator —
+                // without this pop it would spin forever over the login screen.
+                navigator.pop();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

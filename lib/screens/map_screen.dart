@@ -37,6 +37,11 @@ class _MapScreenState extends State<MapScreen> {
 
   StreamSubscription? _busSubscription;
 
+  /// Live GPS fix behind the blue "you are here" dot. Stays null until the
+  /// first reading lands, and forever if location permission is denied.
+  Position? _myPosition;
+  StreamSubscription<Position>? _myPositionSubscription;
+
   // flutter_map layers take Lists; Google Maps took Sets.
   final List<Marker> _pickupMarkers = [];
   final List<Marker> _busMarkers = [];
@@ -66,6 +71,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _myPositionSubscription?.cancel();
     _busSubscription?.cancel();
     // FlutterMap is our child, so it has already disposed itself by the time
     // this runs. We own the controller, so we must dispose it ourselves.
@@ -76,8 +82,43 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _requestLocationPermissions() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      await Geolocator.requestPermission();
+      permission = await Geolocator.requestPermission();
     }
+    if (!mounted) return;
+
+    // Refused, either just now or on a previous run. Opening a stream that
+    // can never deliver would only hold a dead subscription open, so leave
+    // the map exactly as it renders today - no dot, everything else intact.
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return;
+    }
+    _startMyLocationStream();
+  }
+
+  /// Streams GPS fixes for the blue dot.
+  ///
+  /// [LocationSettings.distanceFilter] means the marker is only rebuilt once
+  /// the device has genuinely moved 10 m, rather than on every raw fix - a
+  /// [setState] that would otherwise rebuild all marker layers while
+  /// stationary.
+  void _startMyLocationStream() {
+    const LocationSettings settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+    );
+
+    _myPositionSubscription =
+        Geolocator.getPositionStream(locationSettings: settings).listen(
+          (pos) {
+            if (mounted) {
+              setState(() => _myPosition = pos);
+            }
+          },
+          // Permission revoked mid-session, or GPS unavailable. The dot just
+          // disappears; nothing else on the screen is affected.
+          onError: (_) {},
+        );
   }
 
   void _setupNotificationHandler() {
@@ -149,6 +190,45 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
     });
+  }
+
+  /// The device's own position rendered as a marker.
+  ///
+  /// Returns an empty list until the first fix arrives - or forever, when
+  /// permission was denied - so a no-permission session looks exactly as it
+  /// does today rather than rendering a broken marker at (0, 0).
+  List<Marker> get _myLocationMarkers {
+    final pos = _myPosition;
+    if (pos == null) return const [];
+
+    return [
+      Marker(
+        point: LatLng(pos.latitude, pos.longitude),
+        width: 30,
+        height: 30,
+        // Soft accuracy halo with a white-ringed blue disc inside - the
+        // conventional "you are here" treatment. Read-only, so no
+        // GestureDetector: tapping it must not swallow taps meant for a stop
+        // or bus underneath.
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.blue.withValues(alpha: 0.18),
+          ),
+          child: Center(
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.blue,
+                border: Border.all(color: Colors.white, width: 3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   Future<void> _loadBusData() async {
@@ -558,24 +638,50 @@ class _MapScreenState extends State<MapScreen> {
                     // NOTIFY ME BUTTON
                     ElevatedButton.icon(
                       onPressed: () async {
-                        if (!isNotifying) {
-                          await _service.subscribeToStopNotifications(
-                            point.id,
-                            widget.route.id,
-                          );
-                        } else {
-                          await _service.unsubscribeFromStopNotifications(
-                            point.id,
-                          );
-                        }
+                        // Capture before the awaits: `context` here belongs to
+                        // the modal bottom sheet, which the user CAN dismiss
+                        // while the request is in flight, so the `mounted`
+                        // check below (which guards the State, not this
+                        // context) is not enough on its own.
+                        final messenger = ScaffoldMessenger.of(context);
 
-                        if (!mounted) return;
+                        // Toggle while the sheet is definitely still alive, so
+                        // nothing has to touch `setSheetState` after the await
+                        // (that throws if the sheet was closed meanwhile).
                         setState(() {
                           _notificationsEnabled[point.id] = !isNotifying;
                         });
                         setSheetState(() {});
 
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        try {
+                          if (!isNotifying) {
+                            await _service.subscribeToStopNotifications(
+                              point.id,
+                              widget.route.id,
+                            );
+                          } else {
+                            await _service.unsubscribeFromStopNotifications(
+                              point.id,
+                            );
+                          }
+                        } catch (e) {
+                          // Undo the optimistic toggle.
+                          if (mounted) {
+                            setState(() {
+                              _notificationsEnabled[point.id] = isNotifying;
+                            });
+                          }
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content:
+                                  Text('Could not update notifications: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(
                               isNotifying
@@ -753,19 +859,23 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _getDirections(PickupPoint point) {
-    // Open Google Maps for directions
+    // Google Maps directions URL for this stop.
     final url =
         'https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Opening directions to ${point.pointName}'),
+        content: Text('Directions to ${point.pointName}'),
         duration: const Duration(seconds: 1),
         behavior: SnackBarBehavior.floating,
       ),
     );
 
-    // In a real app, you'd use url_launcher to open the URL
+    // The URL is only logged - the app never opens it. `url_launcher` is no
+    // longer a direct dependency (it now reaches pubspec.lock only as a
+    // transitive package), so nothing is wired up to call canLaunchUrl /
+    // launchUrl; declaring it in pubspec.yaml and adding that call would make
+    // this real.
     print('Directions URL: $url');
   }
 
@@ -894,7 +1004,11 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     PolylineLayer(polylines: _polylines),
                     MarkerLayer(
-                      markers: [..._pickupMarkers, ..._busMarkers],
+                      markers: [
+                        ..._pickupMarkers,
+                        ..._busMarkers,
+                        ..._myLocationMarkers,
+                      ],
                     ),
                     const SimpleAttributionWidget(
                       source: Text('OpenStreetMap contributors'),
@@ -1011,6 +1125,33 @@ class _MapScreenState extends State<MapScreen> {
                     elevation: 6,
                   ),
                 ),
+
+                // Re-centre on the blue dot. Without this the dot can sit
+                // outside the viewport - the map opens framed on the first
+                // stop, which is rarely where the user is standing. Disabled
+                // (greyed, non-tappable) until a first fix arrives.
+                if (_myPosition != null)
+                  Positioned(
+                    bottom: 88,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      // Two FABs on one route need distinct hero tags or the
+                      // navigator asserts on a duplicate hero.
+                      heroTag: 'recenterOnMe',
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.blue,
+                      onPressed: () {
+                        if (!_mapReady) return;
+                        final pos = _myPosition!;
+                        _mapController.move(
+                          LatLng(pos.latitude, pos.longitude),
+                          // Never zoom out to reach the dot.
+                          math.max(_mapController.camera.zoom, 16.0),
+                        );
+                      },
+                      child: const Icon(Icons.my_location),
+                    ),
+                  ),
 
                 // Legend
                 Positioned(

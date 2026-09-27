@@ -27,7 +27,8 @@ class PickupPoint {
   factory PickupPoint.fromJson(Map<String, dynamic> json) {
     return PickupPoint(
       id: json['id'] as int,
-      routeId: json['route_id'] as int,
+      // Nullable FK (never written by the app) — see `Bus.fromJson`.
+      routeId: json['route_id'] as int? ?? 0,
       pointName: json['point_name'] as String,
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),

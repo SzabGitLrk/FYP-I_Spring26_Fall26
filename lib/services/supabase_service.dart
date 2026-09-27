@@ -166,7 +166,10 @@ class SupabaseService {
 
       final Map<int, dynamic> latestLocations = {};
       for (var loc in (response as List)) {
-        final busId = loc['bus_id'] as int;
+        final busId = loc['bus_id'] as int?;
+        // Orphan row: `bus_locations.bus_id` is a nullable FK, and a row with
+        // no bus has nowhere to be drawn — skip it instead of throwing.
+        if (busId == null) continue;
         if (!latestLocations.containsKey(busId)) {
           latestLocations[busId] = loc;
         }
