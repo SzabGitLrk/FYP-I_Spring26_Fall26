@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,6 +12,8 @@ import 'package:university_point_locator/models/bus.dart';
 import 'package:university_point_locator/models/bus_location.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/services/notification_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 class MapScreen extends StatefulWidget {
   final RouteModel route;
@@ -64,8 +67,9 @@ class _MapScreenState extends State<MapScreen> {
     _requestLocationPermissions();
     _setupPickupMarkers();
     _setupRoutePolyline();
+    // The live subscription is started by _loadBusData() once the route's
+    // bus list is known, so its events can be filtered from the first tick.
     _loadBusData();
-    _subscribeToBusLocations();
     _setupNotificationHandler();
   }
 
@@ -73,6 +77,10 @@ class _MapScreenState extends State<MapScreen> {
   void dispose() {
     _myPositionSubscription?.cancel();
     _busSubscription?.cancel();
+    // NotificationService is a singleton that outlives this screen; leaving
+    // the callback registered would let a later notification tap call
+    // _mapController.move() on an already-disposed controller.
+    NotificationService().onNotificationOpened = null;
     // FlutterMap is our child, so it has already disposed itself by the time
     // this runs. We own the controller, so we must dispose it ourselves.
     _mapController.dispose();
@@ -123,6 +131,9 @@ class _MapScreenState extends State<MapScreen> {
 
   void _setupNotificationHandler() {
     NotificationService().onNotificationOpened = (data) {
+      // dispose() clears this callback; the guard covers a tap that was
+      // already in flight while the screen was being removed.
+      if (!mounted) return;
       final stopId = data['stop_id'];
       if (stopId != null) {
         final stop = widget.pickupPoints
@@ -190,6 +201,76 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
     });
+
+    // Drawn straight stop-to-stop as an instant placeholder, then upgraded in
+    // place to the real road geometry below.
+    _fetchRoadGeometry();
+  }
+
+  /// Replaces the placeholder straight line with the actual driving route.
+  ///
+  /// This is the fix for "the map draws straight lines instead of the real
+  /// route": the pickup points used to be connected directly, cutting across
+  /// buildings and fields. OSRM's public routing server returns the real road
+  /// geometry between the stops, needs no API key and has no billing account
+  /// - the same constraint that ruled out Google Maps elsewhere in this app.
+  ///
+  /// Any failure (offline, rate limited, no drivable path between stops)
+  /// silently leaves the straight fallback on screen: the map stays usable,
+  /// it just stops being road-accurate.
+  Future<void> _fetchRoadGeometry() async {
+    final stops = widget.pickupPoints;
+    if (stops.length < 2) return;
+
+    // OSRM follows GeoJSON conventions: coordinates are [longitude, latitude]
+    // - the reverse of Flutter's LatLng - joined by ';' in visit order.
+    final path = stops.map((p) => '${p.longitude},${p.latitude}').join(';');
+    final uri = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/$path'
+      '?overview=full&geometries=geojson',
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic> || decoded['code'] != 'Ok') return;
+
+      final routes = decoded['routes'];
+      if (routes is! List || routes.isEmpty) return;
+
+      final geometry = routes.first;
+      final coordinates = geometry is Map<String, dynamic>
+          ? geometry['coordinates']
+          : null;
+      if (coordinates is! List || coordinates.length < 2) return;
+
+      final roadPoints = <LatLng>[];
+      for (final coordinate in coordinates) {
+        if (coordinate is! List || coordinate.length < 2) return;
+        roadPoints.add(
+          // GeoJSON position: [lon, lat].
+          LatLng(
+            (coordinate[1] as num).toDouble(),
+            (coordinate[0] as num).toDouble(),
+          ),
+        );
+      }
+
+      if (!mounted || _polylines.isEmpty) return;
+      setState(() {
+        // _setupRoutePolyline() put the only polyline on this screen at 0.
+        _polylines[0] = Polyline(
+          points: roadPoints,
+          color: Colors.blue,
+          strokeWidth: 4,
+          pattern: StrokePattern.dashed(segments: const [20, 10]),
+        );
+      });
+    } catch (_) {
+      // Timeout, DNS failure or malformed body: keep the straight fallback.
+    }
   }
 
   /// The device's own position rendered as a marker.
@@ -236,16 +317,41 @@ class _MapScreenState extends State<MapScreen> {
       final buses = await _service.getBusesForRoute(widget.route.id);
       final locations = await _service.getBusLocationsForRoute(widget.route.id);
 
+      // Re-read what is actually stored for this user instead of forcing every
+      // toggle back to false on refresh: the old code left the subscriptions
+      // alive on the server while the UI claimed they were off, so arrival
+      // alerts silently stopped firing after a refresh.
+      // null = the query failed; the toggles then keep their current values.
+      Set<int>? activeStopIds;
+      if (widget.pickupPoints.isNotEmpty) {
+        try {
+          activeStopIds = await _service.getActiveStopNotifications(
+            widget.pickupPoints.map((p) => p.id).toList(),
+          );
+        } catch (_) {
+          // Preferences are non-critical; they must not take the map down.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _buses = buses;
         _busLocations = locations;
         _isLoading = false;
+        // A successful reload must clear a previous failure, otherwise the
+        // retry button could never bring the map back.
+        _error = null;
 
-        for (var point in widget.pickupPoints) {
-          _notificationsEnabled[point.id] = false;
+        if (activeStopIds != null) {
+          for (final point in widget.pickupPoints) {
+            _notificationsEnabled[point.id] = activeStopIds.contains(point.id);
+          }
         }
       });
+
+      // Start (or restart) the live feed only now that `_buses` is known, so
+      // events can be narrowed to this route's buses from the first tick.
+      _subscribeToBusLocations();
 
       _updateBusMarkers();
       _updateETAInfo();
@@ -259,21 +365,28 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _subscribeToBusLocations() {
-    _busSubscription = _service.subscribeToBusLocations(widget.route.id).listen(
+    // Restart cleanly when called again after a refresh.
+    _busSubscription?.cancel();
+
+    // Supabase's `.stream()` offers no `where` clause and `bus_locations` has
+    // no route column, so the feed carries every bus in the project; the
+    // filtering happens here. An empty bus list (still loading, or this route
+    // really has no active buses) must show NOTHING - it used to fall back to
+    // the unfiltered feed, painting other routes' buses onto this map.
+    _busSubscription = _service.subscribeToBusLocations().listen(
       (locations) {
-        if (mounted) {
-          final routeBusIds = _buses.map((b) => b.id).toSet();
-          setState(() {
-            _busLocations = routeBusIds.isEmpty
-                ? locations
-                : locations
-                      .where((loc) => routeBusIds.contains(loc.busId))
-                      .toList();
-          });
-          _updateBusMarkers();
-          _updateETAInfo();
-          _checkNotifications();
-        }
+        if (!mounted) return;
+        final routeBusIds = _buses.map((b) => b.id).toSet();
+        setState(() {
+          _busLocations = routeBusIds.isEmpty
+              ? <BusLocation>[]
+              : locations
+                    .where((loc) => routeBusIds.contains(loc.busId))
+                    .toList();
+        });
+        _updateBusMarkers();
+        _updateETAInfo();
+        _checkNotifications();
       },
     );
   }
@@ -858,25 +971,40 @@ class _MapScreenState extends State<MapScreen> {
     return closestBus.estimatedTimeTo(point.latitude, point.longitude);
   }
 
-  void _getDirections(PickupPoint point) {
-    // Google Maps directions URL for this stop.
-    final url =
-        'https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}';
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Directions to ${point.pointName}'),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
+  Future<void> _getDirections(PickupPoint point) async {
+    // Turn-by-turn navigation is delegated to a real maps app: the URL only
+    // carries the destination, so the app supplies the user's current
+    // position as the origin.
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${point.latitude},${point.longitude}',
     );
 
-    // The URL is only logged - the app never opens it. `url_launcher` is no
-    // longer a direct dependency (it now reaches pubspec.lock only as a
-    // transitive package), so nothing is wired up to call canLaunchUrl /
-    // launchUrl; declaring it in pubspec.yaml and adding that call would make
-    // this real.
-    print('Directions URL: $url');
+    try {
+      // externalApplication keeps the user in a navigation app instead of
+      // opening an in-app browser tab. This used to only `print()` the URL,
+      // which meant the button did nothing at all on a phone.
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open a maps app on this device'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open directions: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _centerOnStop(PickupPoint point) {
@@ -971,7 +1099,34 @@ class _MapScreenState extends State<MapScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? Center(child: Text('Error: $_error'))
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    Text('Error: $_error', textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    // The error view used to be a dead end: a bare message
+                    // with no way back, and even the AppBar refresh left
+                    // `_error` set (it is only cleared on success).
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _error = null;
+                          _isLoading = true;
+                        });
+                        _loadBusData();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : Stack(
               children: [
                 FlutterMap(
@@ -1225,8 +1380,11 @@ class _MapScreenState extends State<MapScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              Expanded(
-                // 🔴 FIX: Wrap ListView with Expanded
+              Flexible(
+                // Flexible rather than Expanded: the sheet grows with the stop
+                // list but is capped at the container's 70% height (scrollable
+                // beyond it). Expanded force-stretched it to the full 70% even
+                // when only three stops were listed.
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: widget.pickupPoints.length,

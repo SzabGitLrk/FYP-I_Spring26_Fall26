@@ -30,6 +30,12 @@ dependencies:
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
 
+  # HTTP + external links: OSRM road geometry for the route line, and the
+  # "Directions" button. Both were already in pubspec.lock (transitive via
+  # supabase_flutter / plugins); declaring them makes that usage legal.
+  http: ^1.0.0
+  url_launcher: ^6.0.0
+
 # ✅ DEV DEPENDENCIES SECTION
 dev_dependencies:
   flutter_test:

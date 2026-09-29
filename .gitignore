@@ -57,6 +57,9 @@
 *.temp
 *.swp
 
+# Captured `flutter run` session output (created on demand, never versioned)
+/run_log.txt
+
 # OS generated
 .DS_Store
 .DS_Store?

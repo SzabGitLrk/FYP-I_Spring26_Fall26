@@ -42,7 +42,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       // Get user metadata
-      _displayName = user?.userMetadata?['name'] ?? 'Student';
+      // `?? 'Student'` only guards null: an empty-string name (signup with an
+      // empty name field) used to reach `_displayName![0]` in build() and
+      // crash the screen with a RangeError.
+      final rawName = user?.userMetadata?['name'];
+      _displayName = rawName is String && rawName.trim().isNotEmpty
+          ? rawName.trim()
+          : 'Student';
       _email = user?.email ?? '';
       _role = user?.userMetadata?['role'] ?? 'student';
       // Handle createdAt - Supabase returns it as a String in ISO8601 format

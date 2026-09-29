@@ -158,11 +158,16 @@ class SupabaseService {
 
       final busIds = buses.map((b) => b.id).toList();
 
+      // Newest first, capped: `bus_locations` is an append-only log that grows
+      // by one row per GPS tick of every trip ever driven. An unbounded fetch
+      // would download that whole history on every map open; the 500 most
+      // recent rows always cover one fix per bus.
       final response = await _client
           .from('bus_locations')
           .select()
           .inFilter('bus_id', busIds)
-          .order('timestamp', ascending: false);
+          .order('timestamp', ascending: false)
+          .limit(500);
 
       final Map<int, dynamic> latestLocations = {};
       for (var loc in (response as List)) {
@@ -183,34 +188,23 @@ class SupabaseService {
     }
   }
 
-  Stream<List<BusLocation>> subscribeToBusLocations(int routeId) {
+  /// Live feed of bus positions across the whole project.
+  ///
+  /// Supabase's `.stream()` supports only `order`/`limit` - no `where` - and
+  /// `bus_locations` carries no `route_id` column to filter on anyway, so
+  /// events arrive for every bus. Callers MUST narrow them to their own buses
+  /// (`map_screen.dart` does this against the route's bus list); the `limit`
+  /// at least keeps the replayed history bounded instead of re-downloading
+  /// the table's entire append-only past on every subscribe.
+  Stream<List<BusLocation>> subscribeToBusLocations() {
     return _client
         .from('bus_locations')
         .stream(primaryKey: ['id'])
         .order('timestamp', ascending: false)
+        .limit(500)
         .map((maps) {
           return maps.map((map) => BusLocation.fromJson(map)).toList();
         });
-  }
-
-  Future<void> simulateBusMovement(
-    int busId,
-    List<PickupPoint> routePoints,
-  ) async {
-    for (var i = 0; i < routePoints.length; i++) {
-      final point = routePoints[i];
-
-      await _client.from('bus_locations').insert({
-        'bus_id': busId,
-        'latitude': point.latitude,
-        'longitude': point.longitude,
-        'speed': 25.0,
-        'heading': 45.0,
-        'next_stop_index': i + 1,
-      });
-
-      await Future.delayed(const Duration(seconds: 3));
-    }
   }
 
   String? _getUserId() {
@@ -225,13 +219,34 @@ class SupabaseService {
     final uid = _getUserId();
     if (uid == null) return;
     try {
-      await _client.from('stop_notifications').upsert({
-        'user_id': uid,
-        'stop_id': stopId,
-        'route_id': routeId,
-        'is_active': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
+      // Update first, insert only when no row exists yet - deliberately NOT
+      // an `upsert()`. Without knowing whether `stop_notifications` carries a
+      // UNIQUE (user_id, stop_id) constraint, upsert misbehaves on one of the
+      // two possible schemas: with the constraint it falls back to the serial
+      // primary key as its conflict target, so re-subscribing throws a unique
+      // violation; without it, every cycle stacks another duplicate row.
+      // This order needs only the INSERT and UPDATE policies the feature
+      // already proves exist (subscribing and unsubscribing both work).
+      final existing = await _client
+          .from('stop_notifications')
+          .update({
+            'is_active': true,
+            'route_id': routeId,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', uid)
+          .eq('stop_id', stopId)
+          .select('id');
+
+      if (existing.isEmpty) {
+        await _client.from('stop_notifications').insert({
+          'user_id': uid,
+          'stop_id': stopId,
+          'route_id': routeId,
+          'is_active': true,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
     } catch (e) {
       throw Exception('Failed to subscribe: $e');
     }
@@ -251,29 +266,31 @@ class SupabaseService {
     }
   }
 
-  Future<bool> isSubscribedToStop(int stopId) async {
+  /// Which of [stopIds] the signed-in user currently has an active
+  /// subscription for - one query instead of one per stop.
+  ///
+  /// List-based on purpose: `unsubscribe` only flips `is_active` to false and
+  /// never deletes the row, so on schemas without a unique constraint the
+  /// table can hold more than one row per (user, stop), and `.maybeSingle()`
+  /// would throw on exactly those users. Callers decide how important the
+  /// answer is - the map treats a failure as "keep the current toggle state".
+  Future<Set<int>> getActiveStopNotifications(List<int> stopIds) async {
     final uid = _getUserId();
-    if (uid == null) return false;
+    if (uid == null || stopIds.isEmpty) return const {};
+
     try {
       final response = await _client
           .from('stop_notifications')
-          .select('is_active')
+          .select('stop_id')
           .eq('user_id', uid)
-          .eq('stop_id', stopId)
-          .maybeSingle();
+          .eq('is_active', true)
+          .inFilter('stop_id', stopIds);
 
-      return response != null && response['is_active'] == true;
+      return (response as List)
+          .map((row) => (row['stop_id'] as num).toInt())
+          .toSet();
     } catch (e) {
-      return false;
-    }
-  }
-
-  Future<bool> testConnection() async {
-    try {
-      await _client.from('universities').select().limit(1);
-      return true;
-    } catch (e) {
-      return false;
+      throw Exception('Failed to load notification preferences: $e');
     }
   }
 

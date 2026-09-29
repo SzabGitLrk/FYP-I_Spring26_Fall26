@@ -12,7 +12,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  print('🚀 Starting app...');
+  debugPrint('🚀 Starting app...');
 
   try {
     // Initialize Supabase with PKCE for better security
@@ -23,28 +23,28 @@ void main() async {
         authFlowType: AuthFlowType.pkce,
       ),
     );
-    print('✅ Supabase initialized!');
+    debugPrint('✅ Supabase initialized!');
 
     // Initialize local notifications (mobile only)
     if (!kIsWeb) {
       final notificationService = NotificationService();
       await notificationService.initialize();
-      print('✅ Local notifications initialized!');
+      debugPrint('✅ Local notifications initialized!');
     } else {
-      print('🌐 Web detected - skipping notifications');
+      debugPrint('🌐 Web detected - skipping notifications');
     }
 
     // Optional: Listen to auth changes for debugging
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
-        print('🔐 Auth: ${data.event} - User: ${session.user.email}');
+        debugPrint('🔐 Auth: ${data.event} - User: ${session.user.email}');
       } else {
-        print('🔐 Auth: ${data.event} - No session');
+        debugPrint('🔐 Auth: ${data.event} - No session');
       }
     });
   } catch (e) {
-    print('❌ Initialization error: $e');
+    debugPrint('❌ Initialization error: $e');
   }
 
   runApp(const MyApp());

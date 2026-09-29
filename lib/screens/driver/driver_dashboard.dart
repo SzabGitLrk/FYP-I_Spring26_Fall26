@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/models/route_model.dart';
 import 'package:university_point_locator/models/bus.dart';
+import 'package:university_point_locator/models/pickup_point.dart';
 import 'package:geolocator/geolocator.dart';
 
 class DriverDashboard extends StatefulWidget {
@@ -32,6 +33,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
   int _pickupCount = 0;
   Position? _lastPosition;
   int? _currentTripId;
+
+  /// Stops of the route being driven, loaded once per trip. Feeds arrival
+  /// detection (`_pickupCount`) and the `next_stop_index` students see as
+  /// "Next stop" on the map.
+  List<PickupPoint> _tripStops = [];
+
+  /// Stops already visited on this trip, so each one is counted exactly once.
+  final Set<int> _countedStopIds = {};
 
   @override
   void initState() {
@@ -151,6 +160,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // Drop the previous trip's last fix, otherwise the Live Tracking card
       // shows the OLD trip's coordinates until the first new fix arrives.
       _currentPosition = null;
+      // ...and the previous trip's stop progress.
+      _tripStops = [];
+      _countedStopIds.clear();
     });
 
     try {
@@ -170,6 +182,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
       _currentTripId = tripResult?['id'] as int?;
     } catch (_) {
       // Trip recording is non-critical
+    }
+
+    // Stops for arrival detection and the "Next stop" readout. Best-effort:
+    // if this fails the trip still tracks - it just reports no pickups and no
+    // next stop (both default to 0 = unknown), which beats dropping the fix.
+    try {
+      _tripStops = await _service.getPickupPointsForRoute(_selectedRoute!.id);
+    } catch (_) {
+      _tripStops = [];
     }
 
     const LocationSettings locationSettings = LocationSettings(
@@ -197,18 +218,33 @@ class _DriverDashboardState extends State<DriverDashboard> {
               _lastPosition = position;
             });
 
-            _service.updateBusLocation(
-              busId: bus.id,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              speed: position.speed,
-            );
+            final nextStopIndex = _updateStopProgress(position);
 
-            if (position.speed < 1 && _pickupCount < 10) {
-              setState(() {
-                _pickupCount = _pickupCount + 1;
-              });
-            }
+            _service
+                .updateBusLocation(
+                  busId: bus.id,
+                  latitude: position.latitude,
+                  longitude: position.longitude,
+                  // `Position.speed` is metres per second; everything reading
+                  // this column - the "km/h" labels, the map's moving/stopped
+                  // thresholds, `estimatedTimeTo`'s ETA maths - expects km/h,
+                  // so it is converted once at the source instead of being
+                  // 3.6x wrong at every consumer.
+                  speed: position.speed.isFinite && position.speed > 0
+                      ? position.speed * 3.6
+                      : 0,
+                  // Degrees clockwise from north: the same convention the bus
+                  // marker's rotation uses. Unknown bearings arrive as a
+                  // negative or NaN value and would point the icon sideways.
+                  heading: position.heading.isFinite && position.heading > 0
+                      ? position.heading
+                      : 0,
+                  nextStopIndex: nextStopIndex,
+                )
+                // Fire-and-forget by design: awaiting would stall the GPS
+                // stream, and an unhandled rejection would surface as an
+                // async error on every dropped fix. The next tick retries.
+                .catchError((Object _) {});
           },
           onError: (error) {
             if (mounted) {
@@ -244,6 +280,47 @@ class _DriverDashboardState extends State<DriverDashboard> {
         'Trip ended! Duration: ${duration.inMinutes} min, Distance: ${_totalDistance.toStringAsFixed(1)} km',
       );
     }
+  }
+
+  /// Records stop arrivals and works out which stop comes next.
+  ///
+  /// Returns the 1-based index of the first stop not yet reached (0 = every
+  /// stop visited, or no stops loaded), which is the numbering
+  /// `map_screen._getNextStopName` decodes back into a stop name.
+  ///
+  /// The counter used to bump on any fix with `speed < 1` - i.e. it counted
+  /// red lights rather than pickups, capped at 10 - and `next_stop_index` was
+  /// never sent at all, so students always saw "Next stop: Unknown".
+  int _updateStopProgress(Position position) {
+    if (_tripStops.isEmpty) return 0;
+
+    const arrivalRadiusMeters = 50.0;
+    var nearestIndex = 0;
+    var nearestDistance = double.infinity;
+    for (var i = 0; i < _tripStops.length; i++) {
+      final stop = _tripStops[i];
+      final distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        stop.latitude,
+        stop.longitude,
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = i;
+      }
+    }
+
+    if (nearestDistance <= arrivalRadiusMeters &&
+        _countedStopIds.add(_tripStops[nearestIndex].id) &&
+        mounted) {
+      setState(() => _pickupCount++);
+    }
+
+    for (var i = 0; i < _tripStops.length; i++) {
+      if (!_countedStopIds.contains(_tripStops[i].id)) return i + 1;
+    }
+    return 0;
   }
 
   Future<void> _showLogoutDialog() async {
@@ -620,7 +697,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                   Expanded(
                                     child: _buildInfoChip(
                                       Icons.speed,
-                                      '${_currentPosition!.speed.toStringAsFixed(1)} km/h',
+                                      // Position.speed is m/s; the label says
+                                      // km/h, so convert it here too.
+                                      '${(_currentPosition!.speed * 3.6).toStringAsFixed(1)} km/h',
                                       Colors.blue,
                                     ),
                                   ),
@@ -699,7 +778,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               'Trip Time',
                             ),
                             _buildStatItem(
-                              Icons.speed,
+                              Icons.route,
                               '${_totalDistance.toStringAsFixed(1)} km',
                               'Distance',
                             ),

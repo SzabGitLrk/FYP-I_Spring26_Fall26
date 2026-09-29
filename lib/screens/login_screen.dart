@@ -24,21 +24,59 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Client-side checks before anything goes over the network.
+  ///
+  /// The fields are plain [TextField]s (no [Form]/[validator] anywhere), so
+  /// an empty email produced Supabase's cryptic "Invalid login credentials"
+  /// and a short password a raw Auth error - and untrimmed copy-pasted
+  /// addresses failed for the same reason.
+  bool _validate() {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    String? error;
+    if (email.isEmpty) {
+      error = 'Please enter your email';
+    } else if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      error = 'Please enter a valid email address';
+    } else if (password.isEmpty) {
+      error = 'Please enter your password';
+    } else if (!_isLogin && password.length < 6) {
+      // Supabase rejects anything shorter anyway; say so before the round trip.
+      error = 'Password must be at least 6 characters';
+    } else if (!_isLogin && _nameController.text.trim().isEmpty) {
+      error = 'Please enter your name';
+    }
+
+    if (error == null) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error), backgroundColor: Colors.orange),
+    );
+    return false;
+  }
+
   Future<void> _submit() async {
+    if (!_validate()) return;
     setState(() => _isLoading = true);
+
+    // Captured before the first await, so what was validated is exactly what
+    // is sent even if the fields are edited while the request is in flight.
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final name = _nameController.text.trim();
 
     try {
       if (_isLogin) {
         await Supabase.instance.client.auth.signInWithPassword(
-          email: _emailController.text,
-          password: _passwordController.text,
+          email: email,
+          password: password,
         );
       } else {
         final response = await Supabase.instance.client.auth.signUp(
-          email: _emailController.text,
-          password: _passwordController.text,
+          email: email,
+          password: password,
           data: {
-            'name': _nameController.text,
+            'name': name,
             'role': _selectedRole,
             'created_at': DateTime.now().toIso8601String(),
           },
@@ -55,8 +93,8 @@ class _LoginScreenState extends State<LoginScreen> {
             if (existing == null) {
               await Supabase.instance.client.from('profiles').insert({
                 'id': response.user!.id,
-                'name': _nameController.text,
-                'email': _emailController.text,
+                'name': name,
+                'email': email,
                 // Only 'student' / 'driver' are selectable above, and the
                 // database guard re-validates this regardless: a client can
                 // never self-assign 'admin' or self-approve.

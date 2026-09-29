@@ -1,4 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Package visibility (Android 11+): needed so the "Directions" button
+         can resolve browsers / maps apps through url_launcher. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <package android:name="com.google.android.apps.maps"/>
+    </queries>
+
     <application
         android:label="University Point Locator"
         android:name="${applicationName}"
