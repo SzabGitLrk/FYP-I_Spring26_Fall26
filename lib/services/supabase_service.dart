@@ -106,7 +106,7 @@ class SupabaseService {
         'bus_id': busId,
         'driver_id': driverId,
         'route_id': routeId,
-        'start_time': DateTime.now().toIso8601String(),
+        'start_time': DateTime.now().toUtc().toIso8601String(),
         'status': 'active',
       });
     } catch (e) {
@@ -119,7 +119,7 @@ class SupabaseService {
       await _client
           .from('trips')
           .update({
-            'end_time': DateTime.now().toIso8601String(),
+            'end_time': DateTime.now().toUtc().toIso8601String(),
             'distance_km': distanceKm,
             'status': 'completed',
           })
@@ -151,21 +151,35 @@ class SupabaseService {
     }
   }
 
-  Future<List<BusLocation>> getBusLocationsForRoute(int routeId) async {
+  Future<List<BusLocation>> getBusLocationsForRoute(
+    int routeId, {
+    List<Bus>? buses,
+  }) async {
     try {
-      final buses = await getBusesForRoute(routeId);
-      if (buses.isEmpty) return [];
+      // Optional passthrough: callers that already loaded the route's buses
+      // (map_screen) skip a second identical round-trip.
+      final busList = buses ?? await getBusesForRoute(routeId);
+      if (busList.isEmpty) return [];
 
-      final busIds = buses.map((b) => b.id).toList();
+      final busIds = busList.map((b) => b.id).toList();
 
       // Newest first, capped: `bus_locations` is an append-only log that grows
       // by one row per GPS tick of every trip ever driven. An unbounded fetch
       // would download that whole history on every map open; the 500 most
       // recent rows always cover one fix per bus.
+      //
+      // Ghost-bus guard on top: without an age floor, "newest row per bus"
+      // for a bus that stopped reporting yesterday IS yesterday's last fix,
+      // drawn live with a plausible ETA. Only the last 2 minutes count.
+      final cutoff = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(minutes: 2))
+          .toIso8601String();
       final response = await _client
           .from('bus_locations')
           .select()
           .inFilter('bus_id', busIds)
+          .gte('timestamp', cutoff)
           .order('timestamp', ascending: false)
           .limit(500);
 
@@ -190,16 +204,26 @@ class SupabaseService {
 
   /// Live feed of bus positions across the whole project.
   ///
-  /// Supabase's `.stream()` supports only `order`/`limit` - no `where` - and
-  /// `bus_locations` carries no `route_id` column to filter on anyway, so
-  /// events arrive for every bus. Callers MUST narrow them to their own buses
+  /// Supabase's `.stream()` supports `where`/`order`/`limit` but no join, and
+  /// `bus_locations` carries no `route_id` column to filter on, so events
+  /// still arrive for every bus. Callers MUST narrow them to their own buses
   /// (`map_screen.dart` does this against the route's bus list); the `limit`
   /// at least keeps the replayed history bounded instead of re-downloading
   /// the table's entire append-only past on every subscribe.
+  ///
+  /// The same 2-minute age floor as [getBusLocationsForRoute] applies: the
+  /// cutoff is fixed at subscribe time (the screen's lifetime is short), and
+  /// consumers re-check age before acting on a row, so an old fix can neither
+  /// replay on first subscribe nor produce a phantom alert later.
   Stream<List<BusLocation>> subscribeToBusLocations() {
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(minutes: 2))
+        .toIso8601String();
     return _client
         .from('bus_locations')
         .stream(primaryKey: ['id'])
+        .gte('timestamp', cutoff)
         .order('timestamp', ascending: false)
         .limit(500)
         .map((maps) {
@@ -232,7 +256,7 @@ class SupabaseService {
           .update({
             'is_active': true,
             'route_id': routeId,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('user_id', uid)
           .eq('stop_id', stopId)
@@ -244,7 +268,7 @@ class SupabaseService {
           'stop_id': stopId,
           'route_id': routeId,
           'is_active': true,
-          'updated_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
         });
       }
     } catch (e) {
@@ -315,7 +339,7 @@ class SupabaseService {
         'latitude': latitude,
         'longitude': longitude,
         'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
       rethrow;

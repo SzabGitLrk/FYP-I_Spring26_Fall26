@@ -15,7 +15,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _totalDrivers = 0;
   int _totalBuses = 0;
   int _activeTrips = 0;
-  int _pendingDrivers = 0;
   List<Map<String, dynamic>> _sosAlerts = [];
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _buses = [];
@@ -66,7 +65,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _totalDrivers = drivers.length;
         _totalBuses = buses.length;
         _activeTrips = trips.length;
-        _pendingDrivers = drivers.where((d) => d['is_approved'] == false).length;
       });
     } catch (e) {
       _showError('Could not load dashboard stats: $e');
@@ -124,13 +122,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  /// `created_at` arrives straight from the backend: one null or malformed
+  /// value must not throw inside build() and take every other SOS card
+  /// down with it.
+  static String _formatSosTime(dynamic raw) {
+    final parsed = DateTime.tryParse('${raw ?? ''}');
+    if (parsed == null) return '—';
+    return '${parsed.toLocal()}';
+  }
+
   Future<void> _resolveSOS(int alertId) async {
     try {
       await supabase
           .from('sos_alerts')
           .update({
             'status': 'resolved',
-            'resolved_at': DateTime.now().toIso8601String(),
+            'resolved_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', alertId);
       await _loadSOSAlerts();
@@ -312,8 +319,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               const SizedBox(height: 24),
 
-              // Pending Approvals Section
-              if (_pendingDrivers > 0) ...[
+              // Pending Approvals Section. Derived from `_drivers` - the same
+              // list the cards below render - because the old `_pendingDrivers`
+              // snapshot lived in _loadStats(), which approve/reject never
+              // refreshed: the header could sit above an empty section after
+              // the last approval (and `== false` ignored a NULL is_approved,
+              // while the list filter below counts it).
+              if (_drivers.any((d) => d['is_approved'] != true)) ...[
                 const Text(
                   'Pending Driver Approvals',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -384,7 +396,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                       title: Text(alert['user_name'] ?? 'Unknown User'),
                       subtitle: Text(
-                        '📍 ${alert['latitude']}, ${alert['longitude']}\n🕐 ${DateTime.parse(alert['created_at']).toLocal()}',
+                        '📍 ${alert['latitude']}, ${alert['longitude']}\n'
+                        '🕐 ${_formatSosTime(alert['created_at'])}',
                       ),
                       trailing: ElevatedButton(
                         onPressed: () => _resolveSOS(alert['id']),

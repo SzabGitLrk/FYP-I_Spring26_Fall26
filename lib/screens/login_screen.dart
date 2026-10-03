@@ -78,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
           data: {
             'name': name,
             'role': _selectedRole,
-            'created_at': DateTime.now().toIso8601String(),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
           },
         );
 
@@ -128,8 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (e.message.toLowerCase().contains(
         'database error saving new user',
       )) {
+        // Detail goes to the log, not to the student: nobody in the app can
+        // run SQL migrations.
+        debugPrint('[login] profile trigger failed: ${e.message}');
         message =
-            'Database error creating profile. Run the SQL migration in Supabase SQL Editor to fix the trigger function.';
+            'Registration could not save your profile. Please contact your administrator.';
       } else {
         message = e.message;
       }
@@ -138,9 +141,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      // Raw exception text is for the log, not the UI.
+      debugPrint('[login] unexpected error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );

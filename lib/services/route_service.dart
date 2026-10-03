@@ -44,6 +44,12 @@ class RoadRoute {
 /// Returns null only when *every* router fails (offline, rate limited, no
 /// drivable path); the caller then keeps its straight placeholder on screen.
 class RouteService {
+  /// Identifies these requests to the shared public routers: their usage
+  /// policies ask for a real User-Agent (with contact info), not the default
+  /// `Dart/<version>` string.
+  static const String _userAgent =
+      'UniversityPointLocator/1.0 (university final-year student project)';
+
   Future<RoadRoute?> fetchRoute(List<LatLng> waypoints) async {
     if (waypoints.length < 2) return null;
     debugPrint('[route] fetching road geometry for ${waypoints.length} waypoints');
@@ -63,7 +69,9 @@ class RouteService {
         'https://router.project-osrm.org/route/v1/driving/$path'
         '?overview=full&geometries=geojson&steps=true',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      final response = await http
+          .get(uri, headers: const {'User-Agent': _userAgent})
+          .timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
         debugPrint(
           '[route] OSRM: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
@@ -114,7 +122,9 @@ class RouteService {
           'directions_options': {'units': 'kilometers'},
         }),
       });
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(uri, headers: const {'User-Agent': _userAgent})
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         debugPrint(
           '[route] Valhalla: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
