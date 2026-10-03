@@ -48,7 +48,13 @@ class _MapScreenState extends State<MapScreen> {
   // flutter_map layers take Lists; Google Maps took Sets.
   final List<Marker> _pickupMarkers = [];
   final List<Marker> _busMarkers = [];
-  final List<Polyline> _polylines = [];
+  /// The route polyline currently drawn over the map.
+  ///
+  /// Reassigned as a *fresh list* (never mutated in place): flutter_map caches
+  /// its projected/simplified polyline data per list instance, so handing the
+  /// layer a new list is what guarantees it re-projects and repaints with road
+  /// geometry instead of keeping the straight placeholder painted.
+  List<Polyline> _polylines = [];
 
   List<Bus> _buses = [];
   List<BusLocation> _busLocations = [];
@@ -186,7 +192,7 @@ class _MapScreenState extends State<MapScreen> {
     if (widget.pickupPoints.length < 2) return;
 
     setState(() {
-      _polylines.add(
+      _polylines = [
         Polyline(
           points: widget.pickupPoints
               .map((p) => LatLng(p.latitude, p.longitude))
@@ -199,11 +205,11 @@ class _MapScreenState extends State<MapScreen> {
           // evaluated in a constant expression.
           pattern: StrokePattern.dashed(segments: const [20, 10]),
         ),
-      );
+      ];
     });
 
-    // Drawn straight stop-to-stop as an instant placeholder, then upgraded in
-    // place to the real road geometry below.
+    // Drawn straight stop-to-stop as an instant placeholder, then replaced
+    // by the real road geometry below.
     _fetchRoadGeometry();
   }
 
@@ -211,66 +217,197 @@ class _MapScreenState extends State<MapScreen> {
   ///
   /// This is the fix for "the map draws straight lines instead of the real
   /// route": the pickup points used to be connected directly, cutting across
-  /// buildings and fields. OSRM's public routing server returns the real road
-  /// geometry between the stops, needs no API key and has no billing account
-  /// - the same constraint that ruled out Google Maps elsewhere in this app.
+  /// buildings and fields. Two keyless routers are tried in order:
   ///
-  /// Any failure (offline, rate limited, no drivable path between stops)
-  /// silently leaves the straight fallback on screen: the map stays usable,
-  /// it just stops being road-accurate.
+  /// 1. OSRM's public demo (`router.project-osrm.org`) - GeoJSON straight off
+  ///    the wire.
+  /// 2. Valhalla's public OSM instance (`valhalla1.openstreetmap.de`) - a
+  ///    differently-encoded shape, decoded below.
+  ///
+  /// Neither needs an API key nor a billing account - the same constraint
+  /// that ruled out Google Maps elsewhere in this app. Every step logs with a
+  /// `[route]` prefix, so `adb logcat -s flutter:I` shows exactly which
+  /// router answered and what came back if a device ever draws the fallback
+  /// again.
+  ///
+  /// If every router fails (offline, rate limited, no drivable path between
+  /// stops), the straight fallback simply stays on screen: the map stays
+  /// usable, it just stops being road-accurate.
   Future<void> _fetchRoadGeometry() async {
     final stops = widget.pickupPoints;
     if (stops.length < 2) return;
 
-    // OSRM follows GeoJSON conventions: coordinates are [longitude, latitude]
-    // - the reverse of Flutter's LatLng - joined by ';' in visit order.
+    // Routers address waypoints GeoJSON-style: [longitude, latitude] - the
+    // reverse of Flutter's LatLng - joined by ';' in visit order.
     final path = stops.map((p) => '${p.longitude},${p.latitude}').join(';');
-    final uri = Uri.parse(
-      'https://router.project-osrm.org/route/v1/driving/$path'
-      '?overview=full&geometries=geojson',
-    );
+    debugPrint('[route] fetching road geometry for ${stops.length} stops');
 
+    // ---- Router 1: OSRM public demo ----
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return;
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic> || decoded['code'] != 'Ok') return;
-
-      final routes = decoded['routes'];
-      if (routes is! List || routes.isEmpty) return;
-
-      final geometry = routes.first;
-      final coordinates = geometry is Map<String, dynamic>
-          ? geometry['coordinates']
-          : null;
-      if (coordinates is! List || coordinates.length < 2) return;
-
-      final roadPoints = <LatLng>[];
-      for (final coordinate in coordinates) {
-        if (coordinate is! List || coordinate.length < 2) return;
-        roadPoints.add(
-          // GeoJSON position: [lon, lat].
-          LatLng(
-            (coordinate[1] as num).toDouble(),
-            (coordinate[0] as num).toDouble(),
-          ),
+      final uri = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving/$path'
+        '?overview=full&geometries=geojson',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final Object? decoded = jsonDecode(response.body);
+        final points = _parseOsrmGeometry(decoded);
+        if (points != null && _applyRoadPolyline(points, 'OSRM')) return;
+        final code =
+            decoded is Map<String, dynamic> ? ' (code=${decoded['code']})' : '';
+        debugPrint(
+          '[route] OSRM: 200 but no usable geometry$code - '
+          '${_bodySnippet(response.body)}',
+        );
+      } else {
+        debugPrint(
+          '[route] OSRM: HTTP ${response.statusCode} - '
+          '${_bodySnippet(response.body)}',
         );
       }
+    } catch (e) {
+      debugPrint('[route] OSRM: failed - $e');
+    }
 
-      if (!mounted || _polylines.isEmpty) return;
-      setState(() {
-        // _setupRoutePolyline() put the only polyline on this screen at 0.
-        _polylines[0] = Polyline(
+    // ---- Router 2: Valhalla public instance (different encoding) ----
+    try {
+      final uri = Uri.https('valhalla1.openstreetmap.de', '/route', {
+        'json': jsonEncode({
+          'locations': [
+            for (final p in stops) {'lat': p.latitude, 'lon': p.longitude},
+          ],
+          'costing': 'auto',
+          'directions_options': {'units': 'kilometers'},
+        }),
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final Object? decoded = jsonDecode(response.body);
+        final points = _parseValhallaGeometry(decoded);
+        if (points != null && _applyRoadPolyline(points, 'Valhalla')) return;
+        debugPrint(
+          '[route] Valhalla: 200 but no usable geometry - '
+          '${_bodySnippet(response.body)}',
+        );
+      } else {
+        debugPrint(
+          '[route] Valhalla: HTTP ${response.statusCode} - '
+          '${_bodySnippet(response.body)}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[route] Valhalla: failed - $e');
+    }
+
+    debugPrint('[route] all routers failed - keeping straight fallback');
+  }
+
+  /// OSRM response body -> road points, or null when anything is off.
+  List<LatLng>? _parseOsrmGeometry(Object? decoded) {
+    if (decoded is! Map<String, dynamic> || decoded['code'] != 'Ok') {
+      return null;
+    }
+    final routes = decoded['routes'];
+    if (routes is! List || routes.isEmpty) return null;
+
+    final geometry = routes.first;
+    final coordinates = geometry is Map<String, dynamic>
+        ? geometry['coordinates']
+        : null;
+    if (coordinates is! List || coordinates.length < 2) return null;
+
+    final roadPoints = <LatLng>[];
+    for (final coordinate in coordinates) {
+      if (coordinate is! List || coordinate.length < 2) return null;
+      roadPoints.add(
+        // GeoJSON position: [lon, lat].
+        LatLng(
+          (coordinate[1] as num).toDouble(),
+          (coordinate[0] as num).toDouble(),
+        ),
+      );
+    }
+    return roadPoints;
+  }
+
+  /// Valhalla response body -> road points across every leg, or null.
+  List<LatLng>? _parseValhallaGeometry(Object? decoded) {
+    if (decoded is! Map<String, dynamic>) return null;
+    final trip = decoded['trip'];
+    if (trip is! Map<String, dynamic>) return null;
+    final legs = trip['legs'];
+    if (legs is! List || legs.isEmpty) return null;
+
+    final roadPoints = <LatLng>[];
+    for (final leg in legs) {
+      final shape = leg is Map<String, dynamic> ? leg['shape'] : null;
+      if (shape is! String) return null;
+      roadPoints.addAll(_decodeValhallaPolyline(shape));
+    }
+    return roadPoints.length >= 2 ? roadPoints : null;
+  }
+
+  /// Decodes an encoded polyline (precision 1e-6, signed deltas - the format
+  /// Valhalla ships its route shape in) into map points.
+  List<LatLng> _decodeValhallaPolyline(String encoded) {
+    final points = <LatLng>[];
+    var index = 0;
+    var lat = 0;
+    var lng = 0;
+    while (index < encoded.length) {
+      var result = 0;
+      var shift = 0;
+      var byte = 0;
+      do {
+        byte = encoded.codeUnitAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+      lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+
+      result = 0;
+      shift = 0;
+      do {
+        byte = encoded.codeUnitAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+      lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+
+      points.add(LatLng(lat / 1e6, lng / 1e6));
+    }
+    return points;
+  }
+
+  /// Puts [roadPoints] on screen as the route: a *fresh list instance* so the
+  /// polyline layer cannot reuse its cached projection of the straight
+  /// placeholder - and a log line so the device confirms what it drew.
+  ///
+  /// Returns false when the screen is already gone, so the caller falls
+  /// through to the next router instead of pretending success.
+  bool _applyRoadPolyline(List<LatLng> roadPoints, String source) {
+    if (!mounted || roadPoints.length < 2) return false;
+    setState(() {
+      _polylines = [
+        Polyline(
           points: roadPoints,
           color: Colors.blue,
           strokeWidth: 4,
           pattern: StrokePattern.dashed(segments: const [20, 10]),
-        );
-      });
-    } catch (_) {
-      // Timeout, DNS failure or malformed body: keep the straight fallback.
-    }
+        ),
+      ];
+    });
+    debugPrint(
+      '[route] $source geometry applied: ${roadPoints.length} points',
+    );
+    return true;
+  }
+
+  /// First bytes of an error body on one line - enough to recognise the
+  /// responder (rate-limit page, proxy block, router error object, ...).
+  String _bodySnippet(String body) {
+    final clipped = body.length > 120 ? body.substring(0, 120) : body;
+    return clipped.replaceAll(RegExp(r'\s+'), ' ');
   }
 
   /// The device's own position rendered as a marker.
