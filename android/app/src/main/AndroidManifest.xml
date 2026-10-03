@@ -7,6 +7,11 @@
             <data android:scheme="https"/>
         </intent>
         <package android:name="com.google.android.apps.maps"/>
+        <!-- Package visibility (Android 11+): lets the navigation banner's
+             voice guidance reach an installed text-to-speech engine. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
     </queries>
 
     <application

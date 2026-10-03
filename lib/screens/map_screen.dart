@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,8 +12,11 @@ import 'package:university_point_locator/models/bus.dart';
 import 'package:university_point_locator/models/bus_location.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/services/notification_service.dart';
-import 'package:http/http.dart' as http;
+import 'package:university_point_locator/services/route_service.dart';
+import 'package:university_point_locator/navigation/route_follower.dart';
+import 'package:university_point_locator/navigation/route_step.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class MapScreen extends StatefulWidget {
   final RouteModel route;
@@ -65,6 +68,31 @@ class _MapScreenState extends State<MapScreen> {
   bool _followBus = true;
   String _etaInfo = '';
 
+  // ---- In-app turn-by-turn navigation ----
+  /// Guidance is active: banner shown, camera follows the user, off-route
+  /// detection and arrival are armed.
+  bool _navigating = false;
+  /// A route is being calculated (start or reroute) - drives the banner's
+  /// "Calculating route.../Rerouting..." state.
+  bool _navRouting = false;
+  /// Voice guidance on/off (session only).
+  bool _navVoice = true;
+  RouteFollower? _follower;
+  RouteProgress? _progress;
+  /// Last announced step, so speech and haptics fire once per maneuver.
+  int _spokenStepIndex = -1;
+  /// Next stop the user is heading for; reroutes join the route after it
+  /// instead of backtracking to a stop they already passed.
+  int _navNextStopIndex = 0;
+  PickupPoint? _navDestination;
+  int _navDestinationIndex = 0;
+  /// Bumped on start/cancel so an in-flight fetch cannot resurrect a
+  /// navigation the user already ended.
+  int _navSession = 0;
+  DateTime? _lastRerouteAt;
+  FlutterTts? _tts;
+  Future<void>? _ttsInit;
+
   final LatLng _larkanaCenter = const LatLng(27.5580, 68.2120);
 
   @override
@@ -90,6 +118,8 @@ class _MapScreenState extends State<MapScreen> {
     // FlutterMap is our child, so it has already disposed itself by the time
     // this runs. We own the controller, so we must dispose it ourselves.
     _mapController.dispose();
+    // Cut off any queued utterance when the screen goes away.
+    unawaited(_tts?.stop());
     super.dispose();
   }
 
@@ -124,15 +154,58 @@ class _MapScreenState extends State<MapScreen> {
 
     _myPositionSubscription =
         Geolocator.getPositionStream(locationSettings: settings).listen(
-          (pos) {
-            if (mounted) {
-              setState(() => _myPosition = pos);
-            }
-          },
+          _handlePosition,
           // Permission revoked mid-session, or GPS unavailable. The dot just
           // disappears; nothing else on the screen is affected.
           onError: (_) {},
         );
+  }
+
+  /// Single pipeline for every GPS fix: the blue dot first, then - while
+  /// navigating - route progress, step announcements, camera follow, arrival
+  /// and off-route detection.
+  void _handlePosition(Position pos) {
+    if (!mounted) return;
+    final p = LatLng(pos.latitude, pos.longitude);
+
+    if (!_navigating || _follower == null) {
+      setState(() => _myPosition = pos);
+      return;
+    }
+
+    final previousStep = _progress?.nextStepIndex;
+    final progress = _follower!.update(p);
+    setState(() {
+      _myPosition = pos;
+      _progress = progress;
+
+      // A stop we were heading for is now within 50 m: later reroutes start
+      // from the next stop rather than re-routing back into this one.
+      if (_navNextStopIndex < widget.pickupPoints.length &&
+          _navNextStopIndex <= _navDestinationIndex) {
+        final stop = widget.pickupPoints[_navNextStopIndex];
+        if (distanceMeters(p, LatLng(stop.latitude, stop.longitude)) < 50) {
+          _navNextStopIndex++;
+        }
+      }
+    });
+
+    // While guiding, the camera follows the user - not the bus.
+    if (_mapReady) {
+      _mapController.move(p, math.max(_mapController.camera.zoom, 16.0));
+    }
+
+    if (progress.arrived) {
+      _endNavigation(arrived: true);
+      return;
+    }
+    if (previousStep != null && previousStep != progress.nextStepIndex) {
+      HapticFeedback.mediumImpact();
+      _speakStep(progress.nextStepIndex);
+    }
+    if (progress.distanceOffRoute > 45 && progress.remainingMeters > 120) {
+      unawaited(_maybeReroute());
+    }
   }
 
   void _setupNotificationHandler() {
@@ -213,184 +286,26 @@ class _MapScreenState extends State<MapScreen> {
     _fetchRoadGeometry();
   }
 
-  /// Replaces the placeholder straight line with the actual driving route.
+  /// Draws the full route with real road geometry.
   ///
-  /// This is the fix for "the map draws straight lines instead of the real
-  /// route": the pickup points used to be connected directly, cutting across
-  /// buildings and fields. Two keyless routers are tried in order:
-  ///
-  /// 1. OSRM's public demo (`router.project-osrm.org`) - GeoJSON straight off
-  ///    the wire.
-  /// 2. Valhalla's public OSM instance (`valhalla1.openstreetmap.de`) - a
-  ///    differently-encoded shape, decoded below.
-  ///
-  /// Neither needs an API key nor a billing account - the same constraint
-  /// that ruled out Google Maps elsewhere in this app. Every step logs with a
-  /// `[route]` prefix, so `adb logcat -s flutter:I` shows exactly which
-  /// router answered and what came back if a device ever draws the fallback
-  /// again.
-  ///
-  /// If every router fails (offline, rate limited, no drivable path between
-  /// stops), the straight fallback simply stays on screen: the map stays
-  /// usable, it just stops being road-accurate.
+  /// The straight stop-to-stop line appears instantly as a placeholder, then
+  /// [RouteService] upgrades it to the driving route (OSRM, falling back to
+  /// Valhalla). If every router fails, the straight line simply stays: the
+  /// map remains usable, just less road-accurate.
   Future<void> _fetchRoadGeometry() async {
     final stops = widget.pickupPoints;
     if (stops.length < 2) return;
 
-    // Routers address waypoints GeoJSON-style: [longitude, latitude] - the
-    // reverse of Flutter's LatLng - joined by ';' in visit order.
-    final path = stops.map((p) => '${p.longitude},${p.latitude}').join(';');
-    debugPrint('[route] fetching road geometry for ${stops.length} stops');
-
-    // ---- Router 1: OSRM public demo ----
-    try {
-      final uri = Uri.parse(
-        'https://router.project-osrm.org/route/v1/driving/$path'
-        '?overview=full&geometries=geojson',
-      );
-      final response = await http.get(uri).timeout(const Duration(seconds: 12));
-      if (response.statusCode == 200) {
-        final Object? decoded = jsonDecode(response.body);
-        final points = _parseOsrmGeometry(decoded);
-        if (points != null && _applyRoadPolyline(points, 'OSRM')) return;
-        final code =
-            decoded is Map<String, dynamic> ? ' (code=${decoded['code']})' : '';
-        debugPrint(
-          '[route] OSRM: 200 but no usable geometry$code - '
-          '${_bodySnippet(response.body)}',
-        );
-      } else {
-        debugPrint(
-          '[route] OSRM: HTTP ${response.statusCode} - '
-          '${_bodySnippet(response.body)}',
-        );
-      }
-    } catch (e) {
-      debugPrint('[route] OSRM: failed - $e');
-    }
-
-    // ---- Router 2: Valhalla public instance (different encoding) ----
-    try {
-      final uri = Uri.https('valhalla1.openstreetmap.de', '/route', {
-        'json': jsonEncode({
-          'locations': [
-            for (final p in stops) {'lat': p.latitude, 'lon': p.longitude},
-          ],
-          'costing': 'auto',
-          'directions_options': {'units': 'kilometers'},
-        }),
-      });
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode == 200) {
-        final Object? decoded = jsonDecode(response.body);
-        final points = _parseValhallaGeometry(decoded);
-        if (points != null && _applyRoadPolyline(points, 'Valhalla')) return;
-        debugPrint(
-          '[route] Valhalla: 200 but no usable geometry - '
-          '${_bodySnippet(response.body)}',
-        );
-      } else {
-        debugPrint(
-          '[route] Valhalla: HTTP ${response.statusCode} - '
-          '${_bodySnippet(response.body)}',
-        );
-      }
-    } catch (e) {
-      debugPrint('[route] Valhalla: failed - $e');
-    }
-
-    debugPrint('[route] all routers failed - keeping straight fallback');
-  }
-
-  /// OSRM response body -> road points, or null when anything is off.
-  List<LatLng>? _parseOsrmGeometry(Object? decoded) {
-    if (decoded is! Map<String, dynamic> || decoded['code'] != 'Ok') {
-      return null;
-    }
-    final routes = decoded['routes'];
-    if (routes is! List || routes.isEmpty) return null;
-
-    final geometry = routes.first;
-    final coordinates = geometry is Map<String, dynamic>
-        ? geometry['coordinates']
-        : null;
-    if (coordinates is! List || coordinates.length < 2) return null;
-
-    final roadPoints = <LatLng>[];
-    for (final coordinate in coordinates) {
-      if (coordinate is! List || coordinate.length < 2) return null;
-      roadPoints.add(
-        // GeoJSON position: [lon, lat].
-        LatLng(
-          (coordinate[1] as num).toDouble(),
-          (coordinate[0] as num).toDouble(),
-        ),
-      );
-    }
-    return roadPoints;
-  }
-
-  /// Valhalla response body -> road points across every leg, or null.
-  List<LatLng>? _parseValhallaGeometry(Object? decoded) {
-    if (decoded is! Map<String, dynamic>) return null;
-    final trip = decoded['trip'];
-    if (trip is! Map<String, dynamic>) return null;
-    final legs = trip['legs'];
-    if (legs is! List || legs.isEmpty) return null;
-
-    final roadPoints = <LatLng>[];
-    for (final leg in legs) {
-      final shape = leg is Map<String, dynamic> ? leg['shape'] : null;
-      if (shape is! String) return null;
-      roadPoints.addAll(_decodeValhallaPolyline(shape));
-    }
-    return roadPoints.length >= 2 ? roadPoints : null;
-  }
-
-  /// Decodes an encoded polyline (precision 1e-6, signed deltas - the format
-  /// Valhalla ships its route shape in) into map points.
-  List<LatLng> _decodeValhallaPolyline(String encoded) {
-    final points = <LatLng>[];
-    var index = 0;
-    var lat = 0;
-    var lng = 0;
-    while (index < encoded.length) {
-      var result = 0;
-      var shift = 0;
-      var byte = 0;
-      do {
-        byte = encoded.codeUnitAt(index++) - 63;
-        result |= (byte & 0x1f) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-      lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-
-      result = 0;
-      shift = 0;
-      do {
-        byte = encoded.codeUnitAt(index++) - 63;
-        result |= (byte & 0x1f) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-      lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-
-      points.add(LatLng(lat / 1e6, lng / 1e6));
-    }
-    return points;
-  }
-
-  /// Puts [roadPoints] on screen as the route: a *fresh list instance* so the
-  /// polyline layer cannot reuse its cached projection of the straight
-  /// placeholder - and a log line so the device confirms what it drew.
-  ///
-  /// Returns false when the screen is already gone, so the caller falls
-  /// through to the next router instead of pretending success.
-  bool _applyRoadPolyline(List<LatLng> roadPoints, String source) {
-    if (!mounted || roadPoints.length < 2) return false;
+    final route = await RouteService().fetchRoute([
+      for (final p in stops) LatLng(p.latitude, p.longitude),
+    ]);
+    // Navigation may have drawn its own (user-position based) route while
+    // this was in flight - guidance wins over the full-route fetch.
+    if (!mounted || route == null || _navigating) return;
     setState(() {
       _polylines = [
         Polyline(
-          points: roadPoints,
+          points: route.points,
           color: Colors.blue,
           strokeWidth: 4,
           pattern: StrokePattern.dashed(segments: const [20, 10]),
@@ -398,16 +313,361 @@ class _MapScreenState extends State<MapScreen> {
       ];
     });
     debugPrint(
-      '[route] $source geometry applied: ${roadPoints.length} points',
+      '[route] ${route.source} geometry applied: ${route.points.length} points',
     );
-    return true;
   }
 
-  /// First bytes of an error body on one line - enough to recognise the
-  /// responder (rate-limit page, proxy block, router error object, ...).
-  String _bodySnippet(String body) {
-    final clipped = body.length > 120 ? body.substring(0, 120) : body;
-    return clipped.replaceAll(RegExp(r'\s+'), ' ');
+  // -----------------------------------------------------------------------
+  // In-app turn-by-turn navigation
+  // -----------------------------------------------------------------------
+
+  /// Starts guidance from the user's position to [destination].
+  ///
+  /// The route is requested with the user's current position as its first
+  /// waypoint, so the polyline and the maneuver steps describe *their* path
+  /// - not the abstract bus route.
+  Future<void> _startNavigation(PickupPoint destination) async {
+    if (_navRouting) return;
+
+    final pos = _myPosition;
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Turn on location (GPS) to start navigation'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final destinationIndex = widget.pickupPoints.indexOf(destination);
+    if (destinationIndex < 0) return;
+
+    // Join the bus route at the nearest stop, never past the destination.
+    var nearest = 0;
+    var nearestDistance = double.infinity;
+    for (var i = 0; i <= destinationIndex; i++) {
+      final stop = widget.pickupPoints[i];
+      final distance = distanceMeters(
+        LatLng(pos.latitude, pos.longitude),
+        LatLng(stop.latitude, stop.longitude),
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = i;
+      }
+    }
+
+    final session = ++_navSession;
+    setState(() {
+      _navRouting = true;
+      _navigating = false; // supersede any running guidance
+      _follower = null;
+      _progress = null;
+      _navNextStopIndex = nearest;
+      _navDestination = destination;
+      _navDestinationIndex = destinationIndex;
+      _spokenStepIndex = -1;
+    });
+
+    final route = await RouteService().fetchRoute(
+      _navWaypoints(LatLng(pos.latitude, pos.longitude)),
+    );
+    if (!mounted || session != _navSession) return;
+    if (route == null) {
+      setState(() => _navRouting = false);
+      // Whatever route was drawn before stays/returns; nothing was adopted.
+      _setupRoutePolyline();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not calculate a route - check your connection'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    _adoptNavRoute(route);
+  }
+
+  /// Waypoints for a (re)route: the user's position, then every stop from
+  /// the next one ahead up to the chosen destination.
+  List<LatLng> _navWaypoints(LatLng current) {
+    final points = <LatLng>[current];
+    if (widget.pickupPoints.isEmpty) return points;
+
+    final last = math.min(
+      _navDestinationIndex,
+      widget.pickupPoints.length - 1,
+    );
+    for (var i = _navNextStopIndex; i <= last; i++) {
+      final stop = widget.pickupPoints[i];
+      points.add(LatLng(stop.latitude, stop.longitude));
+    }
+    if (points.length == 1) {
+      // Degenerate (already past the destination): head to it directly.
+      final stop = widget.pickupPoints[last];
+      points.add(LatLng(stop.latitude, stop.longitude));
+    }
+    return points;
+  }
+
+  /// Installs a freshly fetched route as the active navigation state and
+  /// announces the first maneuver.
+  void _adoptNavRoute(RoadRoute route) {
+    setState(() {
+      _navRouting = false;
+      _navigating = true;
+      _polylines = [
+        Polyline(
+          points: route.points,
+          color: Colors.blue,
+          strokeWidth: 4,
+          pattern: StrokePattern.dashed(segments: const [20, 10]),
+        ),
+      ];
+      _follower = RouteFollower(points: route.points, steps: route.steps);
+      _progress = null;
+      _spokenStepIndex = -1;
+    });
+    debugPrint(
+      '[nav] route adopted (${route.source}: ${route.points.length} points, '
+      '${route.steps.length} steps)',
+    );
+
+    final pos = _myPosition;
+    if (pos == null) return;
+    final progress = _follower!.update(LatLng(pos.latitude, pos.longitude));
+    setState(() => _progress = progress);
+    _speakStep(progress.nextStepIndex);
+  }
+
+  /// Recalculates once the user has strayed from the polyline - debounced
+  /// so GPS noise cannot spin it into a loop.
+  Future<void> _maybeReroute() async {
+    if (_navRouting || !_navigating) return;
+    final now = DateTime.now();
+    if (_lastRerouteAt != null &&
+        now.difference(_lastRerouteAt!) < const Duration(seconds: 20)) {
+      return;
+    }
+    final pos = _myPosition;
+    if (pos == null) return;
+
+    _lastRerouteAt = now;
+    final session = _navSession;
+    setState(() => _navRouting = true);
+    debugPrint('[nav] off route - rerouting from the current position');
+
+    final route = await RouteService().fetchRoute(
+      _navWaypoints(LatLng(pos.latitude, pos.longitude)),
+    );
+    if (!mounted || session != _navSession) return;
+    if (route == null) {
+      // Keep guiding on the old polyline; the banner stops saying rerouting.
+      setState(() => _navRouting = false);
+      return;
+    }
+    _adoptNavRoute(route);
+  }
+
+  /// Stops guidance. On [arrived] the destination is announced first.
+  void _endNavigation({required bool arrived}) {
+    ++_navSession; // invalidate any in-flight (re)route fetch
+    final destination = _navDestination;
+    final wasNavigating = _navigating;
+    setState(() {
+      _navigating = false;
+      _navRouting = false;
+      _follower = null;
+      _progress = null;
+      _navDestination = null;
+      _spokenStepIndex = -1;
+      _lastRerouteAt = null;
+    });
+
+    if (arrived) {
+      _speakNow('You have arrived at ${destination?.pointName ?? 'your stop'}');
+    } else {
+      unawaited(_tts?.stop());
+    }
+    // The full-route line takes over again after guidance.
+    if (wasNavigating) _setupRoutePolyline();
+  }
+
+  /// Announces maneuver [index] once. Speech is async, hence unawaited -
+  /// failures are logged inside [_speakNow] and never interrupt guidance.
+  void _speakStep(int index) {
+    final steps = _follower?.steps ?? const <RouteStep>[];
+    if (index < 0 || index >= steps.length) return;
+    if (index == _spokenStepIndex) return;
+    _spokenStepIndex = index;
+    if (!_navVoice) return;
+
+    final distance = _progress?.distanceToManeuver ?? steps[index].distance;
+    final prefix = distance >= 20
+        ? 'In ${RouteStep.formatDistance(distance)}, '
+        : '';
+    unawaited(_speakNow('$prefix${steps[index].instruction}'));
+  }
+
+  /// Speaks [text], replacing anything queued. Speech failures are logged,
+  /// never fatal: guidance must work even without a TTS engine installed.
+  Future<void> _speakNow(String text) async {
+    if (!_navVoice) return;
+    try {
+      await _initTts();
+      await _tts?.stop();
+      await _tts?.speak(text);
+    } catch (e) {
+      debugPrint('[nav] speech failed: $e');
+    }
+  }
+
+  Future<void> _initTts() => _ttsInit ??= _createTts();
+
+  Future<void> _createTts() async {
+    try {
+      final tts = FlutterTts();
+      await tts.setLanguage('en-US');
+      await tts.setSpeechRate(0.45);
+      await tts.setVolume(1.0);
+      _tts = tts;
+    } catch (e) {
+      debugPrint('[nav] TTS unavailable: $e');
+    }
+  }
+
+  /// Banner icon for the maneuver the user is about to perform.
+  IconData _navIconFor(RouteStep? step) {
+    final key = step?.maneuver ?? '';
+    if (key.startsWith('arrive')) return Icons.flag;
+    if (key.contains('roundabout')) return Icons.roundabout_right;
+    if (key.contains('uturn') || key.contains('reverse')) {
+      return Icons.u_turn_left;
+    }
+    if (key.contains('fork') || key.contains('merge') || key.contains('ramp')) {
+      return Icons.merge_type;
+    }
+    if (key.endsWith('left')) return Icons.turn_left;
+    if (key.endsWith('right')) return Icons.turn_right;
+    return Icons.straight;
+  }
+
+  /// The turn-by-turn card pinned to the top of the map.
+  Widget _buildNavigationBanner() {
+    final progress = _progress;
+    final steps = _follower?.steps ?? const <RouteStep>[];
+    final nextStep = (progress != null && steps.isNotEmpty)
+        ? steps[progress.nextStepIndex]
+        : null;
+
+    final String headline;
+    if (_navRouting) {
+      headline = _navigating ? 'Rerouting…' : 'Calculating route…';
+    } else if (progress == null) {
+      headline = 'Preparing guidance…';
+    } else if (progress.arrived) {
+      headline = 'Arrived at ${_navDestination?.pointName ?? 'destination'}';
+    } else if (progress.distanceToManeuver < 20) {
+      headline = 'Now';
+    } else {
+      headline = 'In ${RouteStep.formatDistance(progress.distanceToManeuver)}';
+    }
+
+    final String detail;
+    if (_navRouting) {
+      detail = 'Following your GPS position';
+    } else {
+      detail = nextStep?.instruction ?? 'Follow the highlighted route';
+    }
+
+    return Card(
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(_navIconFor(nextStep), color: Colors.blue, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          headline,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (_navRouting) ...[
+                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    detail,
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (!_navRouting && progress != null)
+                    Text(
+                      'Remaining ${RouteStep.formatDistance(progress.remainingMeters)}'
+                      ' to ${_navDestination?.pointName ?? 'your stop'}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(_navVoice ? Icons.volume_up : Icons.volume_off),
+                  tooltip: _navVoice
+                      ? 'Voice guidance on'
+                      : 'Voice guidance off',
+                  onPressed: () {
+                    setState(() => _navVoice = !_navVoice);
+                    if (!_navVoice) unawaited(_tts?.stop());
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'End navigation',
+                  onPressed: () => _endNavigation(arrived: false),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// The device's own position rendered as a marker.
@@ -581,8 +841,9 @@ class _MapScreenState extends State<MapScreen> {
       }
     });
 
-    // Follow first bus if enabled
-    if (_followBus && _busLocations.isNotEmpty && _mapReady) {
+    // Follow first bus if enabled - but never while guiding, where the
+    // camera belongs to the user, not the bus.
+    if (_followBus && !_navigating && _busLocations.isNotEmpty && _mapReady) {
       _mapController.move(
         LatLng(_busLocations[0].latitude, _busLocations[0].longitude),
         _mapController.camera.zoom, // CameraUpdate.newLatLng kept the zoom
@@ -964,6 +1225,22 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     const SizedBox(height: 8),
 
+                    // In-app turn-by-turn navigation to this stop.
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _startNavigation(point);
+                      },
+                      icon: const Icon(Icons.navigation),
+                      label: const Text('Navigate here'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     // Action buttons
                     Row(
                       children: [
@@ -1308,9 +1585,18 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
 
-                // Bus count indicator
+                // Turn-by-turn guidance card
+                if (_navigating || _navRouting)
+                  Positioned(
+                    top: 12,
+                    left: 16,
+                    right: 16,
+                    child: _buildNavigationBanner(),
+                  ),
+
+                // Bus count indicator (drops below the banner while guiding)
                 Positioned(
-                  top: 16,
+                  top: (_navigating || _navRouting) ? 96 : 16,
                   right: 16,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
