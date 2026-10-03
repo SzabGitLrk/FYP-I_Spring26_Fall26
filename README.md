@@ -8,7 +8,7 @@
 
 ## 📱 Project Overview
 
-University Point Locator is a mobile application designed to solve the critical problem faced by university students in Larkana who wait endlessly at roadside pickup points without knowing when their transport vehicle will arrive. The app provides real-time GPS tracking of university transport buses across multiple routes, allowing students to view live bus locations on an interactive map, receive accurate Estimated Time of Arrival (ETA) calculations, and get push notifications when buses approach their designated stops.
+University Point Locator is a mobile application designed to solve the critical problem faced by university students in Larkana who wait endlessly at roadside pickup points without knowing when their transport vehicle will arrive. The app provides real-time GPS tracking of university transport buses across multiple routes, allowing students to view live bus locations on an interactive map, receive accurate Estimated Time of Arrival (ETA) calculations, and get bus-approach alerts on the map while it is open.
 
 ## 🎯 Problem Statement
 
@@ -30,10 +30,9 @@ University Point Locator is a mobile application designed to solve the critical 
 - Color-coded markers (Green=First, Blue=Intermediate, Red=Last)
 - Bus markers (Azure=Moving, Purple=Stopped) rotated to the bus heading
 - ETA (Estimated Time of Arrival) calculation using Haversine formula
-- Push notifications for approaching buses
+- Bus-approach alerts on the map (in-app while the map screen is open)
 - SOS Emergency button with location sharing
-- Favorite stops management
-- Trip history view
+- Favorite stops management (synced with your stop notifications)
 
 ### 👨‍✈️ Driver Features
 - Driver dashboard with welcome card
@@ -53,8 +52,7 @@ University Point Locator is a mobile application designed to solve the critical 
 
 ### 🔐 Security Features
 - Email/Password registration and login
-- Role-based access (Student, Driver, Admin)
-- OTP (One-Time Password) phone verification
+- Role-based access (Student, Driver, Admin) resolved server-side from `profiles`
 - Session persistence and secure logout
 - Row Level Security (RLS) in database
 
@@ -118,7 +116,10 @@ university_point_locator/
 │   ├── services/
 │   │   ├── supabase_service.dart
 │   │   ├── notification_service.dart
-│   │   └── device_service.dart
+│   │   └── route_service.dart
+│   ├── navigation/
+│   │   ├── route_follower.dart
+│   │   └── route_step.dart
 │   ├── utils/
 │   │   ├── app_theme.dart
 │   │   └── helpers.dart
@@ -126,12 +127,11 @@ university_point_locator/
 │       ├── map_legend.dart
 │       ├── bus_count_indicator.dart
 │       ├── loading_error.dart
-│       ├── sos_button.dart
-│       ├── logout_dialog.dart
 │       ├── info_row.dart
 │       └── stat_card.dart
 ├── test/
-│   └── widget_test.dart
+│   ├── widget_test.dart
+│   └── navigation_test.dart
 ├── assets/
 │   └── icons/
 ├── android/

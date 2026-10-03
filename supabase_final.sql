@@ -1,3 +1,17 @@
+-- #############################################################################
+-- #  BOOTSTRAP SCRIPT - DO NOT RE-RUN AFTER supabase_security_fix.sql         #
+-- #                                                                           #
+-- #  This file creates the ORIGINAL, permissive policies (trips/profiles/     #
+-- #  OTP/SOS readable or writable by everyone, admin_settings open to all     #
+-- #  authenticated users, and a signup trigger that trusts client metadata).  #
+-- #  Re-running it AFTER supabase_security_fix.sql silently REVERTS every     #
+-- #  hardening step - and its reset block DELETEs all trips/buses/routes/     #
+-- #  sos_alerts, i.e. real student data.                                      #
+-- #                                                                           #
+-- #  Authoritative order: supabase_final.sql (schema+seed) ->                #
+-- #  supabase_patch.sql (columns) -> supabase_migration.sql (data reset) ->   #
+-- #  supabase_security_fix.sql (RLS hardening - ALWAYS LAST, re-runnable).    #
+-- #############################################################################
 -- ============================================
 -- COMPLETE SETUP: Run this in Supabase SQL Editor
 -- Safe to run on existing DB (CREATE IF NOT EXISTS)

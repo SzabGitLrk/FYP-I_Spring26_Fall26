@@ -1,3 +1,8 @@
+-- #############################################################################
+-- #  RESET SCRIPT - DELETES DATA. Run only to wipe demo/seed state.           #
+-- #  After any reset, RE-RUN supabase_security_fix.sql: if the bootstrap      #
+-- #  scripts were also re-applied, the permissive policies are back.          #
+-- #############################################################################
 -- ===========================================
 -- COMPLETE RESET FOR LARKANA-ONLY APP
 -- Deletes in correct order to avoid foreign key errors

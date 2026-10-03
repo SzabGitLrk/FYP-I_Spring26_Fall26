@@ -1,3 +1,9 @@
+-- #############################################################################
+-- #  BOOTSTRAP SCRIPT - DO NOT RE-RUN AFTER supabase_security_fix.sql         #
+-- #  Recreates the permissive policy versions of profiles/trips/OTP/SOS.      #
+-- #  Authoritative order: final -> patch -> migration ->                      #
+-- #  supabase_security_fix.sql (always last, re-runnable).                    #
+-- #############################################################################
 -- ============================================
 -- PATCH: Fix schema mismatches for Flutter app
 -- Run this in Supabase SQL Editor

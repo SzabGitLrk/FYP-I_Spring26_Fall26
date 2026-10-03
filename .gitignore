@@ -57,6 +57,19 @@
 *.temp
 *.swp
 
+# Signing keystores ARE the app's identity - never version them.
+*.jks
+*.keystore
+
+# Unrelated project trees sitting next to the app, plus their artefacts:
+# pickled models, Python caches, vector stores and logs.
+/main/
+/sage/
+__pycache__/
+*.pyc
+*.pkl
+chroma_db/
+
 # Captured `flutter run` session output (created on demand, never versioned)
 /run_log.txt
 

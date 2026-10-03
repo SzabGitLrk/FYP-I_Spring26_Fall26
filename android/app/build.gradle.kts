@@ -56,8 +56,18 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.findByName("release")
-                ?: signingConfigs.getByName("debug")
+            // Never fall back to the debug key: a debug-signed release build
+            // is rejected by Play, and a wrong signing lineage is permanent.
+            // Without key.properties the sign task now fails loudly - and
+            // this warning names the real cause first. Debug builds keep
+            // using the debug config and are unaffected.
+            if (loadKeystoreProperties()["storeFile"] == null) {
+                logger.warn(
+                    "key.properties/storeFile is missing: assembleRelease " +
+                    "will fail until the upload keystore is configured."
+                )
+            }
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
         }

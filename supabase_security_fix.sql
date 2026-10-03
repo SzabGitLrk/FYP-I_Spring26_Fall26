@@ -39,6 +39,23 @@
 --   6. Profile email exposure (medium)
 --      `profiles` SELECT was `USING (true)`, exposing every user's email and
 --      role to the anon key. Now owner-or-admin.
+--
+--   7. Trips world-readable (high) - Section 7
+--      `trips` SELECT was `USING (true)`: every driver's travel history was
+--      readable with the anon key. Now admin-or-owner.
+--
+--   8. Driver GPS writes denied (high) - Section 8
+--      `bus_locations` had NO INSERT policy anywhere in the bootstrap
+--      scripts, so a stock deployment silently drops every driver fix while
+--      the app reports success. Now approved-driver-only.
+--
+--   9. Live map frozen (high) - Section 9
+--      `bus_locations` was never added to the `supabase_realtime`
+--      publication, so `.stream()` returned one snapshot and never updated.
+--
+--  10. admin_settings world-writable / trips un-gated (medium) -
+--      Sections 10-11. Any signed-in user could rewrite app configuration,
+--      and any self-registered "driver" could insert trips before approval.
 -- =============================================================================
 
 
@@ -255,10 +272,108 @@ CREATE POLICY "Trips select" ON public.trips
   USING (public.is_admin() OR auth.uid() = driver_id);
 
 
+-- -----------------------------------------------------------------------------
+-- SECTION 8. bus_locations: drivers need an INSERT policy
+--
+-- The bootstrap scripts only ever created a SELECT policy for this table, yet
+-- every GPS fix is an INSERT (`supabase_service.updateBusLocation`). On a
+-- stock deployment of those scripts every driver write is denied by RLS, the
+-- error is swallowed (`driver_dashboard` used to catchError-empty), and the
+-- driver sees "Trip started successfully!" while students' maps never move.
+-- If your project already has a manually created insert policy, this one is
+-- additive (permissive policies OR together) and changes nothing.
+-- -----------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Bus locations insert" ON public.bus_locations;
+CREATE POLICY "Bus locations insert" ON public.bus_locations
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role = 'driver'
+        AND p.is_approved = true
+    )
+  );
+-- Anon must never write positions (it could spoof buses for everyone).
+
+
+-- -----------------------------------------------------------------------------
+-- SECTION 9. bus_locations: enable realtime replication
+--
+-- Supabase only emits changes for tables in the `supabase_realtime`
+-- publication, and no script ever added this table to it. Without it,
+-- `.stream()` in `map_screen` returns the initial snapshot and NEVER updates:
+-- students see frozen buses while everything looks healthy in testing.
+-- -----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'bus_locations'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bus_locations;
+  END IF;
+END $$;
+
+
+-- -----------------------------------------------------------------------------
+-- SECTION 10. admin_settings: admin-only (was any authenticated user)
+--
+-- supabase_final.sql granted SELECT/INSERT/UPDATE to `authenticated`, so any
+-- signed-in student could rewrite app configuration. All policies on the
+-- table are dropped first (name-independent), then replaced with admin-only
+-- ones. The app currently never queries this table; the policies exist so a
+-- future settings screen cannot open it up.
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE pol record;
+BEGIN
+  FOR pol IN
+    SELECT policyname FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'admin_settings'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.admin_settings', pol.policyname);
+  END LOOP;
+END $$;
+
+CREATE POLICY "Admin settings select" ON public.admin_settings
+  FOR SELECT USING (public.is_admin());
+CREATE POLICY "Admin settings insert" ON public.admin_settings
+  FOR INSERT WITH CHECK (public.is_admin());
+CREATE POLICY "Admin settings update" ON public.admin_settings
+  FOR UPDATE USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+
+-- -----------------------------------------------------------------------------
+-- SECTION 11. trips INSERT: only an APPROVED driver may record trips
+--
+-- The bootstrap INSERT policy checked `auth.uid() = driver_id` only, and
+-- approval was enforced purely by the UI (`role_router` hides the dashboard).
+-- Anyone could self-signup as role:driver and push trip rows / fake history.
+-- An unapproved driver cannot reach the dashboard anyway, so this breaks no
+-- legitimate flow.
+-- -----------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Trips insert" ON public.trips;
+CREATE POLICY "Trips insert" ON public.trips
+  FOR INSERT
+  WITH CHECK (
+    auth.uid() = driver_id
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND p.role = 'driver'
+        AND p.is_approved = true
+    )
+  );
+
+
 -- =============================================================================
 --  VERIFICATION - run these afterwards.
 --
---  All five must FAIL (HTTP 403/401 or zero rows) when called with the anon
+--  All must FAIL (HTTP 403/401 or zero rows) when called with the anon
 --  key, and the first must succeed only as an authenticated non-admin user:
 --
 --    1. Self-escalate:
@@ -276,6 +391,19 @@ CREATE POLICY "Trips select" ON public.trips
 --    5. Read everyone's trip history:
 --         GET  /rest/v1/trips?select=*
 --       Expect: [] for anon. (Before Section 7 this returned the full table.)
+--    6. Spoof a bus position:
+--         POST /rest/v1/bus_locations  {"bus_id":1,"latitude":25.0,...}
+--       Expect: 401/403 for anon; 401/403 for a student; 201 for an
+--       APPROVED driver. (Before Section 8 anon inserts were denied but a
+--       stock schema also denied the driver - both must now behave as above.)
+--    7. Rewrite app configuration:
+--         POST /rest/v1/admin_settings  {"key":"x","value":"y"}
+--       Expect: 403 for a non-admin.
+--    8. Realtime actually streams:
+--       Subscribe from a second client to bus_locations while a driver
+--       tracks; events must arrive. (If they do not, check
+--       Database -> Replication: bus_locations must be in supabase_realtime -
+--       Section 9 does this from SQL.)
 --
 --  TO GRANT ADMIN (there is no in-app way to do this, by design):
 --      UPDATE public.profiles
