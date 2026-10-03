@@ -41,10 +41,24 @@ class _RoleRouterState extends State<RoleRouter> {
         }
 
         final session = Supabase.instance.client.auth.currentSession;
-        if (session == null) return const LoginScreen();
+        if (session == null) {
+          // Signing out must clear the identity latch: the same user logging
+          // back in (e.g. after an admin approved them) has to re-resolve,
+          // and a demoted admin must not keep their old dashboard for the
+          // rest of the app session.
+          _resolvedForUserId = null;
+          _resolvedRole = null;
+          _isApproved = false;
+          return const LoginScreen();
+        }
 
         final user = Supabase.instance.client.auth.currentUser;
-        if (user == null) return const LoginScreen();
+        if (user == null) {
+          _resolvedForUserId = null;
+          _resolvedRole = null;
+          _isApproved = false;
+          return const LoginScreen();
+        }
 
         // Kick off (or restart) the DB lookup when the identity changes.
         if (_resolvedForUserId != user.id) {
@@ -75,7 +89,10 @@ class _RoleRouterState extends State<RoleRouter> {
           .eq('id', userId)
           .maybeSingle();
 
-      if (!mounted) return;
+      // Re-check ownership after the await: if the user changed while this
+      // lookup was in flight, writing A's role into B's session would hand
+      // B the wrong dashboard (admin rights included).
+      if (!mounted || _resolvedForUserId != userId) return;
 
       if (profile != null) {
         setState(() {
@@ -99,15 +116,16 @@ class _RoleRouterState extends State<RoleRouter> {
         'is_approved': false,
       });
 
-      if (mounted) {
+      if (mounted && _resolvedForUserId == userId) {
         setState(() {
           _resolvedRole = 'student';
           _isApproved = false;
         });
       }
     } catch (_) {
-      // Fail closed: default to the least-privileged role.
-      if (mounted && _resolvedRole == null) {
+      // Fail closed: default to the least-privileged role - but only for the
+      // user this lookup still belongs to.
+      if (mounted && _resolvedRole == null && _resolvedForUserId == userId) {
         setState(() {
           _resolvedRole = 'student';
           _isApproved = false;
@@ -116,13 +134,25 @@ class _RoleRouterState extends State<RoleRouter> {
     }
   }
 
+  /// Forces a fresh profiles lookup: clears the latch so the build-time
+  /// kick re-runs [_resolveRoleFromProfile] for the current user.
+  void _reResolve() {
+    setState(() {
+      _resolvedForUserId = null;
+      _resolvedRole = null;
+      _isApproved = false;
+    });
+  }
+
   Widget _buildScreenForRole(String role, bool isApproved) {
     switch (role) {
       case 'admin':
         return const AdminDashboard();
       case 'driver':
         // Drivers must be approved by an admin before they can operate a bus.
-        if (!isApproved) return _PendingApprovalScreen(role: role);
+        if (!isApproved) {
+          return _PendingApprovalScreen(role: role, onRefresh: _reResolve);
+        }
         return const DriverDashboard();
       case 'student':
       default:
@@ -133,9 +163,15 @@ class _RoleRouterState extends State<RoleRouter> {
 
 /// Shown to accounts whose role requires admin approval (currently: drivers).
 class _PendingApprovalScreen extends StatelessWidget {
-  const _PendingApprovalScreen({required this.role});
+  const _PendingApprovalScreen({required this.role, required this.onRefresh});
 
   final String role;
+
+  /// Re-runs the profiles lookup: the approval may have landed since this
+  /// screen was shown. The old version only offered sign-out, and - because
+  /// sign-out never cleared the router's latch - the same user logging back
+  /// in kept rendering this stale screen until the app was force-stopped.
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +199,12 @@ class _PendingApprovalScreen extends StatelessWidget {
               style: TextStyle(color: Colors.grey.shade700, fontSize: 15),
             ),
             const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Check approval status'),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: () => Supabase.instance.client.auth.signOut(),
               icon: const Icon(Icons.logout),

@@ -50,73 +50,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ? rawName.trim()
           : 'Student';
       _email = user?.email ?? '';
-      _role = user?.userMetadata?['role'] ?? 'student';
+      // Role from the profiles row, never from userMetadata: the badge must
+      // show the same enforced value the router used (metadata is
+      // client-controlled and goes stale after an admin changes a role).
+      try {
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', user?.id ?? '')
+            .maybeSingle();
+        _role = profile?['role'] as String? ?? 'student';
+      } catch (_) {
+        // Non-critical: the badge falls back to the default label.
+        _role = 'student';
+      }
       // Handle createdAt - Supabase returns it as a String in ISO8601 format
       final createdAtValue = user?.createdAt;
       if (createdAtValue != null) {
         _memberSince = DateTime.tryParse(createdAtValue.toString());
       }
 
-      // In a real app, you'd fetch these from your database
-      // For demo, we'll use sample data
-      await Future.delayed(
-        const Duration(milliseconds: 500),
-      );
+      // Real favourites: this account's active stop subscriptions joined
+      // against stop and route names. The old version showed three hard-coded
+      // "sample" stops and four fake trips (after a fake 500 ms delay) as if
+      // they were the signed-in student's own data.
+      final subs = await Supabase.instance.client
+          .from('stop_notifications')
+          .select('stop_id, route_id')
+          .eq('user_id', user?.id ?? '')
+          .eq('is_active', true);
+      final subRows = List<Map<String, dynamic>>.from(subs as List);
+      final stopIds = [
+        for (final s in subRows)
+          if (s['stop_id'] is int) s['stop_id'] as int,
+      ];
+      final routeIds = [
+        for (final s in subRows)
+          if (s['route_id'] is int) s['route_id'] as int,
+      ];
+
+      final points = stopIds.isEmpty
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(
+              await Supabase.instance.client
+                  .from('pickup_points')
+                  .select('id, point_name')
+                  .inFilter('id', stopIds) as List,
+            );
+      final routes = routeIds.isEmpty
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(
+              await Supabase.instance.client
+                  .from('routes')
+                  .select('id, route_name')
+                  .inFilter('id', routeIds) as List,
+            );
+      final pointNameById = {
+        for (final p in points) p['id']: p['point_name'],
+      };
+      final routeNameById = {
+        for (final r in routes) r['id']: r['route_name'],
+      };
+
       if (!mounted) return;
       setState(() {
-        // Sample favorite stops
         _favoriteStops = [
-          {
-            'name': 'Qazi Muhalla',
-            'route': 'Qazi Muhalla Route',
-            'university': 'University of Sindh',
-            'notifications': true,
-          },
-          {
-            'name': 'Civil Hospital',
-            'route': 'City Center Route',
-            'university': 'University of Sindh',
-            'notifications': false,
-          },
-          {
-            'name': 'Clock Tower',
-            'route': 'City Center Route',
-            'university': 'University of Sindh',
-            'notifications': true,
-          },
+          for (final sub in subRows)
+            if (pointNameById[sub['stop_id']] != null)
+              {
+                'name': pointNameById[sub['stop_id']],
+                'route': routeNameById[sub['route_id']] ?? 'Route',
+                'notifications': true,
+                'stopId': sub['stop_id'],
+                'routeId': sub['route_id'],
+              },
         ];
-
-        // Sample recent trips
-        _recentTrips = [
-          {
-            'university': 'University of Sindh',
-            'route': 'Qazi Muhalla Route',
-            'date': 'Today',
-            'time': '8:30 AM',
-            'status': 'completed',
-          },
-          {
-            'university': 'University of Sindh',
-            'route': 'City Center Route',
-            'date': 'Yesterday',
-            'time': '9:15 AM',
-            'status': 'completed',
-          },
-          {
-            'university': 'Medical University',
-            'route': 'Civil Hospital Route',
-            'date': 'Mar 10, 2026',
-            'time': '10:00 AM',
-            'status': 'completed',
-          },
-          {
-            'university': 'University of Sindh',
-            'route': 'Naudero Road Route',
-            'date': 'Mar 9, 2026',
-            'time': '8:45 AM',
-            'status': 'completed',
-          },
-        ];
+        // Students own no trip rows (trips belong to drivers), so there is
+        // nothing real to show - an empty list beats the fake "Mar 10, 2026"
+        // entries that used to ship.
+        _recentTrips = [];
 
         // Calculate statistics
         _favoriteCount = _favoriteStops.length;
@@ -128,8 +140,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      // Guard like the success path: pull-to-refresh then pop mid-flight
+      // must not call setState on a disposed State.
+      if (!mounted) return;
+      debugPrint('[profile] load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error = 'Could not load your profile. Pull down to retry.';
         _isLoading = false;
       });
     }
@@ -164,8 +180,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
+                  // barrierDismissible only blocks taps - Android back still
+                  // pops the dialog, which would send the follow-up
+                  // `navigator.pop` below to the route underneath it.
+                  builder: (_) => const PopScope(
+                    canPop: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
                 );
 
                 try {
@@ -198,12 +219,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _toggleNotification(int index) {
-    setState(() {
-      _favoriteStops[index]['notifications'] =
-          !_favoriteStops[index]['notifications'];
-    });
+  void _toggleNotification(int index) async {
+    final stop = _favoriteStops[index];
+    final enable = stop['notifications'] != true;
 
+    // Optimistic flip - rolled back below if the server disagrees, so the
+    // bell icon never claims an alert is armed when the write failed.
+    setState(() => stop['notifications'] = enable);
+
+    try {
+      if (enable) {
+        await _service.subscribeToStopNotifications(
+          stop['stopId'] as int,
+          stop['routeId'] as int,
+        );
+      } else {
+        await _service.unsubscribeFromStopNotifications(stop['stopId'] as int);
+      }
+    } catch (e) {
+      debugPrint('[profile] notification toggle failed: $e');
+      if (!mounted) return;
+      setState(() => stop['notifications'] = !enable);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update notifications. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -234,13 +280,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                // Captured before the pop - both outlive the await, unlike
+                // the dialog's own context.
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                navigator.pop();
+
+                // Remove server-side too: unsubscribe flips is_active so the
+                // row stays gone on the next load (the old local-only remove
+                // was silently restored by every pull-to-refresh).
+                try {
+                  await _service.unsubscribeFromStopNotifications(
+                    _favoriteStops[index]['stopId'] as int,
+                  );
+                } catch (e) {
+                  debugPrint('[profile] remove favorite failed: $e');
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Could not remove - please try again'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                if (!mounted) return;
                 setState(() {
                   _favoriteStops.removeAt(index);
                   _favoriteCount = _favoriteStops.length;
                 });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(
                     content: Text('Removed from favorites'),
                     duration: Duration(seconds: 2),

@@ -62,10 +62,18 @@ class _MapScreenState extends State<MapScreen> {
   List<Bus> _buses = [];
   List<BusLocation> _busLocations = [];
   final Map<int, bool> _notificationsEnabled = {};
+  /// Last "bus approaching" alert per "stopId:busId", session-scoped: one
+  /// alert per bus per stop per 10 minutes instead of one per GPS tick.
+  static final Map<String, DateTime> _lastArrivalAlert = {};
 
   bool _isLoading = true;
   String? _error;
   bool _followBus = true;
+  /// Bus the camera is pinned to once following starts, so alternating
+  /// reports from two buses cannot teleport the camera between them.
+  int? _followBusId;
+  LatLng? _lastFollowPoint;
+  DateTime _lastFollowMove = DateTime.fromMillisecondsSinceEpoch(0);
   String _etaInfo = '';
 
   // ---- In-app turn-by-turn navigation ----
@@ -90,6 +98,14 @@ class _MapScreenState extends State<MapScreen> {
   /// navigation the user already ended.
   int _navSession = 0;
   DateTime? _lastRerouteAt;
+  /// Position on the reroute backoff ladder: 0 waits 20 s, then 40, 80,
+  /// 160, 300 s max - a dead network must not hammer the public routers
+  /// once per GPS fix. Reset when a reroute succeeds.
+  int _rerouteFailures = 0;
+  /// Off-route episode latch: entered when the user crosses 45 m off the
+  /// polyline, held until they are back under 30 m. Hysteresis so GPS
+  /// hovering at the threshold cannot retrigger a reroute every fix.
+  bool _offRouteEpisode = false;
   FlutterTts? _tts;
   Future<void>? _ttsInit;
 
@@ -203,8 +219,14 @@ class _MapScreenState extends State<MapScreen> {
       HapticFeedback.mediumImpact();
       _speakStep(progress.nextStepIndex);
     }
-    if (progress.distanceOffRoute > 45 && progress.remainingMeters > 120) {
+    // Hysteresis: enter the off-route state past 45 m, leave it only under
+    // 30 m, so a fix oscillating at the threshold cannot retrigger a reroute.
+    if (progress.distanceOffRoute > (_offRouteEpisode ? 30.0 : 45.0) &&
+        progress.remainingMeters > 120) {
+      _offRouteEpisode = true;
       unawaited(_maybeReroute());
+    } else if (progress.distanceOffRoute < 30.0) {
+      _offRouteEpisode = false;
     }
   }
 
@@ -420,6 +442,11 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _navRouting = false;
       _navigating = true;
+      // A freshly installed polyline is the user's current reality: close
+      // the off-route episode and reset the reroute backoff (this reroute
+      // succeeded).
+      _offRouteEpisode = false;
+      _rerouteFailures = 0;
       _polylines = [
         Polyline(
           points: route.points,
@@ -445,18 +472,22 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   /// Recalculates once the user has strayed from the polyline - debounced
-  /// so GPS noise cannot spin it into a loop.
+  /// with exponential backoff so GPS noise and dead networks cannot spin it
+  /// into a loop against the public routers.
   Future<void> _maybeReroute() async {
     if (_navRouting || !_navigating) return;
-    final now = DateTime.now();
+    // Backoff ladder: 20 s, 40 s, 80 s, 160 s, then 5 minutes max.
+    const backoff = [20, 40, 80, 160, 300];
+    final delaySeconds = backoff[_rerouteFailures > 4 ? 4 : _rerouteFailures];
     if (_lastRerouteAt != null &&
-        now.difference(_lastRerouteAt!) < const Duration(seconds: 20)) {
+        DateTime.now().difference(_lastRerouteAt!) <
+            Duration(seconds: delaySeconds)) {
       return;
     }
     final pos = _myPosition;
     if (pos == null) return;
 
-    _lastRerouteAt = now;
+    _lastRerouteAt = DateTime.now();
     final session = _navSession;
     setState(() => _navRouting = true);
     debugPrint('[nav] off route - rerouting from the current position');
@@ -464,12 +495,18 @@ class _MapScreenState extends State<MapScreen> {
     final route = await RouteService().fetchRoute(
       _navWaypoints(LatLng(pos.latitude, pos.longitude)),
     );
+    // Measure the debounce from when the ATTEMPT ENDED, not when it started:
+    // OSRM+Valhalla can burn ~27 s in timeouts, which - timed from the start
+    // - already exceeded the old flat 20 s window and retried instantly.
+    _lastRerouteAt = DateTime.now();
     if (!mounted || session != _navSession) return;
     if (route == null) {
+      _rerouteFailures = _rerouteFailures < 4 ? _rerouteFailures + 1 : 4;
       // Keep guiding on the old polyline; the banner stops saying rerouting.
       setState(() => _navRouting = false);
       return;
     }
+    _rerouteFailures = 0;
     _adoptNavRoute(route);
   }
 
@@ -486,6 +523,8 @@ class _MapScreenState extends State<MapScreen> {
       _navDestination = null;
       _spokenStepIndex = -1;
       _lastRerouteAt = null;
+      _rerouteFailures = 0;
+      _offRouteEpisode = false;
     });
 
     if (arrived) {
@@ -537,6 +576,11 @@ class _MapScreenState extends State<MapScreen> {
       _tts = tts;
     } catch (e) {
       debugPrint('[nav] TTS unavailable: $e');
+      // Only cache this failure until the next utterance: pinning the failed
+      // future forever meant one transient engine error silenced voice
+      // guidance for the whole session. Deferred by a microtask so it cannot
+      // race _initTts's own `??=` assignment to this future.
+      scheduleMicrotask(() => _ttsInit = null);
     }
   }
 
@@ -711,24 +755,35 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _loadBusData() async {
     try {
+      // Stop-notification preferences are independent of the bus queries -
+      // start them now, await later, instead of stacking another round-trip
+      // after them. The error handler attaches immediately so a rejection
+      // while the bus queries are still running cannot surface as an
+      // unhandled async error; null keeps the toggles' current values.
+      final preferencesFuture = widget.pickupPoints.isEmpty
+          ? Future<Set<int>?>.value(null)
+          : _service
+                .getActiveStopNotifications(
+                  widget.pickupPoints.map((p) => p.id).toList(),
+                )
+                .then<Set<int>?>((v) => v, onError: (_) => null);
+
       final buses = await _service.getBusesForRoute(widget.route.id);
-      final locations = await _service.getBusLocationsForRoute(widget.route.id);
+      // Passes `buses` along: getBusLocationsForRoute would otherwise fetch
+      // the exact same list again (two round-trips for identical data).
+      final locations = await _service.getBusLocationsForRoute(
+        widget.route.id,
+        buses: buses,
+      );
 
       // Re-read what is actually stored for this user instead of forcing every
       // toggle back to false on refresh: the old code left the subscriptions
       // alive on the server while the UI claimed they were off, so arrival
       // alerts silently stopped firing after a refresh.
       // null = the query failed; the toggles then keep their current values.
-      Set<int>? activeStopIds;
-      if (widget.pickupPoints.isNotEmpty) {
-        try {
-          activeStopIds = await _service.getActiveStopNotifications(
-            widget.pickupPoints.map((p) => p.id).toList(),
-          );
-        } catch (_) {
-          // Preferences are non-critical; they must not take the map down.
-        }
-      }
+      final activeStopIds = widget.pickupPoints.isNotEmpty
+          ? await preferencesFuture
+          : null;
 
       if (!mounted) return;
       setState(() {
@@ -841,14 +896,56 @@ class _MapScreenState extends State<MapScreen> {
       }
     });
 
-    // Follow first bus if enabled - but never while guiding, where the
+    // Follow the route's bus if enabled - but never while guiding, where the
     // camera belongs to the user, not the bus.
     if (_followBus && !_navigating && _busLocations.isNotEmpty && _mapReady) {
-      _mapController.move(
-        LatLng(_busLocations[0].latitude, _busLocations[0].longitude),
-        _mapController.camera.zoom, // CameraUpdate.newLatLng kept the zoom
-      );
+      BusLocation? target;
+      if (_followBusId != null) {
+        for (final loc in _busLocations) {
+          if (loc.busId == _followBusId) {
+            target = loc;
+            break;
+          }
+        }
+      }
+      // Pinned bus stopped reporting (or nothing pinned yet): pick a new one
+      // deterministically - not "whichever bus's report arrived most recently".
+      target ??= _pickFollowTarget();
+      _followBusId = target.busId;
+
+      // Throttled: alternating updates from two buses, or a fix every few
+      // seconds, used to teleport/fight the camera. Only a genuinely new
+      // position moves it, at most twice a second.
+      final point = LatLng(target.latitude, target.longitude);
+      final moved =
+          _lastFollowPoint == null ||
+          distanceMeters(point, _lastFollowPoint!) > 15;
+      if (moved &&
+          DateTime.now().difference(_lastFollowMove) >
+              const Duration(milliseconds: 500)) {
+        _lastFollowPoint = point;
+        _lastFollowMove = DateTime.now();
+        _mapController.move(
+          point,
+          _mapController.camera.zoom, // CameraUpdate.newLatLng kept the zoom
+        );
+      }
     }
+  }
+
+  /// Deterministic bus to follow: the one closest to the first pickup point
+  /// (the bus students are waiting for), stable regardless of which bus
+  /// reported last.
+  BusLocation _pickFollowTarget() {
+    if (widget.pickupPoints.isEmpty) return _busLocations.first;
+    final stop = widget.pickupPoints.first;
+    return _busLocations.reduce(
+      (a, b) =>
+          a.distanceTo(stop.latitude, stop.longitude) <
+              b.distanceTo(stop.latitude, stop.longitude)
+          ? a
+          : b,
+    );
   }
 
   void _updateETAInfo() {
@@ -857,9 +954,19 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    // Get closest bus to first stop
+    // A fix older than 5 minutes is history, not live data: an ETA from a
+    // bus that stopped reporting would be fiction.
+    final fresh = _busLocations
+        .where((loc) => DateTime.now().difference(loc.timestamp).inMinutes < 5)
+        .toList();
+    if (fresh.isEmpty) {
+      _etaInfo = 'Waiting for live bus positions...';
+      return;
+    }
+
+    // Get closest fresh bus to first stop
     final firstStop = widget.pickupPoints[0];
-    final closestBus = _busLocations.reduce(
+    final closestBus = fresh.reduce(
       (a, b) =>
           a.distanceTo(firstStop.latitude, firstStop.longitude) <
               b.distanceTo(firstStop.latitude, firstStop.longitude)
@@ -872,10 +979,12 @@ class _MapScreenState extends State<MapScreen> {
       firstStop.longitude,
     );
 
-    if (eta != null) {
+    if (eta == 0) {
+      _etaInfo = 'Bus is at ${firstStop.pointName} now';
+    } else if (eta != null) {
       _etaInfo = 'First bus arrives at ${firstStop.pointName} in $eta min';
     } else {
-      _etaInfo = 'Tracking ${_busLocations.length} buses';
+      _etaInfo = 'Tracking ${fresh.length} buses';
     }
   }
 
@@ -887,22 +996,33 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _checkNotifications() {
+    final now = DateTime.now();
     for (var loc in _busLocations) {
+      // A fix older than 5 minutes must not produce an "arriving" alert for
+      // a bus that parked (or stopped reporting) long ago.
+      if (now.difference(loc.timestamp).inMinutes >= 5) continue;
       for (var point in widget.pickupPoints) {
-        if (_notificationsEnabled[point.id] == true) {
-          final distance = loc.distanceTo(point.latitude, point.longitude);
-          final eta = loc.estimatedTimeTo(point.latitude, point.longitude);
+        if (_notificationsEnabled[point.id] != true) continue;
 
-          // Notify if bus is within 0.5 km and ETA less than 5 minutes
-          if (distance < 0.5 && eta != null && eta < 5) {
-            _showArrivalNotification(point, eta, loc);
+        final distance = loc.distanceTo(point.latitude, point.longitude);
+        final eta = loc.estimatedTimeTo(point.latitude, point.longitude);
 
-            // Turn off notification after showing
-            setState(() {
-              _notificationsEnabled[point.id] = false;
-            });
-          }
+        // Notify if bus is within 0.5 km and within 5 minutes out.
+        if (distance >= 0.5 || eta == null || eta > 5) continue;
+
+        // One alert per stop+bus per 10 minutes. The old code flipped the
+        // toggle off locally while the server subscription stayed armed - the
+        // UI lied, and reopening the map re-armed the alert - and reused the
+        // stop id as the notification id, so a second bus's alert replaced
+        // the first one instead of stacking.
+        final key = '${point.id}:${loc.busId}';
+        final last = _lastArrivalAlert[key];
+        if (last != null &&
+            now.difference(last) < const Duration(minutes: 10)) {
+          continue;
         }
+        _lastArrivalAlert[key] = now;
+        _showArrivalNotification(point, eta, loc);
       }
     }
   }
@@ -913,6 +1033,7 @@ class _MapScreenState extends State<MapScreen> {
       etaMinutes: eta,
       stopId: point.id,
       routeId: widget.route.id,
+      busId: loc.busId,
     );
   }
 
@@ -955,11 +1076,29 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _sendSOSAlert() async {
+    // Captured from the builder so the spinner can ALWAYS be dismissed -
+    // even if MapScreen itself is gone (a bare Navigator.pop after `await`
+    // would otherwise pop whatever route sits underneath, or leave a stuck
+    // spinner over an emergency flow).
+    BuildContext? loadingDialog;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      // barrierDismissible only blocks taps: the Android back button pops
+      // even "non-dismissible" dialogs, silently sending the dismiss calls
+      // below to the map underneath. Block it explicitly.
+      builder: (context) {
+        loadingDialog = context;
+        return const PopScope(
+          canPop: false,
+          child: Center(child: CircularProgressIndicator()),
+        );
+      },
     );
+    void dismissLoading() {
+      final ctx = loadingDialog;
+      if (ctx != null && ctx.mounted) Navigator.of(ctx).pop();
+    }
 
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -973,8 +1112,8 @@ class _MapScreenState extends State<MapScreen> {
 
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
+        dismissLoading();
         if (mounted) {
-          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('You must be logged in to send SOS'),
@@ -994,8 +1133,11 @@ class _MapScreenState extends State<MapScreen> {
         longitude: position.longitude,
       );
 
+      dismissLoading();
+      // Confirmation notification as well as the snackbar - this is what
+      // showSOSNotification existed for; it had no call site at all.
+      unawaited(NotificationService().showSOSNotification());
       if (!mounted) return;
-      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1012,15 +1154,18 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to send SOS: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      dismissLoading();
+      // Raw exception text is for the log, not for a panicking user.
+      debugPrint('[nav] SOS failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to send SOS. Please try again or call '
+                'emergency services directly.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1176,16 +1321,28 @@ class _MapScreenState extends State<MapScreen> {
                             );
                           }
                         } catch (e) {
-                          // Undo the optimistic toggle.
+                          // Undo the optimistic toggle - and repaint the open
+                          // sheet: a modal sheet is its own route and does NOT
+                          // rebuild from the parent's setState, so without this
+                          // the button kept showing the failed state ("Notify
+                          // On" for an alert that was never armed). The
+                          // `context.mounted` guard covers the sheet having
+                          // been dismissed mid-request - calling a dead
+                          // builder's setSheetState asserts.
                           if (mounted) {
                             setState(() {
                               _notificationsEnabled[point.id] = isNotifying;
                             });
                           }
+                          if (context.mounted) {
+                            setSheetState(() {});
+                          }
+                          debugPrint('[map] stop notification toggle failed: $e');
                           messenger.showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('Could not update notifications: $e'),
+                            const SnackBar(
+                              content: Text(
+                                'Could not update notifications. Please try again.',
+                              ),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -1560,6 +1717,18 @@ class _MapScreenState extends State<MapScreen> {
                         setState(() => _mapReady = true);
                       }
                     },
+                    onPositionChanged: (camera, hasGesture) {
+                      // A manual pan/pinch takes priority: keep-following
+                      // would snap the map straight back on the next event.
+                      if (hasGesture && _followBus) {
+                        setState(() => _followBus = false);
+                      }
+                    },
+                    // Heading icons are drawn in screen space; letting the
+                    // map rotate would point them off by the camera angle.
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
                   ),
                   children: [
                     // OpenStreetMap: no API key, no billing account. OSM's tile
@@ -1636,12 +1805,15 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 ),
 
-                // ETA info card
+                // ETA info card. `right: 132` keeps it clear of the SOS FAB
+                // painted above it (later Stack children win), and the text
+                // is capped at two lines so a long stop name cannot grow the
+                // card over the legend at bottom:100.
                 if (_etaInfo.isNotEmpty)
                   Positioned(
                     bottom: 20,
                     left: 16,
-                    right: 16,
+                    right: 132,
                     child: Card(
                       elevation: 4,
                       shape: RoundedRectangleBorder(
@@ -1677,6 +1849,8 @@ class _MapScreenState extends State<MapScreen> {
                                   ),
                                   Text(
                                     _etaInfo,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,

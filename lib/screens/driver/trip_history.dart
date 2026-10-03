@@ -13,6 +13,10 @@ class _TripHistoryState extends State<TripHistory> {
   List<Map<String, dynamic>> _trips = [];
   bool _isLoading = true;
 
+  /// Set on failure so the body can tell "failed" from "genuinely empty" -
+  /// both used to render the same confident "No trips found".
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -20,11 +24,27 @@ class _TripHistoryState extends State<TripHistory> {
   }
 
   Future<void> _loadTrips() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        if (mounted) {
+          setState(() {
+            _error = 'You are not signed in.';
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+      // Own trips only: RLS should block other drivers' rows anyway, but the
+      // explicit filter keeps the screen correct regardless of RLS state.
       final trips = await supabase
           .from('trips')
           .select('*, routes!inner(route_name)')
+          .eq('driver_id', userId)
           .order('start_time', ascending: false);
       if (mounted) {
         setState(() {
@@ -33,14 +53,13 @@ class _TripHistoryState extends State<TripHistory> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      // Raw exception text goes to the log, never to the UI.
+      debugPrint('[trips] load failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading trips: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _error = 'Could not load your trips. Check your connection.';
+          _isLoading = false;
+        });
       }
     }
   }
@@ -54,9 +73,13 @@ class _TripHistoryState extends State<TripHistory> {
 
   String _calculateDuration(Map<String, dynamic> trip) {
     if (trip['start_time'] == null) return 'N/A';
-    final start = DateTime.parse(trip['start_time']);
+    // tryParse, not parse: one malformed backend row must not throw inside
+    // build() and red-screen the whole page.
+    final start = DateTime.tryParse('${trip['start_time']}');
+    if (start == null) return 'N/A';
     if (trip['end_time'] != null) {
-      final end = DateTime.parse(trip['end_time']);
+      final end = DateTime.tryParse('${trip['end_time']}');
+      if (end == null) return 'N/A';
       final diff = end.difference(start);
       final hours = diff.inHours;
       final minutes = diff.inMinutes.remainder(60);
@@ -80,7 +103,29 @@ class _TripHistoryState extends State<TripHistory> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _trips.isEmpty
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 60, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadTrips,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                )
+              : _trips.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -100,7 +145,8 @@ class _TripHistoryState extends State<TripHistory> {
                     itemBuilder: (context, index) {
                       final trip = _trips[index];
                       final date = trip['start_time'] != null
-                          ? DateTime.parse(trip['start_time']).toLocal()
+                          ? DateTime.tryParse('${trip['start_time']}')
+                              ?.toLocal()
                           : null;
                       final distance = trip['distance_km'];
 

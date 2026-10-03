@@ -14,6 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint('🚀 Starting app...');
 
+  var initialized = false;
   try {
     // Initialize Supabase with PKCE for better security
     await Supabase.initialize(
@@ -23,35 +24,87 @@ void main() async {
         authFlowType: AuthFlowType.pkce,
       ),
     );
+    initialized = true;
     debugPrint('✅ Supabase initialized!');
+  } catch (e) {
+    debugPrint('❌ Initialization error: $e');
+  }
 
-    // Initialize local notifications (mobile only)
-    if (!kIsWeb) {
-      final notificationService = NotificationService();
-      await notificationService.initialize();
-      debugPrint('✅ Local notifications initialized!');
-    } else {
-      debugPrint('🌐 Web detected - skipping notifications');
+  if (initialized) {
+    // Own try/catch: a notification-plugin failure must not skip the auth
+    // listener below (it used to, silently leaving taps unhandled).
+    try {
+      // Initialize local notifications (mobile only)
+      if (!kIsWeb) {
+        final notificationService = NotificationService();
+        await notificationService.initialize();
+        debugPrint('✅ Local notifications initialized!');
+      } else {
+        debugPrint('🌐 Web detected - skipping notifications');
+      }
+    } catch (e) {
+      debugPrint('❌ Notification init failed: $e');
     }
 
     // Optional: Listen to auth changes for debugging
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
-        debugPrint('🔐 Auth: ${data.event} - User: ${session.user.email}');
+        // No PII in logs: debugPrint is NOT stripped in release builds, and
+        // every e-mail here was readable by anyone plugging in a phone.
+        // The user id correlates just as well.
+        debugPrint('🔐 Auth: ${data.event} - User: ${session.user.id}');
       } else {
         debugPrint('🔐 Auth: ${data.event} - No session');
       }
     });
-  } catch (e) {
-    debugPrint('❌ Initialization error: $e');
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(canStart: initialized));
+}
+
+/// Shown when Supabase could not initialize (storage failure, corrupt
+/// persisted session). RoleRouter's first statement would otherwise throw
+/// an unhandled SupabaseException: a white screen with no explanation.
+class _StartupFailedScreen extends StatelessWidget {
+  const _StartupFailedScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text(
+                'Could not start: unable to reach the server.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => main(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.canStart = true});
+
+  /// False when [Supabase.initialize] failed: rendering [RoleRouter] would
+  /// throw on its first line, so the app starts into a retry screen instead.
+  final bool canStart;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +132,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const RoleRouter(), // Clean role-based routing
+      home: canStart ? const RoleRouter() : const _StartupFailedScreen(),
       routes: {
         '/profile': (context) => const ProfileScreen(),
         '/history': (context) => const TripHistory(),

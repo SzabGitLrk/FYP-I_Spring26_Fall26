@@ -222,8 +222,10 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
         itemCount: _pickupPoints.length,
         itemBuilder: (context, index) {
           final point = _pickupPoints[index];
-          final isFirst = point.orderIndex == 1;
-          final isLast = point.orderIndex == _pickupPoints.length;
+          // List position, not `orderIndex`: order gaps (deleted stops,
+          // imported data) must not mark the wrong row as first/last.
+          final isFirst = index == 0;
+          final isLast = index == _pickupPoints.length - 1;
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -413,9 +415,12 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
             // ✅ UPDATED: Working map button in dialog
             ElevatedButton.icon(
               onPressed: () {
-                Navigator.pop(context); // Close dialog
-                Navigator.push(
-                  context,
+                // Captured while the dialog is still mounted: `context` here
+                // belongs to the dialog and is deactivated the moment it
+                // pops, so looking it up again afterwards would throw.
+                final navigator = Navigator.of(context);
+                navigator.pop(); // Close dialog
+                navigator.push(
                   MaterialPageRoute(
                     builder: (context) => MapScreen(
                       route: widget.route,

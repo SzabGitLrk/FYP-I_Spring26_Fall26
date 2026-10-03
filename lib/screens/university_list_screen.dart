@@ -131,8 +131,13 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
+                  // barrierDismissible only blocks taps - Android back still
+                  // pops the dialog, which would send the follow-up
+                  // `navigator.pop` below to the route underneath it.
+                  builder: (_) => const PopScope(
+                    canPop: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
                 );
 
                 try {

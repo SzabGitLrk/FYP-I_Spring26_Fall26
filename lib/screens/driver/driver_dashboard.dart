@@ -42,6 +42,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// Stops already visited on this trip, so each one is counted exactly once.
   final Set<int> _countedStopIds = {};
 
+  /// Ownership token for the tracking session; bumped by every start/stop so
+  /// a coroutine suspended in [_startTracking] can tell it was superseded.
+  int _trackSession = 0;
+
+  /// Consecutive failed position inserts; after 5 the driver is warned that
+  /// students may be seeing a frozen map.
+  int _locationWriteFailures = 0;
+
   @override
   void initState() {
     super.initState();
@@ -88,11 +96,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _assignedRoutes = allRoutes;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -111,6 +121,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -132,6 +143,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   void _startTracking() async {
+    // Re-entrancy guard: a second tap while the awaits below are still
+    // running used to install a second GPS listener, double every position
+    // insert and leave an orphaned "active" trip behind.
+    if (_isTracking) return;
     if (_selectedRoute == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a route first'), backgroundColor: Colors.red),
@@ -151,6 +166,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final bus = routeBuses.first;
 
+    // Ownership token: bumped by every start/stop, so this coroutine can tell
+    // after each await whether it still owns the tracking session.
+    final session = ++_trackSession;
+
     setState(() {
       _isTracking = true;
       _tripStartTime = DateTime.now();
@@ -163,8 +182,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // ...and the previous trip's stop progress.
       _tripStops = [];
       _countedStopIds.clear();
+      // ...and the previous trip's id: a start whose queries fail must not
+      // leave End writing distance/time onto the old trip's row.
+      _currentTripId = null;
     });
 
+    int? tripId;
     try {
       await _service.startTrip(
         busId: bus.id,
@@ -179,10 +202,33 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .order('start_time', ascending: false)
           .limit(1)
           .maybeSingle();
-      _currentTripId = tripResult?['id'] as int?;
+      tripId = tripResult?['id'] as int?;
     } catch (_) {
-      // Trip recording is non-critical
+      // Trip recording is non-critical for live tracking - but never claim
+      // success for a write that failed: without a trip row, End Trip has
+      // nothing to close and the drive vanishes from trip history.
+      if (mounted && session == _trackSession) {
+        _showErrorSnackBar(
+          'Trip recording is unavailable - live tracking is on, but this '
+          'drive will not appear in trip history.',
+        );
+      }
     }
+
+    // The driver ended (or restarted) tracking while this trip row was
+    // still being created: if this start owns a row nobody else knows
+    // about, close it now - otherwise it hangs "active" forever.
+    if (!mounted || session != _trackSession) {
+      if (tripId != null && tripId != _currentTripId) {
+        try {
+          await _service.endTrip(tripId, _totalDistance);
+        } catch (_) {
+          // Session was superseded; nothing more can be done here.
+        }
+      }
+      return;
+    }
+    _currentTripId = tripId;
 
     // Stops for arrival detection and the "Next stop" readout. Best-effort:
     // if this fails the trip still tracks - it just reports no pickups and no
@@ -193,11 +239,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
       _tripStops = [];
     }
 
+    if (!mounted || session != _trackSession) return;
+
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10,
     );
 
+    // Defensive: whatever listener a superseded session left behind must be
+    // gone before this one starts (two streams would double every insert).
+    await _positionSubscription?.cancel();
+    if (!mounted || session != _trackSession) return;
     _positionSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
@@ -241,10 +293,26 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       : 0,
                   nextStopIndex: nextStopIndex,
                 )
+                .then<void>((_) {
+                  // A good write clears the failure streak.
+                  _locationWriteFailures = 0;
+                })
                 // Fire-and-forget by design: awaiting would stall the GPS
                 // stream, and an unhandled rejection would surface as an
-                // async error on every dropped fix. The next tick retries.
-                .catchError((Object _) {});
+                // async error on every dropped fix. The next tick retries -
+                // but never silently: after 5 straight failures the driver
+                // is told their position is not reaching the students' maps.
+                .catchError((Object e) {
+                  _locationWriteFailures++;
+                  debugPrint('[driver] bus location insert failed: $e');
+                  if (_locationWriteFailures >= 5 && mounted) {
+                    _locationWriteFailures = 0;
+                    _showErrorSnackBar(
+                      'Live tracking failing - students may not see your '
+                      'position. Check connection and GPS.',
+                    );
+                  }
+                });
           },
           onError: (error) {
             if (mounted) {
@@ -259,6 +327,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   void _stopTracking() async {
+    // Invalidate any _startTracking still awaiting inside its queries: it
+    // must not install a GPS listener (or resurrect this trip) afterwards.
+    ++_trackSession;
     if (_currentTripId != null) {
       try {
         await _service.endTrip(_currentTripId!, _totalDistance);
@@ -294,25 +365,30 @@ class _DriverDashboardState extends State<DriverDashboard> {
   int _updateStopProgress(Position position) {
     if (_tripStops.isEmpty) return 0;
 
-    const arrivalRadiusMeters = 50.0;
-    var nearestIndex = 0;
-    var nearestDistance = double.infinity;
+    // Only the FIRST unvisited stop can be reached. The old scan took the
+    // globally nearest stop, so a service road passing stop #7 while stops
+    // #1-#6 were still pending marked #7 visited and reported the wrong
+    // "Next stop" to students.
+    var firstUnvisited = _tripStops.length;
     for (var i = 0; i < _tripStops.length; i++) {
-      final stop = _tripStops[i];
-      final distance = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        stop.latitude,
-        stop.longitude,
-      );
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = i;
+      if (!_countedStopIds.contains(_tripStops[i].id)) {
+        firstUnvisited = i;
+        break;
       }
     }
+    if (firstUnvisited >= _tripStops.length) return 0; // every stop visited
 
-    if (nearestDistance <= arrivalRadiusMeters &&
-        _countedStopIds.add(_tripStops[nearestIndex].id) &&
+    const arrivalRadiusMeters = 50.0;
+    final stop = _tripStops[firstUnvisited];
+    final distance = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      stop.latitude,
+      stop.longitude,
+    );
+
+    if (distance <= arrivalRadiusMeters &&
+        _countedStopIds.add(stop.id) &&
         mounted) {
       setState(() => _pickupCount++);
     }
@@ -352,8 +428,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
+                  // barrierDismissible only blocks taps - Android back still
+                  // pops the dialog, which would send the follow-up
+                  // `navigator.pop` below to the route underneath it.
+                  builder: (_) => const PopScope(
+                    canPop: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
                 );
 
                 try {
