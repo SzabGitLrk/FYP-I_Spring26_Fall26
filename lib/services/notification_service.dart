@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -31,7 +32,10 @@ class NotificationService {
               jsonDecode(response.payload!),
             );
             onNotificationOpened!(data);
-          } catch (_) {}
+          } catch (e) {
+            // Never silently drop a tap: at least leave a trace to debug by.
+            debugPrint('[notif] bad payload: $e');
+          }
         }
       },
     );
@@ -45,7 +49,11 @@ class NotificationService {
     required int etaMinutes,
     required int stopId,
     required int routeId,
+    int busId = 0,
   }) async {
+    // No plugin implementation exists on web (main.dart skips init there);
+    // calling anyway would raise an unhandled MissingPluginException.
+    if (kIsWeb) return;
     const androidDetails = AndroidNotificationDetails(
       'bus_arrival',
       'Bus Arrival Alerts',
@@ -61,9 +69,14 @@ class NotificationService {
     );
 
     await _plugin.show(
-      stopId,
+      // stopId*1000+busId: Android keeps one slot per id, so the old
+      // stopId-only id made a second bus's alert REPLACE the first one
+      // instead of stacking. Stays far below 2^31 for realistic ids.
+      stopId * 1000 + busId,
       '🚌 Bus approaching $stopName',
-      'Arriving in approximately $etaMinutes minutes',
+      etaMinutes == 0
+          ? 'The bus is at the stop now'
+          : 'Arriving in approximately $etaMinutes minutes',
       details,
       payload: '{"stop_id":$stopId,"route_id":$routeId}',
     );

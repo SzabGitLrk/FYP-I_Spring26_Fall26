@@ -56,12 +56,26 @@ class BusLocation {
 
   double _toRadians(double degree) => degree * (pi / 180);
 
-  // Estimate time to reach a point (in minutes)
+  // Estimate time to reach a point (in minutes).
+  //
+  // Straight-line distance over current speed - a coarse model (it ignores
+  // the road geometry), so callers treat the result as approximate. Null
+  // means "no estimate possible": the bus is stopped somewhere away from
+  // the point and will not arrive on any predictable schedule.
   int? estimatedTimeTo(double lat, double lng) {
-    if (speed <= 1) return null; // Bus stopped or very slow
     final distance = distanceTo(lat, lng);
+    if (speed <= 1) {
+      // Stopped AT the point means the bus has arrived (0 min), not "no
+      // data" - otherwise the approaching-bus alert can never fire for the
+      // bus already sitting at your stop. Stopped elsewhere stays null so a
+      // bus at a red light 2 km away never shows a phantom ETA.
+      return distance < 0.05 ? 0 : null;
+    }
     final timeHours = distance / speed;
-    return (timeHours * 60).round();
+    // Ceiling: the app must never promise an earlier arrival than reality
+    // (round() on 4.9 min claimed "5", but 0.4 min of real travel used to
+    // round down to "0 min" and read as "already here").
+    return (timeHours * 60).ceil();
   }
 
   // Check if bus is moving

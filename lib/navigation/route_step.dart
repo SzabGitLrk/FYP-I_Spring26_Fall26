@@ -33,10 +33,12 @@ class RouteStep {
   final LatLng location;
 
   /// Compact distance for banners and speech: "850 m" below a kilometer,
-  /// "1.2 km" above.
+  /// "1.2 km" above. Rounded first, so 999.6 m reads "1.0 km" instead of
+  /// "1000 m".
   static String formatDistance(double meters) {
-    if (meters >= 1000) return '${(meters / 1000).toStringAsFixed(1)} km';
-    return '${meters.round()} m';
+    final m = meters.round();
+    if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)} km';
+    return '$m m';
   }
 
   /// Parses an OSRM route object (requested with `steps=true`) into steps.
@@ -156,7 +158,12 @@ class RouteStep {
       case 'roundabout':
       case 'rotary':
         final exit = maneuver['exit'];
-        if (exit is num) return 'At the roundabout, take exit ${exit.toInt()}$onto';
+        // OSRM numbers exits from 1; 0 (or a non-numeric value) means the
+        // exit is unknown - "take exit 0" would be nonsense, so fall back
+        // to the generic phrasing.
+        if (exit is num && exit.toInt() >= 1) {
+          return 'At the roundabout, take exit ${exit.toInt()}$onto';
+        }
         return 'At the roundabout, take the exit$onto';
       case 'end of road':
         return '${_turnPhrase(modifier)}$onto at the end of the road';

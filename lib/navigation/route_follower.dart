@@ -58,6 +58,12 @@ class RouteFollower {
     this.stepAdvanceBefore = 15,
   }) : points = List<LatLng>.unmodifiable(points),
        steps = List<RouteStep>.unmodifiable(steps) {
+    // Fail fast on a caller bug: an empty polyline would otherwise throw an
+    // obscure StateError deep inside update() at the first GPS fix.
+    if (this.points.isEmpty) {
+      throw ArgumentError('RouteFollower requires at least one point');
+    }
+
     // Cumulative distance at each route vertex, so any projection can be
     // converted to "meters from the start".
     final cumulative = <double>[0];
@@ -70,11 +76,19 @@ class RouteFollower {
     _total = cumulative.last;
 
     // Each maneuver point projected onto the route once: step i happens
-    // when the user's along-distance passes this mark.
-    _stepAlong = [
-      for (final step in this.steps)
-        math.min(math.max(_alongFor(step.location), 0), _total),
-    ];
+    // when the user's along-distance passes this mark. Global projection can
+    // snap two steps onto the wrong leg of a self-crossing route and make the
+    // marks run backwards, which would break the "first step not passed yet"
+    // scan below - so the marks are forced monotonically non-decreasing
+    // (steps happen in order by definition).
+    final marks = <double>[];
+    var mark = 0.0;
+    for (final step in this.steps) {
+      final raw = math.min(math.max(_alongFor(step.location), 0.0), _total);
+      if (raw > mark) mark = raw;
+      marks.add(mark);
+    }
+    _stepAlong = marks;
   }
 
   /// The routed polyline the user should stay on.
@@ -97,6 +111,23 @@ class RouteFollower {
   late final double _total;
   late final List<double> _stepAlong;
 
+  /// Meters of along-route continuity between fixes: projections are only
+  /// considered on segments within +/- this window of the previous fix.
+  /// Without it, a route that crosses or runs parallel to itself (or plain
+  /// GPS noise far from the road) can snap the user onto the wrong leg and
+  /// teleport progress - reporting "1 km remaining" while they stand 100 m
+  /// from the stop, or jumping straight to the end and declaring arrival.
+  static const double _continuityWindow = 200;
+
+  /// Where the previous fix projected onto the route; null until the first
+  /// fix, which seeds the window with the whole route.
+  double? _lastAlong;
+
+  /// Consecutive fixes near the route end while sitting more than
+  /// [offRouteThreshold] m off the polyline - the GPS-noise tiebreaker for
+  /// arrival (see the arrived calculation in [update]).
+  int _nearEndFixes = 0;
+
   /// Total length of the route in meters.
   double get totalMeters => _total;
 
@@ -105,9 +136,17 @@ class RouteFollower {
     var along = 0.0;
     var offRoute = double.infinity;
 
-    // Closest point over every segment (routes are small; a full scan keeps
-    // the answer stable no matter where the user jumped from).
+    // Closest point over every segment near the previous fix (see
+    // [_continuityWindow]; the first fix scans the whole route).
     for (var i = 1; i < points.length; i++) {
+      final segStart = _cumulative[i - 1];
+      final segEnd = _cumulative[i];
+      if (_lastAlong != null &&
+          (segStart > _lastAlong! + _continuityWindow ||
+              segEnd < _lastAlong! - _continuityWindow)) {
+        continue;
+      }
+
       final a = points[i - 1];
       final b = points[i];
       final segAlong = _segmentMeters(a, b);
@@ -125,6 +164,7 @@ class RouteFollower {
     }
 
     along = math.min(math.max(along, 0), _total);
+    _lastAlong = along;
     final remaining = math.max(_total - along, 0.0);
 
     // First maneuver the user has not passed yet (15 m of lookahead, so GPS
@@ -139,8 +179,23 @@ class RouteFollower {
         ? remaining
         : math.max(_stepAlong[next] - along, 0.0);
 
-    final arrived =
-        remaining <= arrivalRadius && offRoute <= offRouteThreshold;
+    // Arrival: at the route's end and (normally) near the polyline. GPS
+    // noise near a stop can put the user 50-100 m off the drawn line while
+    // they stand at the destination - that fell between the arrival gate
+    // (off-route <= 45 m) and the reroute trigger (remaining > 120 m), so
+    // guidance hung forever. Three consecutive near-end fixes settle it.
+    // A degenerate zero-length route never arrives: `remaining` is 0 from
+    // the first fix, and standing at the route's *start* is not the end.
+    final nearEnd = _total > 0 && remaining <= arrivalRadius;
+    bool arrived;
+    if (!nearEnd) {
+      _nearEndFixes = 0;
+      arrived = false;
+    } else if (offRoute <= offRouteThreshold) {
+      arrived = true;
+    } else {
+      arrived = ++_nearEndFixes >= 3;
+    }
 
     return RouteProgress(
       distanceAlong: along,
