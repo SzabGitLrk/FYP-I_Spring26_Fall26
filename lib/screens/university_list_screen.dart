@@ -37,8 +37,12 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // Raw exception text (PostgREST/SQL internals) is useless to students
+      // and leaks table/column names on screen - keep it in the debug log.
+      debugPrint('[universities] load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error =
+            'Could not load universities. Check your connection and try again.';
         _isLoading = false;
       });
     }

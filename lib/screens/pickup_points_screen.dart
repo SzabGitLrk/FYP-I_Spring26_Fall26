@@ -40,8 +40,11 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // Friendly copy for the screen; raw exception stays in the log.
+      debugPrint('[stops] load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error =
+            'Could not load stops. Check your connection and try again.';
         _isLoading = false;
       });
     }

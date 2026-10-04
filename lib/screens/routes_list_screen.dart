@@ -42,8 +42,11 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // Friendly copy for the screen; raw exception stays in the log.
+      debugPrint('[routes] load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error =
+            'Could not load routes. Check your connection and try again.';
         _isLoading = false;
       });
     }

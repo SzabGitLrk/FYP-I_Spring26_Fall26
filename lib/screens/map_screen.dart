@@ -809,8 +809,12 @@ class _MapScreenState extends State<MapScreen> {
       _updateETAInfo();
     } catch (e) {
       if (!mounted) return;
+      // Raw PostgREST/SQL text never goes on screen (it leaks schema);
+      // the retry button still brings the map back once.
+      debugPrint('[map] bus data load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error =
+            'Could not load live bus data. Check your connection and try again.';
         _isLoading = false;
       });
     }

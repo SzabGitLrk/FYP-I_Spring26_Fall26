@@ -9,12 +9,21 @@ Closed items are summarised at the bottom.
 
 ## A. You must do in Supabase (blocking)
 
-- [ ] **Re-run `supabase_security_fix.sql`** (now Sections 1–11) in the SQL
-  Editor, then verify with the anon key:
-  - `GET /rest/v1/trips?select=*` → `[]` (Section 7, still pending)
-  - `POST /rest/v1/bus_locations` → 401/403 for anon, 201 for an approved driver (Section 8 — the bootstrap scripts had **no** INSERT policy for it)
-  - `bus_locations` listed under Database → Replication / `supabase_realtime` (Section 9 — otherwise `.stream()` never updates)
-  - `POST /rest/v1/admin_settings` → 403 for non-admins (Section 10)
+- [x] **Re-run `supabase_security_fix.sql`** (now Sections 1–11) — done and
+  verified from the anon key on 4 Oct 2026: `trips` → `[]`, `profiles?select=email`
+  → `[]`, `otp_verification` → `[]`, anon `POST bus_locations` → 401 RLS,
+  anon `POST admin_settings` → 401 RLS, anon `POST sos_alerts` → 401.
+  Two checks still need a dashboard/SQL-editor glance:
+  - `select tablename from pg_publication_tables where pubname='supabase_realtime'
+    and tablename='bus_locations';` → must return one row (Section 9).
+  - `select policyname, cmd from pg_policies where schemaname='public' and
+    tablename in ('trips','sos_alerts');` → must show the new `Trips insert`
+    and the admin-or-owner SOS policies (Sections 7/11/5).
+  - `select email, is_approved from public.profiles where role='driver';`
+    → your driver must be `true` (Sections 8/11 deny unapproved drivers).
+  - Known oddity: live `admin_settings` has no `key` column (table predates
+    the bootstrap; `CREATE IF NOT EXISTS` skipped it). Harmless — the app
+    never queries it and Section 10's policies protect the table itself.
 - [ ] `buses.driver_phone` is world-readable to the anon key — move it behind
   an authenticated view / RPC used by the "Contact" button.
 - [ ] Decide the SOS throttling rule (trigger: max 1 active alert per user
@@ -33,16 +42,20 @@ Closed items are summarised at the bottom.
   leaks into the map User-Agent, manifest scheme and README. Change
   `namespace` + `applicationId`, move `MainActivity.kts`, the deep-link
   scheme, and `userAgentPackageName` together.
-- [ ] Write and host a **privacy policy** (email, precise location, SOS
-  location; processors: Supabase, OpenStreetMap, OSRM, Valhalla).
+- [x] **Privacy policy drafted** — `PRIVACY_POLICY.md` in the repo root.
+  Still to do: replace `[CONTACT EMAIL]` with a monitored address, host it
+  (GitHub Pages / Supabase static), and paste the URL into the Play Console.
 - [ ] Play Console: Data Safety declaration, content rating, store listing,
   screenshots.
 - [ ] Regenerate the upload keystore (current passwords are the Flutter
   tutorial defaults `android`/`android`), store it outside the repo, enrol in
   Play App Signing. `*.jks` is now gitignored and untracked.
-- [ ] Foreground service for driver GPS: without `FOREGROUND_SERVICE(_LOCATION)`
-  the stream dies minutes after the driver locks the phone — students see
-  frozen buses on every real trip.
+- [x] **Foreground service for driver GPS** — `flutter_foreground_task`
+  ^11.0.3 wired in (`driver_dashboard` start/stop around every trip,
+  location-typed service, `stopWithTask`). Still needs an on-device test:
+  start a trip, lock the phone for 5 min, confirm positions keep arriving
+  on a student's map. (Battery-optimisation exemption deliberately NOT
+  requested — Play-hostile; add only if Samsung still throttles.)
 - [ ] Decide the routing endgame: precompute the 3 static routes into
   Postgres (best), self-host OSRM/Valhalla, or take a keyed free tier — the
   public demo routers have no SLA and will rate-limit a class-change burst.
@@ -53,15 +66,18 @@ Closed items are summarised at the bottom.
 
 ## C. Open code work (deferred from the audit)
 
-- [ ] Map error views still render raw exception text in some screens
-  (`university_list`, `routes_list`, `pickup_points`, map's `_error`, driver
-  dashboard) — introduce friendly typed errors; detail behind `kDebugMode`.
+- [x] Friendly errors: the five list/map/dashboard screens now show a
+  human message (`_error` is no longer `e.toString()`); raw exceptions go
+  to `debugPrint` only — done for university, routes, stops, map and driver.
+  Remaining surfaces that still show raw text: driver `Location error: $e`
+  snackbar and trip history's inline error (smaller scope).
 - [ ] Admin dashboard: no loading/error state (shows zeros + "No active SOS
   alerts" while four sequential queries run); load in parallel; subscribe to
   `sos_alerts` instead of fetching once.
 - [ ] Driver bus matching falls back to **all active buses** when
-  `userMetadata['name']` mismatches — match on `driver_id` and show an
-  explicit "no bus assigned" empty state instead.
+  `userMetadata['name']` mismatches — it now WARNS loudly (snackbar) instead
+  of failing silently; the proper fix is matching on `driver_id` (needs a
+  `buses.driver_id` column + migration).
 - [ ] Bottom overlay layout is hard-coded (`bottom:` constants) — restructure
   with `LayoutBuilder` for tablets/small widths; the ETA card now clears the
   SOS FAB and is capped at 2 lines, but a full layout pass is still wanted.

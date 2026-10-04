@@ -55,6 +55,7 @@ University Point Locator is a mobile application designed to solve the critical 
 - Role-based access (Student, Driver, Admin) resolved server-side from `profiles`
 - Session persistence and secure logout
 - Row Level Security (RLS) in database
+- Privacy policy: see [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md)
 
 ## 🛠️ Technology Stack
 
