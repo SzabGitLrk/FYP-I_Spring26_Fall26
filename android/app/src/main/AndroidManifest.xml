@@ -39,6 +39,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+
+        <!-- Driver trip tracking (flutter_foreground_task). Do not rename the
+             service, and keep the type `location`: Android 14+ refuses FGS
+             starts without a declared type, and `location` has no
+             dataSync-style timeout. stopWithTask covers swipe-away. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false"
+            android:stopWithTask="true" />
     </application>
     <!-- Required permissions -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -47,4 +57,10 @@
     <!-- Also merged in from flutter_local_notifications; declared here too so
          the runtime permission request keeps working if the plugin changes. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Driver trip tracking: a location-typed foreground service holds the
+         process so GPS keeps flowing to the students' map after the screen
+         turns off. FOREGROUND_SERVICE_LOCATION is required by Android 14+
+         to start a service of that type. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 </manifest>

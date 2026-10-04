@@ -20,6 +20,11 @@ dependencies:
   # Location
   geolocator: ^10.1.0
 
+  # Android foreground service: keeps the driver's GPS stream alive while the
+  # screen is off (Android 12+ throttles background location within minutes
+  # without one - students would see frozen buses on every real trip).
+  flutter_foreground_task: ^11.0.3
+
   # Device info
   device_info_plus: ^10.0.0
   

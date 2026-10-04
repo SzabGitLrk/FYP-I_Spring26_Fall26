@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/models/route_model.dart';
@@ -55,11 +56,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
     super.initState();
     _loadDriverData();
     _checkLocationPermissions();
+    // Register the foreground-service options before any trip can start
+    // (post-frame so plugin channel setup cannot race the first build).
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _initForegroundTask());
   }
 
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    // Leaving the dashboard mid-trip must not orphan the "Trip in progress"
+    // notification (stopWithTask only covers swiping the app away).
+    if (_isTracking) _stopForegroundService();
     super.dispose();
   }
 
@@ -80,9 +88,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // Load buses assigned to this driver by driver_name
       List<Bus> driverBuses = await _service.getBusesForDriver(driverName);
 
-      // Fallback: if no buses assigned by name, show all active buses
+      // Fallback: if no buses assigned by name, show all active buses.
+      // Never silent: the driver would otherwise start tracking a bus that
+      // is not theirs and students would follow the wrong vehicle.
+      var fallbackToAllBuses = false;
       if (driverBuses.isEmpty) {
         driverBuses = await _service.getAllActiveBuses();
+        fallbackToAllBuses = driverBuses.isNotEmpty;
       }
 
       _availableBuses = driverBuses;
@@ -101,10 +113,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _assignedRoutes = allRoutes;
         _isLoading = false;
       });
+      if (fallbackToAllBuses) {
+        _showErrorSnackBar(
+          'No bus is assigned to your name - showing all active buses. '
+          'Ask an administrator to assign you a bus before starting a trip.',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
+      // Raw exception text stays in the log, not on the dashboard.
+      debugPrint('[driver] route/bus load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error =
+            'Could not load your routes and buses. Check your connection and try again.';
         _isLoading = false;
       });
     }
@@ -117,6 +138,71 @@ class _DriverDashboardState extends State<DriverDashboard> {
       if (permission == LocationPermission.denied) {
         return;
       }
+    }
+  }
+
+  /// Registers the foreground-service options once per app launch.
+  ///
+  /// The service itself does no work: it raises the process priority so
+  /// Android 12+ keeps delivering the GPS stream started in
+  /// [_startTracking] while the screen is off. The stream stays in this
+  /// isolate, so only start/stop calls around the trip are needed - no
+  /// TaskHandler or port plumbing.
+  Future<void> _initForegroundTask() async {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'driver_trip_tracking',
+        channelName: 'Trip tracking',
+        channelDescription:
+            'Keeps sharing the bus position with students while a trip is '
+            'running.',
+        onlyAlertOnce: true,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(
+        showNotification: false,
+        playSound: false,
+      ),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        // No TaskHandler events: the GPS stream runs in this isolate.
+        eventAction: ForegroundTaskEventAction.nothing(),
+        allowWakeLock: true,
+        allowWifiLock: true,
+      ),
+    );
+  }
+
+  /// Starts the `location`-typed foreground service (best-effort).
+  ///
+  /// Failure is logged, never surfaced as a trip error: tracking still works
+  /// while the app is in the foreground - Android only throttles it once
+  /// the screen goes off.
+  Future<void> _startForegroundService() async {
+    try {
+      final result = await FlutterForegroundTask.startService(
+        serviceId: 1101,
+        serviceTypes: const [ForegroundServiceTypes.location],
+        notificationTitle: 'Trip in progress',
+        notificationText: 'Your bus position is being shared with students',
+      );
+      if (result is ServiceRequestFailure) {
+        debugPrint('[driver] foreground service start failed: ${result.error}');
+      }
+    } catch (e) {
+      // Never let service bookkeeping fail a trip start.
+      debugPrint('[driver] foreground service start skipped: $e');
+    }
+  }
+
+  Future<void> _stopForegroundService() async {
+    try {
+      if (!await FlutterForegroundTask.isRunningService) return;
+      final result = await FlutterForegroundTask.stopService();
+      if (result is ServiceRequestFailure) {
+        debugPrint('[driver] foreground service stop failed: ${result.error}');
+      }
+    } catch (e) {
+      // Not initialized (disposed before the first frame) or not Android.
+      debugPrint('[driver] foreground service stop skipped: $e');
     }
   }
 
@@ -323,6 +409,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
           },
         );
 
+    // Keep the process alive after the screen turns off, otherwise Android
+    // 12+ pauses the GPS stream minutes into every real trip and students
+    // see a frozen bus.
+    await _startForegroundService();
+    if (!mounted || session != _trackSession) {
+      // Superseded while the service was starting. A newer tracking session
+      // already owns the running service (its start request resolves to
+      // "already started") - only tear down when nothing is tracking, or
+      // the "Trip in progress" notification would outlive the trip.
+      if (!_isTracking) await _stopForegroundService();
+      return;
+    }
     _showSuccessSnackBar('Trip started successfully!');
   }
 
@@ -344,6 +442,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _currentTripId = null;
+    await _stopForegroundService();
 
     if (_tripStartTime != null) {
       final duration = DateTime.now().difference(_tripStartTime!);

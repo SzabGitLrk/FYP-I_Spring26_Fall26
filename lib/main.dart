@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:university_point_locator/screens/role_router.dart';
@@ -12,6 +13,9 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Driver trip tracking runs a location-typed foreground service; register
+  // the plugin's isolate port before any screen can start the service.
+  FlutterForegroundTask.initCommunicationPort();
   debugPrint('🚀 Starting app...');
 
   var initialized = false;
