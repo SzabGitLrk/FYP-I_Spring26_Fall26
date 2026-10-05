@@ -177,10 +177,19 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } catch (e) {
+      // Raw auth exception text (rate limits, internals) goes to the log;
+      // the two cases a user actually acts on get their own copy.
+      final raw = e.toString().toLowerCase();
+      debugPrint('[login] password reset failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString()}'),
+          content: Text(
+            raw.contains('rate limit') || raw.contains('too many')
+                ? 'Too many reset requests - wait a minute and try again.'
+                : 'Could not send the reset link. Check the email address '
+                    'and your connection, then try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );

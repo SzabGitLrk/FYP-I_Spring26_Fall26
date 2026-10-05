@@ -71,8 +71,9 @@ Closed items are summarised at the bottom.
 - [x] Friendly errors: the five list/map/dashboard screens now show a
   human message (`_error` is no longer `e.toString()`); raw exceptions go
   to `debugPrint` only — done for university, routes, stops, map and driver.
-  Remaining surfaces that still show raw text: driver `Location error: $e`
-  snackbar and trip history's inline error (smaller scope).
+  The leftovers are closed too: the GPS stream error and the password-reset
+  snackbar got friendly copy (reset keeps a specific rate-limit variant).
+  The remaining `Error: ` prefixes render already-friendly text.
 - [ ] Driver bus matching falls back to **all active buses** when
   `userMetadata['name']` mismatches — it now WARNS loudly (snackbar) instead
   of failing silently; the proper fix is matching on `driver_id` (needs a

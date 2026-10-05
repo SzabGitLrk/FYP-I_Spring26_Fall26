@@ -401,9 +401,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 });
           },
           onError: (error) {
+            // Raw Geolocator internals stay in the log; the driver gets
+            // actionable copy. Deliberately does NOT promise auto-resume:
+            // some location errors kill the stream, and recovery is the
+            // driver's stop/start, not the app's.
+            debugPrint('[driver] location stream error: $error');
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Location error: $error'), backgroundColor: Colors.red),
+              _showErrorSnackBar(
+                'GPS error - check that location is enabled and that the '
+                'app has permission, then restart tracking.',
               );
             }
           },
