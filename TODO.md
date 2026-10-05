@@ -90,8 +90,11 @@ Closed items are summarised at the bottom.
   `sos_alerts` subscription** so a new emergency appears without an app
   restart. Requires re-running `supabase_security_fix.sql` for the new
   Section 12 (sos_alerts realtime publication).
-- [ ] Role resolution: a transient network error resolves to `student` with
-  no retry UI (fail-closed, but silent for admins on flaky wifi).
+- [x] Role resolution fail-closed WITH visibility (#22): a failed
+  profiles lookup now renders a "Could not verify account" screen with
+  Retry/Sign-out instead of silently resolving to `student` (which hid an
+  admin's flaky login inside the student home screen). Sign-out and
+  identity changes clear the failure latch.
 - [x] Dead menu entries cleaned up (#23): driver "Profile" menu now
   actually navigates (route existed all along); profile's "Edit Profile",
   both "View All" buttons and the dead Settings gear removed (no fake

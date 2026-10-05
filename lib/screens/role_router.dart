@@ -29,6 +29,11 @@ class _RoleRouterState extends State<RoleRouter> {
   /// latch, so switching accounts showed the prior user's role.
   String? _resolvedForUserId;
 
+  /// True when the profiles lookup threw. Fail-closed: no dashboard renders
+  /// until a retry succeeds - the app never guesses a role, and never
+  /// silently resolves to `student` either.
+  bool _resolveFailed = false;
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
@@ -49,6 +54,7 @@ class _RoleRouterState extends State<RoleRouter> {
           _resolvedForUserId = null;
           _resolvedRole = null;
           _isApproved = false;
+          _resolveFailed = false;
           return const LoginScreen();
         }
 
@@ -57,6 +63,7 @@ class _RoleRouterState extends State<RoleRouter> {
           _resolvedForUserId = null;
           _resolvedRole = null;
           _isApproved = false;
+          _resolveFailed = false;
           return const LoginScreen();
         }
 
@@ -65,7 +72,15 @@ class _RoleRouterState extends State<RoleRouter> {
           _resolvedForUserId = user.id;
           _resolvedRole = null;
           _isApproved = false;
+          _resolveFailed = false;
           _resolveRoleFromProfile(user.id);
+        }
+
+        // The authoritative lookup threw: fail closed to a retryable error
+        // screen - NOT to the student home screen, which used to swallow a
+        // transient failure for admins with no way to tell what happened.
+        if (_resolveFailed) {
+          return _RoleResolveErrorScreen(onRetry: _reResolve);
         }
 
         // Still loading the authoritative role: show progress rather than
@@ -122,14 +137,15 @@ class _RoleRouterState extends State<RoleRouter> {
           _isApproved = false;
         });
       }
-    } catch (_) {
-      // Fail closed: default to the least-privileged role - but only for the
-      // user this lookup still belongs to.
-      if (mounted && _resolvedRole == null && _resolvedForUserId == userId) {
-        setState(() {
-          _resolvedRole = 'student';
-          _isApproved = false;
-        });
+    } catch (e) {
+      // Fail closed: never GUESS a role from a failed lookup - and never
+      // silently resolve to `student` either. A transient error used to
+      // dump a (possibly admin) account into the student home screen with
+      // no indication anything was wrong and no way to retry. Guarded to
+      // the user this lookup still belongs to.
+      debugPrint('[role_router] profile lookup failed: $e');
+      if (mounted && _resolvedForUserId == userId) {
+        setState(() => _resolveFailed = true);
       }
     }
   }
@@ -141,6 +157,7 @@ class _RoleRouterState extends State<RoleRouter> {
       _resolvedForUserId = null;
       _resolvedRole = null;
       _isApproved = false;
+      _resolveFailed = false;
     });
   }
 
@@ -203,6 +220,59 @@ class _PendingApprovalScreen extends StatelessWidget {
               onPressed: onRefresh,
               icon: const Icon(Icons.refresh),
               label: const Text('Check approval status'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () => Supabase.instance.client.auth.signOut(),
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when the authoritative `profiles` lookup failed (offline, RLS,
+/// schema). Fail-closed: no dashboard is rendered until a retry verifies
+/// the role, but the failure is stated openly with a Retry button instead
+/// of silently resolving to `student`.
+class _RoleResolveErrorScreen extends StatelessWidget {
+  const _RoleResolveErrorScreen({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Could not verify account')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(Icons.cloud_off, size: 72, color: Colors.orange.shade700),
+            const SizedBox(height: 24),
+            const Text(
+              'We could not verify your account',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'This usually means the connection dropped before your role '
+              'could be checked. Nothing is wrong with your account - tap '
+              'Retry, or sign out and sign in again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 15),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
