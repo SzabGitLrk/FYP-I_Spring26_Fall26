@@ -600,7 +600,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
               if (value == 'logout') {
                 _showLogoutDialog();
               } else if (value == 'profile') {
-                // Navigate to profile
+                // Was a dead branch (a bare "// Navigate to profile").
+                // The route is registered in main.dart and ProfileScreen
+                // reads the role from the database, so it works for drivers.
+                Navigator.pushNamed(context, '/profile');
               }
             },
             itemBuilder: (BuildContext context) => [

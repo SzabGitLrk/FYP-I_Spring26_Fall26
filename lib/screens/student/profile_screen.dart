@@ -338,35 +338,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         foregroundColor: Colors.white,
         elevation: 4,
         actions: [
-          // Settings button
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              // Navigate to settings
-            },
-            tooltip: 'Settings',
-          ),
           // Logout button with confirmation
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) async {
               if (value == 'logout') {
                 _showLogoutDialog();
-              } else if (value == 'edit') {
-                // Navigate to edit profile
               }
+              // 'Edit Profile' was removed: a no-op entry (its handler was
+              // just "// Navigate to edit profile"). Reintroduce it only
+              // together with a real edit screen.
             },
             itemBuilder: (BuildContext context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Edit Profile'),
-                  ],
-                ),
-              ),
               const PopupMenuItem(
                 value: 'logout',
                 child: Row(
@@ -582,24 +565,15 @@ color: primaryColor.withValues(alpha: 0.3),
                     ),
                     const SizedBox(height: 24),
 
-                    // Favorite Stops Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Favorite Stops',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            // Navigate to all favorites
-                          },
-                          child: const Text('View All'),
-                        ),
-                      ],
+                    // Favorite Stops Section. The old "View All" button was a
+                    // no-op - and pointless besides: the list below already
+                    // renders every favourite, so there is nothing to page to.
+                    const Text(
+                      'Favorite Stops',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _favoriteStops.isEmpty
@@ -689,24 +663,15 @@ backgroundColor: Colors.amber.withValues(alpha: 0.1),
                           ),
                     const SizedBox(height: 24),
 
-                    // Recent Trips Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Recent Trips',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            // Navigate to all trips
-                          },
-                          child: const Text('View All'),
-                        ),
-                      ],
+                    // Recent Trips Section. "View All" was a no-op; trip
+                    // history is a driver feature (Trip History screen) and
+                    // this student list is always empty.
+                    const Text(
+                      'Recent Trips',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Card(

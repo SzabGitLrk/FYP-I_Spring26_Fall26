@@ -92,8 +92,11 @@ Closed items are summarised at the bottom.
   Section 12 (sos_alerts realtime publication).
 - [ ] Role resolution: a transient network error resolves to `student` with
   no retry UI (fail-closed, but silent for admins on flaky wifi).
-- [ ] Dead menu entries that do nothing: profile "Edit Profile"/"View All",
-  trip row tap, driver "profile" menu item — remove or implement.
+- [x] Dead menu entries cleaned up (#23): driver "Profile" menu now
+  actually navigates (route existed all along); profile's "Edit Profile",
+  both "View All" buttons and the dead Settings gear removed (no fake
+  affordances). Trip-history rows stay non-interactive on purpose - they
+  show no tap affordance; add a detail expansion only if wanted.
 - [ ] If realtime is unavailable, add a 30–60 s polling fallback so the map
   can recover without an app restart.
 - [ ] Dead code pending your decision (~543 lines): `utils/helpers.dart`,
