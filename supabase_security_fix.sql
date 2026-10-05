@@ -49,9 +49,11 @@
 --      scripts, so a stock deployment silently drops every driver fix while
 --      the app reports success. Now approved-driver-only.
 --
---   9. Live map frozen (high) - Section 9
---      `bus_locations` was never added to the `supabase_realtime`
---      publication, so `.stream()` returned one snapshot and never updated.
+--   9. Live map frozen / silent SOS feed (high) - Sections 9 and 12
+--      `bus_locations` and `sos_alerts` were never added to the
+--      `supabase_realtime` publication: `.stream()` returned one snapshot
+--      and never updated, and the admin dashboard's SOS subscription (new)
+--      would receive nothing.
 --
 --  10. admin_settings world-writable / trips un-gated (medium) -
 --      Sections 10-11. Any signed-in user could rewrite app configuration,
@@ -370,6 +372,29 @@ CREATE POLICY "Trips insert" ON public.trips
   );
 
 
+-- -----------------------------------------------------------------------------
+-- SECTION 12. sos_alerts: enable realtime replication for live admin alerts
+--
+-- The admin dashboard now SUBSCRIBES to sos_alerts (it used to fetch them
+-- exactly once at startup, so a new emergency never reached an admin who
+-- was already looking at the screen). Subscriptions only deliver changes
+-- for tables in the `supabase_realtime` publication - if sos_alerts is not
+-- a member, the feature silently degrades to pull-to-refresh. Idempotent:
+-- already a member? nothing happens.
+-- -----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'sos_alerts'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.sos_alerts;
+  END IF;
+END $$;
+
+
 -- =============================================================================
 --  VERIFICATION - run these afterwards.
 --
@@ -401,9 +426,10 @@ CREATE POLICY "Trips insert" ON public.trips
 --       Expect: 403 for a non-admin.
 --    8. Realtime actually streams:
 --       Subscribe from a second client to bus_locations while a driver
---       tracks; events must arrive. (If they do not, check
---       Database -> Replication: bus_locations must be in supabase_realtime -
---       Section 9 does this from SQL.)
+--       tracks, AND open the admin dashboard while a second client posts
+--       an SOS alert; events must arrive in both. (If they do not, check
+--       Database -> Replication: bus_locations and sos_alerts must be in
+--       supabase_realtime - Sections 9 and 12 do this from SQL.)
 --
 --  TO GRANT ADMIN (there is no in-app way to do this, by design):
 --      UPDATE public.profiles

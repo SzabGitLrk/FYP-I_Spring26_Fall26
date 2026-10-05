@@ -19,13 +19,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _buses = [];
 
+  /// True while the first parallel load is in flight. Without this gate the
+  /// dashboard rendered 0/0/0/0 and "No active SOS alerts" as facts while
+  /// the data was still arriving - an emergency view claiming to be quiet.
+  bool _isLoading = true;
+
+  /// Non-null when any section failed to reload; shown as an in-page banner
+  /// with Retry. Four stacked error snackbars used to be the only signal,
+  /// and a failed SOS load looked exactly like "no alerts".
+  String? _loadError;
+
+  /// Live feed for SOS alerts. They were fetched exactly ONCE in initState,
+  /// so a new emergency never appeared until the admin restarted the app.
+  RealtimeChannel? _sosChannel;
+
   @override
   void initState() {
     super.initState();
-    _loadStats();
-    _loadSOSAlerts();
-    _loadDrivers();
-    _loadBuses();
+    _refreshAll(initial: true);
+    _subscribeToSOS();
+  }
+
+  @override
+  void dispose() {
+    final channel = _sosChannel;
+    if (channel != null) supabase.removeChannel(channel);
+    super.dispose();
   }
 
   /// Surfaces a failed admin action/load to the admin.
@@ -42,63 +61,109 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Future<void> _loadStats() async {
-    try {
-      if (!mounted) return;
-      final students = await supabase
-          .from('profiles')
-          .select()
-          .eq('role', 'student');
-      if (!mounted) return;
-      final drivers = await supabase
-          .from('profiles')
-          .select()
-          .eq('role', 'driver');
-      if (!mounted) return;
-      final buses = await supabase.from('buses').select();
-      if (!mounted) return;
-      final trips = await supabase.from('trips').select().eq('status', 'active');
-
-      if (!mounted) return;
+  /// Reloads every section in parallel and surfaces any failure as an
+  /// in-page banner.
+  ///
+  /// The four loads used to run sequentially in initState with no loading
+  /// state at all, and pull-to-refresh ran three of them serially (never
+  /// refreshing buses). [_guard] converts each failure into `false` so one
+  /// dead request cannot stack four red snackbars.
+  Future<void> _refreshAll({bool initial = false}) async {
+    if (initial && mounted) {
       setState(() {
-        _totalStudents = students.length;
-        _totalDrivers = drivers.length;
-        _totalBuses = buses.length;
-        _activeTrips = trips.length;
+        _isLoading = true;
+        _loadError = null;
       });
+    }
+    final outcomes = await Future.wait<bool>([
+      _guard(_loadStats),
+      _guard(_loadSOSAlerts),
+      _guard(_loadDrivers),
+      _guard(_loadBuses),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _loadError = outcomes.contains(false)
+          ? 'Some dashboard data could not be loaded. Check your connection '
+              'and tap Retry.'
+          : null;
+    });
+  }
+
+  Future<bool> _guard(Future<void> Function() load) async {
+    try {
+      await load();
+      return true;
     } catch (e) {
-      _showError('Could not load dashboard stats: $e');
+      debugPrint('[admin] dashboard load failed: $e');
+      return false;
     }
   }
 
-  Future<void> _loadSOSAlerts() async {
-    try {
-      final alerts = await supabase
-          .from('sos_alerts')
-          .select()
-          .eq('status', 'active')
-          .order('created_at', ascending: false);
+  Future<void> _loadStats() async {
+    // One round trip in parallel instead of four sequential awaits.
+    final results = await Future.wait([
+      supabase.from('profiles').select().eq('role', 'student'),
+      supabase.from('profiles').select().eq('role', 'driver'),
+      supabase.from('buses').select(),
+      supabase.from('trips').select().eq('status', 'active'),
+    ]);
 
-      if (mounted) {
-        setState(() => _sosAlerts = List<Map<String, dynamic>>.from(alerts));
-      }
-    } catch (e) {
-      _showError('Could not load SOS alerts: $e');
+    if (!mounted) return;
+    setState(() {
+      _totalStudents = results[0].length;
+      _totalDrivers = results[1].length;
+      _totalBuses = results[2].length;
+      _activeTrips = results[3].length;
+    });
+  }
+
+  /// Throws on failure: [_guard] reports it through the [_loadError] banner.
+  /// The old `catch` turned a real outage into a green-looking empty list -
+  /// "No active SOS alerts" while the query had actually failed.
+  Future<void> _loadSOSAlerts() async {
+    final alerts = await supabase
+        .from('sos_alerts')
+        .select()
+        .eq('status', 'active')
+        .order('created_at', ascending: false);
+
+    if (mounted) {
+      setState(() => _sosAlerts = List<Map<String, dynamic>>.from(alerts));
     }
+  }
+
+  /// Keeps the emergency list live: without this subscription the alerts
+  /// were fetched exactly once at app start, so a student pressing SOS
+  /// never reached an admin who was already looking at the screen.
+  void _subscribeToSOS() {
+    _sosChannel = supabase
+        .channel('admin-sos-${identityHashCode(this)}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'sos_alerts',
+          callback: (_) {
+            // Quiet on purpose: this callback sits outside _refreshAll's
+            // Future.wait, so the banner cannot represent it - the periodic
+            // pull-to-refresh remains the fallback if realtime is down.
+            _loadSOSAlerts().catchError(
+              (Object e) => debugPrint('[admin] sos live reload failed: $e'),
+            );
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadDrivers() async {
-    try {
-      final drivers = await supabase
-          .from('profiles')
-          .select()
-          .eq('role', 'driver');
+    final drivers = await supabase
+        .from('profiles')
+        .select()
+        .eq('role', 'driver');
 
-      if (mounted) {
-        setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
-      }
-    } catch (e) {
-      _showError('Could not load drivers: $e');
+    if (mounted) {
+      setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
     }
   }
 
@@ -108,7 +173,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .from('profiles')
           .update({'is_approved': true})
           .eq('id', driverId);
-      await _loadDrivers();
+      await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -140,7 +205,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             'resolved_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', alertId);
-      await _loadSOSAlerts();
+      await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -160,7 +225,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .from('profiles')
           .update({'is_approved': false})
           .eq('id', driverId);
-      await _loadDrivers();
+      await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -175,21 +240,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadBuses() async {
-    try {
-      final buses = await supabase.from('buses').select().order('bus_number');
-      if (mounted) {
-        setState(() => _buses = List<Map<String, dynamic>>.from(buses));
-      }
-    } catch (e) {
-      _showError('Could not load buses: $e');
+    final buses = await supabase.from('buses').select().order('bus_number');
+    if (mounted) {
+      setState(() => _buses = List<Map<String, dynamic>>.from(buses));
     }
   }
 
   Future<void> _deleteBus(int busId) async {
     try {
       await supabase.from('buses').delete().eq('id', busId);
-      await _loadBuses();
-      await _loadStats();
+      await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -263,16 +323,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadStats();
-          await _loadSOSAlerts();
-          await _loadDrivers();
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        onRefresh: _refreshAll,
+        child: _isLoading
+            ? const CustomScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ],
+              )
+            : SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              // Load-failure banner. Partial failures keep whatever DID load
+              // on screen and say so, instead of a snackbar that disappears
+              // over an empty-looking dashboard.
+              if (_loadError != null) ...[
+                Card(
+                  color: Colors.red.shade50,
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_off, color: Colors.red),
+                    title: Text(_loadError!),
+                    trailing: TextButton(
+                      onPressed: _refreshAll,
+                      child: const Text('Retry'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // Stats Cards
               Row(
                 children: [
@@ -421,7 +505,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   TextButton(
-                    onPressed: _loadBuses,
+                    onPressed: _refreshAll,
                     child: const Text('Refresh'),
                   ),
                 ],

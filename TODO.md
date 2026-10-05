@@ -15,7 +15,9 @@ Closed items are summarised at the bottom.
   anon `POST admin_settings` → 401 RLS, anon `POST sos_alerts` → 401.
   Two checks still need a dashboard/SQL-editor glance:
   - `select tablename from pg_publication_tables where pubname='supabase_realtime'
-    and tablename='bus_locations';` → must return one row (Section 9).
+    and tablename in ('bus_locations','sos_alerts');` → must return two rows
+    (Sections 9 and 12 — **re-run the script once more after its §12 was
+    added**; it is idempotent).
   - `select policyname, cmd from pg_policies where schemaname='public' and
     tablename in ('trips','sos_alerts');` → must show the new `Trips insert`
     and the admin-or-owner SOS policies (Sections 7/11/5).
@@ -71,9 +73,6 @@ Closed items are summarised at the bottom.
   to `debugPrint` only — done for university, routes, stops, map and driver.
   Remaining surfaces that still show raw text: driver `Location error: $e`
   snackbar and trip history's inline error (smaller scope).
-- [ ] Admin dashboard: no loading/error state (shows zeros + "No active SOS
-  alerts" while four sequential queries run); load in parallel; subscribe to
-  `sos_alerts` instead of fetching once.
 - [ ] Driver bus matching falls back to **all active buses** when
   `userMetadata['name']` mismatches — it now WARNS loudly (snackbar) instead
   of failing silently; the proper fix is matching on `driver_id` (needs a
@@ -83,6 +82,14 @@ Closed items are summarised at the bottom.
   SOS FAB and is capped at 2 lines, but a full layout pass is still wanted.
 - [ ] Stop-detail / "All Stops" bottom sheets freeze their ETAs while open
   (the sheet is its own route and never rebuilds).
+- [x] Admin dashboard state overhaul — `_isLoading` gate (no more
+  0/0/0/0 and "No active SOS alerts" rendered as facts while four
+  sequential queries were still in flight), in-page error banner with
+  Retry instead of vanishing snackbars, all four loads run in parallel
+  (and pull-to-refresh now refreshes buses too), and a **live
+  `sos_alerts` subscription** so a new emergency appears without an app
+  restart. Requires re-running `supabase_security_fix.sql` for the new
+  Section 12 (sos_alerts realtime publication).
 - [ ] Role resolution: a transient network error resolves to `student` with
   no retry UI (fail-closed, but silent for admins on flaky wifi).
 - [ ] Dead menu entries that do nothing: profile "Edit Profile"/"View All",
