@@ -61,6 +61,11 @@ class _MapScreenState extends State<MapScreen> {
 
   List<Bus> _buses = [];
   List<BusLocation> _busLocations = [];
+
+  /// Bumped whenever [_busLocations] changes. The stop-detail and All-Stops
+  /// bottom sheets are their own navigator route and never see this screen's
+  /// rebuilds; listening here keeps their ETAs live while open.
+  final ValueNotifier<int> _busRevision = ValueNotifier<int>(0);
   final Map<int, bool> _notificationsEnabled = {};
   /// Last "bus approaching" alert per "stopId:busId", session-scoped: one
   /// alert per bus per stop per 10 minutes instead of one per GPS tick.
@@ -136,6 +141,7 @@ class _MapScreenState extends State<MapScreen> {
     _mapController.dispose();
     // Cut off any queued utterance when the screen goes away.
     unawaited(_tts?.stop());
+    _busRevision.dispose();
     super.dispose();
   }
 
@@ -789,6 +795,7 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _buses = buses;
         _busLocations = locations;
+        _busRevision.value++;
         _isLoading = false;
         // A successful reload must clear a previous failure, otherwise the
         // retry button could never bring the map back.
@@ -839,6 +846,7 @@ class _MapScreenState extends State<MapScreen> {
               : locations
                     .where((loc) => routeBusIds.contains(loc.busId))
                     .toList();
+          _busRevision.value++;
         });
         _updateBusMarkers();
         _updateETAInfo();
@@ -1181,8 +1189,14 @@ class _MapScreenState extends State<MapScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
+        // This sheet is its own route and never sees the map's rebuilds, so
+        // it listens to the bus-feed revision directly: the ETA/distance
+        // card keeps up with every position update while the sheet is open.
+        return ValueListenableBuilder<int>(
+          valueListenable: _busRevision,
+          builder: (context, _, _) {
+            return StatefulBuilder(
+              builder: (context, setSheetState) {
             // Calculate ETA using closest bus
             final eta = _calculateETA(point);
             final isNotifying = _notificationsEnabled[point.id] ?? false;
@@ -1435,6 +1449,8 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
               ),
+            );
+              },
             );
           },
         );
@@ -1968,7 +1984,12 @@ class _MapScreenState extends State<MapScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Container(
+        // Own route, so listen to the bus-feed revision: every row's ETA
+        // chip keeps up with position updates while the list stays open.
+        return ValueListenableBuilder<int>(
+          valueListenable: _busRevision,
+          builder: (context, _, _) {
+            return Container(
           padding: const EdgeInsets.all(20),
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.7,
@@ -2043,6 +2064,8 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ],
           ),
+            );
+          },
         );
       },
     );

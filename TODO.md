@@ -81,8 +81,10 @@ Closed items are summarised at the bottom.
 - [ ] Bottom overlay layout is hard-coded (`bottom:` constants) — restructure
   with `LayoutBuilder` for tablets/small widths; the ETA card now clears the
   SOS FAB and is capped at 2 lines, but a full layout pass is still wanted.
-- [ ] Stop-detail / "All Stops" bottom sheets freeze their ETAs while open
-  (the sheet is its own route and never rebuilds).
+- [x] Stop-detail / "All Stops" bottom sheets now track live ETAs — both
+  sheets listen to a `_busRevision` ValueNotifier bumped wherever
+  `_busLocations` changes (a modal sheet is its own route and never saw
+  the map's rebuilds, so its ETA froze at open).
 - [x] Admin dashboard state overhaul — `_isLoading` gate (no more
   0/0/0/0 and "No active SOS alerts" rendered as facts while four
   sequential queries were still in flight), in-page error banner with
