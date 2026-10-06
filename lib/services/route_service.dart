@@ -50,6 +50,22 @@ class RouteService {
   static const String _userAgent =
       'UniversityPointLocator/1.0 (university final-year student project)';
 
+  /// [client] is injected by tests; production call sites omit it and keep
+  /// the one-shot `http.get` behaviour (no pooled client to outlive).
+  RouteService({http.Client? client}) : _client = client;
+
+  final http.Client? _client;
+
+  /// GET [uri] with the identifying User-Agent, via the injected client
+  /// when one was supplied.
+  Future<http.Response> _get(Uri uri) {
+    const headers = {'User-Agent': _userAgent};
+    final client = _client;
+    return client == null
+        ? http.get(uri, headers: headers)
+        : client.get(uri, headers: headers);
+  }
+
   Future<RoadRoute?> fetchRoute(List<LatLng> waypoints) async {
     if (waypoints.length < 2) return null;
     debugPrint('[route] fetching road geometry for ${waypoints.length} waypoints');
@@ -69,9 +85,7 @@ class RouteService {
         'https://router.project-osrm.org/route/v1/driving/$path'
         '?overview=full&geometries=geojson&steps=true',
       );
-      final response = await http
-          .get(uri, headers: const {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 12));
+      final response = await _get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
         debugPrint(
           '[route] OSRM: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
@@ -122,9 +136,7 @@ class RouteService {
           'directions_options': {'units': 'kilometers'},
         }),
       });
-      final response = await http
-          .get(uri, headers: const {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 15));
+      final response = await _get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         debugPrint(
           '[route] Valhalla: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
@@ -160,7 +172,13 @@ class RouteService {
 
   /// OSRM route geometry -> points, or null when malformed.
   static List<LatLng>? _osrmPoints(Map<String, dynamic> route) {
-    final coordinates = route['coordinates'];
+    // GeoJSON shape: routes[0].geometry.coordinates -> [[lon, lat], ...].
+    // (An earlier version read a top-level `coordinates` key that OSRM never
+    // sends, so every OSRM answer looked unusable and only the Valhalla
+    // fallback ever drew a route.)
+    final geometry = route['geometry'];
+    if (geometry is! Map<String, dynamic>) return null;
+    final coordinates = geometry['coordinates'];
     if (coordinates is! List || coordinates.length < 2) return null;
 
     final points = <LatLng>[];
