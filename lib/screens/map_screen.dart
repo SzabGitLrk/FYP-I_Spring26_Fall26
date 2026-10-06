@@ -42,6 +42,10 @@ class _MapScreenState extends State<MapScreen> {
   bool _mapReady = false;
 
   StreamSubscription? _busSubscription;
+  /// Consecutive restarts of a closed bus feed; a healthy tick resets it.
+  int _busFeedRestarts = 0;
+  /// Pending restart of a closed bus feed (see [_scheduleBusFeedRestart]).
+  Timer? _busFeedRestart;
 
   /// Live GPS fix behind the blue "you are here" dot. Stays null until the
   /// first reading lands, and forever if location permission is denied.
@@ -132,6 +136,7 @@ class _MapScreenState extends State<MapScreen> {
   void dispose() {
     _myPositionSubscription?.cancel();
     _busSubscription?.cancel();
+    _busFeedRestart?.cancel();
     // NotificationService is a singleton that outlives this screen; leaving
     // the callback registered would let a later notification tap call
     // _mapController.move() on an already-disposed controller.
@@ -839,6 +844,8 @@ class _MapScreenState extends State<MapScreen> {
     _busSubscription = _service.subscribeToBusLocations().listen(
       (locations) {
         if (!mounted) return;
+        // Healthy tick: reopen the restart budget for future failures.
+        _busFeedRestarts = 0;
         final routeBusIds = _buses.map((b) => b.id).toSet();
         setState(() {
           _busLocations = routeBusIds.isEmpty
@@ -852,7 +859,39 @@ class _MapScreenState extends State<MapScreen> {
         _updateETAInfo();
         _checkNotifications();
       },
+      // channelError/timedOut (a dropped websocket): realtime_client
+      // rejoins on reconnect and the stream reloads itself, so this is
+      // informational - but without a handler the exception escaped as an
+      // unhandled error after long idling.
+      onError: (Object error) =>
+          debugPrint('[map] bus feed error (resumes on reconnect): $error'),
+      // `closed` is final: without a restart the map sits stale until a
+      // manual refresh, so schedule a bounded resubscribe instead.
+      onDone: _scheduleBusFeedRestart,
     );
+  }
+
+  /// Restarts a bus feed whose channel reported `onDone`, with a cap.
+  ///
+  /// A closed realtime channel never comes back by itself, but a server
+  /// that keeps rejecting the join must not turn this into a resubscribe
+  /// loop: at most three consecutive attempts, and any healthy tick
+  /// resets the budget.
+  void _scheduleBusFeedRestart() {
+    if (!mounted) return;
+    if (_busFeedRestarts >= 3) {
+      debugPrint('[map] bus feed closed - restart budget spent, giving up');
+      return;
+    }
+    _busFeedRestart?.cancel();
+    ++_busFeedRestarts;
+    debugPrint(
+      '[map] bus feed closed - restarting '
+      '(attempt $_busFeedRestarts/3)',
+    );
+    _busFeedRestart = Timer(const Duration(seconds: 5), () {
+      if (mounted) _subscribeToBusLocations();
+    });
   }
 
   void _updateBusMarkers() {
@@ -1735,6 +1774,11 @@ class _MapScreenState extends State<MapScreen> {
                     onMapReady: () {
                       if (mounted) {
                         setState(() => _mapReady = true);
+                        // Frame THIS route's own stop bounds instead of a
+                        // fixed zoom-13 view: each route opens showing its
+                        // whole path (nothing cropped at the edge) and looks
+                        // distinct from the others at first glance.
+                        _zoomToFitAllStops();
                       }
                     },
                     onPositionChanged: (camera, hasGesture) {

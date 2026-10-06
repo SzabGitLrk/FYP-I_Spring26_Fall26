@@ -13,7 +13,12 @@ class SupabaseService {
       final response = await _client
           .from('universities')
           .select()
-          .order('name');
+          // supabase-dart's .order() defaults to DESCENDING (unlike the JS
+          // client); every intentional A-Z / visit-order sort must say so.
+          // This bit us: pickup points came back last-stop-first, which
+          // inverted the map's first/last markers, the waypoint order sent
+          // to the routers, and the driver's next_stop_index decoding.
+          .order('name', ascending: true);
 
       return (response as List)
           .map((item) => University.fromJson(item))
@@ -29,7 +34,7 @@ class SupabaseService {
           .from('routes')
           .select()
           .eq('university_id', universityId)
-          .order('route_name');
+          .order('route_name', ascending: true);
 
       return (response as List)
           .map((item) => RouteModel.fromJson(item))
@@ -45,7 +50,9 @@ class SupabaseService {
           .from('pickup_points')
           .select()
           .eq('route_id', routeId)
-          .order('order_index');
+          // Visit order: stop 1 (first) .. stop N (last) - see the note in
+          // getUniversities for the DESC default that broke this.
+          .order('order_index', ascending: true);
 
       return (response as List)
           .map((item) => PickupPoint.fromJson(item))

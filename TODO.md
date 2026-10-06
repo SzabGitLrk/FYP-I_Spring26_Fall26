@@ -85,6 +85,17 @@ Closed items are summarised at the bottom.
   sheets listen to a `_busRevision` ValueNotifier bumped wherever
   `_busLocations` changes (a modal sheet is its own route and never saw
   the map's rebuilds, so its ETA froze at open).
+- [x] Route ordering + per-route framing ("same route in every routes"):
+  supabase-dart's `.order()` defaults to **descending**, so stops arrived
+  last-stop-first — inverting the map's green/red first-last markers, the
+  waypoint order sent to OSRM/Valhalla (wrong direction on one-ways), and
+  driver/student `next_stop_index` decoding (both ends consistently
+  backwards vs the bus's physical visit order). Every intentional sort now
+  passes `ascending: true`, and the map auto-fits the route's stop bounds
+  on ready (was a fixed zoom-13 view, so routes opened cropped and looked
+  alike at first glance). Verified live on emulator: routes 7/8/9 fetch
+  distinct geometry (105/110/76 points); routes 7 and 8 still share the
+  PTS corridor by data design.
 - [x] Admin dashboard state overhaul — `_isLoading` gate (no more
   0/0/0/0 and "No active SOS alerts" rendered as facts while four
   sequential queries were still in flight), in-page error banner with

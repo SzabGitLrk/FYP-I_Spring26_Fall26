@@ -240,7 +240,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadBuses() async {
-    final buses = await supabase.from('buses').select().order('bus_number');
+    final buses = await supabase
+        .from('buses')
+        .select()
+        .order('bus_number', ascending: true);
     if (mounted) {
       setState(() => _buses = List<Map<String, dynamic>>.from(buses));
     }
