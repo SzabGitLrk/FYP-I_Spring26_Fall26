@@ -109,9 +109,9 @@ Closed items are summarised at the bottom.
   `utils/app_theme.dart`, `models/profile.dart`, `widgets/map_legend.dart`,
   `widgets/bus_count_indicator.dart`, `widgets/loading_error.dart`
   (`device_service`, `logout_dialog`, `sos_button` already deleted).
-- [ ] Tests: `route_service` now has decoder/fallback coverage (OSRM parse,
-  Valhalla polyline, router order, failure modes); still none for models'
-  `fromJson`, role resolution, or any screen; `widget_test` covers two
+- [ ] Tests: `route_service` decoder/fallback coverage and `models_test`
+  (`fromJson` for every live model + `estimatedTimeTo` boundaries) are in;
+  still none for role resolution or any screen; `widget_test` covers two
   widgets the app never builds.
 - [ ] R8/minify is off — document that, or enable with `-keep` rules for
   `flutter_local_notifications` / `supabase`.
