@@ -36,6 +36,11 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
         widget.university.id,
       );
       if (!mounted) return;
+      // Breadcrumb: the exact rows the route cards render from.
+      debugPrint(
+        '[routes] uni ${widget.university.id} "${widget.university.name}": '
+        '${routes.map((r) => '${r.id}:${r.routeName}').join(', ')}',
+      );
       setState(() {
         _routes = routes;
         _isLoading = false;
@@ -192,6 +197,9 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
             child: InkWell(
               onTap: () {
                 // ✅ NAVIGATION TO PICKUP POINTS SCREEN
+                debugPrint(
+                  '[routes] opening route ${route.id} "${route.routeName}"',
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(

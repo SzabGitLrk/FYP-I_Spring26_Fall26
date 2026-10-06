@@ -34,6 +34,12 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
     try {
       final points = await _service.getPickupPointsForRoute(widget.route.id);
       if (!mounted) return;
+      // Breadcrumb: which route this screen actually loaded, and what it got.
+      debugPrint(
+        '[stops] route ${widget.route.id} "${widget.route.routeName}": '
+        '${points.length} stops '
+        '(${points.map((p) => p.pointName).join(' | ')})',
+      );
       setState(() {
         _pickupPoints = points;
         _isLoading = false;

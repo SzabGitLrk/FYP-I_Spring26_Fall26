@@ -391,6 +391,11 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
+    debugPrint(
+      '[nav] start to ${destination.pointName} '
+      '(idx $destinationIndex, join stop $nearest)',
+    );
+
     final session = ++_navSession;
     setState(() {
       _navRouting = true;
@@ -1221,6 +1226,10 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _showStopDetails(PickupPoint point) {
+    debugPrint(
+      '[stop] details: ${point.pointName} '
+      '(${point.latitude},${point.longitude})',
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1602,13 +1611,20 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _getDirections(PickupPoint point) async {
-    // Turn-by-turn navigation is delegated to a real maps app: the URL only
-    // carries the destination, so the app supplies the user's current
-    // position as the origin.
+    // Turn-by-turn navigation is delegated to a real maps app. The origin is
+    // pinned to the user's GPS position whenever it is known, so directions
+    // to every stop start from where they actually stand; the destination is
+    // always this stop's own coordinates.
+    final pos = _myPosition;
+    final origin = pos == null
+        ? ''
+        : '&origin=${pos.latitude},${pos.longitude}';
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
+      '$origin'
       '&destination=${point.latitude},${point.longitude}',
     );
+    debugPrint('[dirs] ${point.pointName} -> $uri');
 
     try {
       // externalApplication keeps the user in a navigation app instead of
