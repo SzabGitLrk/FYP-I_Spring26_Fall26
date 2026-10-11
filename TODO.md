@@ -31,6 +31,17 @@ Closed items are summarised at the bottom.
   Fuel Empty / Bus Fault buttons and the admin dashboard's "Bus Issue
   Reports" section. Until it runs those features fail honestly ("Could
   not send the report"; empty section) and nothing else breaks.
+- [ ] **Run `supabase_advisor_fixes.sql`** (idempotent) — answers the Supabase
+  Advisor report of 11 Oct 2026: pins `search_path` on the two live trigger
+  functions, drops the dead `check_bus_proximity*` drift functions, revokes
+  REST EXECUTE on trigger/utility functions, drops the open
+  `bus_notifications` insert policy, and hides PII tables from the anon
+  role at the grant layer. No app behavior changes (the app makes zero
+  rpc() calls; every revoked read already ran as an authenticated user).
+- [ ] **Enable leaked-password protection** (Dashboard → Authentication →
+  Sign In / Providers → Email/Password → "Check password against
+  HaveIBeenPwned.org") — the only Advisor finding that is a dashboard
+  toggle, not SQL.
 - [ ] `buses.driver_phone` is world-readable to the anon key — move it behind
   an authenticated view / RPC used by the "Contact" button.
 - [ ] Decide the SOS throttling rule (trigger: max 1 active alert per user
