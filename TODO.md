@@ -26,6 +26,11 @@ Closed items are summarised at the bottom.
   - Known oddity: live `admin_settings` has no `key` column (table predates
     the bootstrap; `CREATE IF NOT EXISTS` skipped it). Harmless — the app
     never queries it and Section 10's policies protect the table itself.
+- [ ] **Run `supabase_bus_issues.sql`** (idempotent) — creates `bus_issues`
+  with its RLS policies and realtime membership behind the driver's
+  Fuel Empty / Bus Fault buttons and the admin dashboard's "Bus Issue
+  Reports" section. Until it runs those features fail honestly ("Could
+  not send the report"; empty section) and nothing else breaks.
 - [ ] `buses.driver_phone` is world-readable to the anon key — move it behind
   an authenticated view / RPC used by the "Contact" button.
 - [ ] Decide the SOS throttling rule (trigger: max 1 active alert per user
@@ -191,3 +196,15 @@ off), a 30 s session cooldown against duplicate taps, and the alert lands
 in `sos_alerts` as `Bus <number> - <name>` so the live admin feed shows
 WHICH bus has the problem. Zero schema change: there is no message column,
 so the bus context rides in `user_name`.
+
+Bus issue reports + route-tracking accuracy (11 Oct 2026): the driver
+dashboard gained always-visible Fuel Empty / Bus Fault buttons (confirm
+dialog → `bus_issues` insert carrying bus, driver, CHECK-constrained
+issue type, GPS fix and a SERVER-clock `created_at` → green success
+snackbar, 30 s cooldown); the admin dashboard gained a live "Bus Issue
+Reports" feed (realtime subscription + row-verified Resolve, same write
+pattern as SOS). New `lib/utils/geo_snapping.dart` map-matches the
+DRAWN bus marker onto the route line (≤ 50 m snap; genuine detours shown
+honestly; ETAs/distances keep the raw fix) so a GPS wander no longer
+reads as "the bus left the route". Requires `supabase_bus_issues.sql`
+(§A) to be run.

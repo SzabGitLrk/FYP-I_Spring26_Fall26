@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:university_point_locator/utils/geo_snapping.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/models/pickup_point.dart';
@@ -55,6 +56,15 @@ class _MapScreenState extends State<MapScreen> {
   // flutter_map layers take Lists; Google Maps took Sets.
   final List<Marker> _pickupMarkers = [];
   final List<Marker> _busMarkers = [];
+  /// Route geometry used ONLY for map-matching bus markers (see
+  /// [snapToRoute] / [_updateBusMarkers]). Kept separate from [_polylines]
+  /// because navigation overwrites the drawn polyline with a
+  /// user-position based route that is not the bus route.
+  List<LatLng> _routePoints = [];
+  /// Snap radius (metres) for that map-matching: within it the fix is on
+  /// the route and drawn on the road; beyond it the fix is a genuine
+  /// detour or a bad reading and is shown honestly where it actually is.
+  static const double _busSnapDistance = 50.0;
   /// The route polyline currently drawn over the map.
   ///
   /// Reassigned as a *fresh list* (never mutated in place): flutter_map caches
@@ -416,6 +426,12 @@ class _MapScreenState extends State<MapScreen> {
       // line over it (or leaving it when the routers are down) was a
       // downgrade to a lie about the road.
       if (_polylines.isEmpty) {
+        // Baseline geometry for bus map-matching: the stop-to-stop line,
+        // upgraded to the real road geometry when it arrives below.
+        _routePoints = [
+          for (final p in widget.pickupPoints)
+            LatLng(p.latitude, p.longitude),
+        ];
         _polylines = [
           Polyline(
             points: widget.pickupPoints
@@ -456,6 +472,10 @@ class _MapScreenState extends State<MapScreen> {
     // this was in flight - guidance wins over the full-route fetch.
     if (!mounted || route == null || _navigating) return;
     setState(() {
+      // Real road geometry doubles as the map-matching line: bus markers
+      // snap onto it (see _updateBusMarkers). Never touched by navigation,
+      // whose guard above returns before this runs.
+      _routePoints = List<LatLng>.of(route.points);
       _polylines = [
         Polyline(
           points: route.points,
@@ -1122,9 +1142,20 @@ class _MapScreenState extends State<MapScreen> {
         final Color markerColor =
             loc.speed > 2 ? Colors.cyan : Colors.deepPurple;
 
+        // Map-match for display: raw GPS wanders off the drawn road line
+        // (fields, alleys, tree cover), which reads to a student as "the
+        // bus left the route" even when it is exactly where it should be.
+        // The snap only ever moves the DRAWN marker - distances, ETAs and
+        // arrival logic keep using the raw fix.
+        final markerPoint = snapToRoute(
+          LatLng(loc.latitude, loc.longitude),
+          _routePoints,
+          _busSnapDistance,
+        );
+
         _busMarkers.add(
           Marker(
-            point: LatLng(loc.latitude, loc.longitude),
+            point: markerPoint,
             width: 40,
             height: 40,
             // flutter_map has no `rotation:` field — rotate the icon ourselves.
@@ -1170,7 +1201,11 @@ class _MapScreenState extends State<MapScreen> {
       // Throttled: alternating updates from two buses, or a fix every few
       // seconds, used to teleport/fight the camera. Only a genuinely new
       // position moves it, at most twice a second.
-      final point = LatLng(target.latitude, target.longitude);
+      final point = snapToRoute(
+        LatLng(target.latitude, target.longitude),
+        _routePoints,
+        _busSnapDistance,
+      );
       final moved =
           _lastFollowPoint == null ||
           distanceMeters(point, _lastFollowPoint!) > 15;

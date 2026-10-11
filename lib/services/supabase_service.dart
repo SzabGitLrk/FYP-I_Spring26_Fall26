@@ -384,4 +384,36 @@ class SupabaseService {
       rethrow;
     }
   }
+
+  /// Reports a driver-side bus problem (Fuel Empty / Bus Fault) into the
+  /// `bus_issues` table the admin dashboard subscribes to live.
+  ///
+  /// [issueType] must be one of the two CHECK values on the column:
+  /// `fuel_empty` or `bus_fault`. `created_at` is deliberately NOT sent:
+  /// the column default is the SERVER's clock, so the "reported at" time
+  /// dispatch sees cannot drift with a wrong device clock.
+  Future<void> reportBusIssue({
+    required String userId,
+    required String driverName,
+    required int? busId,
+    required String busNumber,
+    required String issueType,
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      await _client.from('bus_issues').insert({
+        'user_id': userId,
+        'driver_name': driverName,
+        'bus_id': busId,
+        'bus_number': busNumber,
+        'issue_type': issueType,
+        'latitude': latitude,
+        'longitude': longitude,
+        'status': 'active',
+      });
+    } catch (e) {
+      throw Exception('Failed to report bus issue: $e');
+    }
+  }
 }

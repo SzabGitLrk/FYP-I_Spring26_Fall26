@@ -27,6 +27,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// Last SOS sent this session - a coarse 30 s cooldown so a bouncing bus
   /// cannot stack duplicate alerts the admin must resolve one by one.
   DateTime? _lastSosAt;
+  /// Last bus-issue report (Fuel Empty / Bus Fault) this session - the
+  /// same coarse cooldown idea as [_lastSosAt].
+  DateTime? _lastIssueAt;
   RouteModel? _selectedRoute;
   bool _isLoading = true;
   String? _error;
@@ -837,6 +840,30 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return 0;
   }
 
+  /// Best available GPS fix for an emergency report.
+  ///
+  /// Live stream (or the heartbeat's cached fix) first, then the OS's
+  /// cached position, then one fresh reading. The stream yields nothing
+  /// while parked at `distanceFilter: 10` and before a trip it has never
+  /// run - relying on it alone would fail exactly when a stationary bus
+  /// needs help. Returns null when location is off or denied; the caller
+  /// decides what honest message that deserves.
+  Future<Position?> _bestPosition() async {
+    try {
+      final cached = _currentPosition ?? _lastPosition;
+      if (cached != null) return cached;
+      final known = await Geolocator.getLastKnownPosition();
+      if (known != null) return known;
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      // Detail stays in the log; the caller shows actionable copy.
+      debugPrint('[driver] GPS fix failed: $e');
+      return null;
+    }
+  }
+
   /// Confirmation for the driver-side emergency button (parity with the
   /// student map's SOS): nothing is sent until the driver taps SEND SOS.
   void _confirmDriverSOS() {
@@ -894,22 +921,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       return;
     }
 
-    // Best available fix: live stream (or the heartbeat's cached fix),
-    // then the OS's cached position, then one fresh reading. The stream
-    // yields nothing while parked at distanceFilter 10 and before a trip
-    // it has never run - relying on it alone would fail exactly when a
-    // stationary bus breaks down.
-    Position? position;
-    try {
-      position = _currentPosition ?? _lastPosition;
-      position ??= await Geolocator.getLastKnownPosition();
-      position ??= await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-    } catch (e) {
-      // Detail stays in the log; the honest fallback message is below.
-      debugPrint('[driver] SOS position fetch failed: $e');
-    }
+    // Shared best-effort fix (stream -> OS cache -> one fresh reading);
+    // the honest "no location" refusal below when all three fail.
+    final position = await _bestPosition();
     if (position == null) {
       messenger.showSnackBar(
         const SnackBar(
@@ -979,6 +993,167 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
       );
     }
+  }
+
+  /// Confirmation for Fuel Empty / Bus Fault (same nothing-sent-until-tap
+  /// contract as the SOS dialog). [issueType] is the exact CHECK value
+  /// stored in `bus_issues.issue_type`.
+  void _confirmReportIssue(String issueType) {
+    final isFuel = issueType == 'fuel_empty';
+    final title = isFuel ? 'Fuel Empty' : 'Bus Fault';
+    final icon = isFuel ? Icons.local_gas_station : Icons.build;
+    final reason = isFuel
+        ? 'the bus has run out of fuel'
+        : 'the bus has a mechanical or technical problem';
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: Colors.red),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Text(
+          'Report "$title" to the admin?\n\n'
+          'The admin receives the bus number, your name, the issue type, '
+          'the current GPS location and the reporting time.\n\n'
+          'Use it only when $reason.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              unawaited(_submitBusIssue(issueType));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('SEND REPORT'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sends a Fuel Empty / Bus Fault report into `bus_issues`, the table the
+  /// admin dashboard subscribes to live, and confirms success on screen.
+  Future<void> _submitBusIssue(String issueType) async {
+    // Captured before the first await - outlives the route, like in
+    // _sendDriverSOS.
+    final messenger = ScaffoldMessenger.of(context);
+    final isFuel = issueType == 'fuel_empty';
+    final title = isFuel ? 'Fuel Empty' : 'Bus Fault';
+
+    final last = _lastIssueAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 30)) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('You just sent a report - the admin already has it.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final position = await _bestPosition();
+    if (position == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Location is unavailable - a report must carry the bus '
+            'position. Enable location for this app and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final account = user;
+    if (account == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('You must be logged in to send a report'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final bus = _selectedBus;
+    try {
+      await _service.reportBusIssue(
+        userId: account.id,
+        driverName: account.userMetadata?['name'] ?? 'Driver',
+        busId: bus?.id,
+        busNumber: bus?.busNumber ?? '',
+        issueType: issueType,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      _lastIssueAt = DateTime.now();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isFuel ? Icons.local_gas_station : Icons.build,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$title reported - the admin has been notified with '
+                  'the bus location.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[driver] bus issue report failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not send the report. Check your connection and '
+            'try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildIssueButton({
+    required String issueType,
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: () => _confirmReportIssue(issueType),
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+    );
   }
 
   Future<void> _showLogoutDialog() async {
@@ -1474,6 +1649,40 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       ),
                     ),
                   ],
+
+                  // Operational problem reports. Always visible - a bus can
+                  // run out of fuel or break down before, during or after a
+                  // trip - and both go straight to the admin's live feed.
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Report a Problem',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildIssueButton(
+                          issueType: 'fuel_empty',
+                          icon: Icons.local_gas_station,
+                          label: 'Fuel Empty',
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildIssueButton(
+                          issueType: 'bus_fault',
+                          icon: Icons.build,
+                          label: 'Bus Fault',
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
 
                   // Quick tips card
                   if (!_isTracking) ...[

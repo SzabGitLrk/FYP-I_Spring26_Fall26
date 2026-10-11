@@ -16,6 +16,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _totalBuses = 0;
   int _activeTrips = 0;
   List<Map<String, dynamic>> _sosAlerts = [];
+  /// Driver-reported bus problems (Fuel Empty / Bus Fault). Live via
+  /// [_subscribeToBusIssues]; fails loudly like the SOS list above.
+  List<Map<String, dynamic>> _busIssues = [];
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _buses = [];
 
@@ -32,18 +35,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
   /// Live feed for SOS alerts. They were fetched exactly ONCE in initState,
   /// so a new emergency never appeared until the admin restarted the app.
   RealtimeChannel? _sosChannel;
+  RealtimeChannel? _issuesChannel;
 
   @override
   void initState() {
     super.initState();
     _refreshAll(initial: true);
     _subscribeToSOS();
+    _subscribeToBusIssues();
   }
 
   @override
   void dispose() {
     final channel = _sosChannel;
     if (channel != null) supabase.removeChannel(channel);
+    final issues = _issuesChannel;
+    if (issues != null) supabase.removeChannel(issues);
     super.dispose();
   }
 
@@ -78,6 +85,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final outcomes = await Future.wait<bool>([
       _guard(_loadStats),
       _guard(_loadSOSAlerts),
+      _guard(_loadBusIssues),
       _guard(_loadDrivers),
       _guard(_loadBuses),
     ]);
@@ -150,6 +158,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
             // pull-to-refresh remains the fallback if realtime is down.
             _loadSOSAlerts().catchError(
               (Object e) => debugPrint('[admin] sos live reload failed: $e'),
+            );
+          },
+        )
+        .subscribe();
+  }
+
+  /// Throws on failure: [_guard] reports it through the [_loadError] banner.
+  Future<void> _loadBusIssues() async {
+    final issues = await supabase
+        .from('bus_issues')
+        .select()
+        .eq('status', 'active')
+        .order('created_at', ascending: false);
+
+    if (mounted) {
+      setState(() => _busIssues = List<Map<String, dynamic>>.from(issues));
+    }
+  }
+
+  /// Keeps the driver-issue list live for the same reason the SOS feed is:
+  /// a fuel-empty or breakdown report must reach an admin already looking
+  /// at this screen, not the next time they pull to refresh.
+  void _subscribeToBusIssues() {
+    _issuesChannel = supabase
+        .channel('admin-bus-issues-${identityHashCode(this)}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'bus_issues',
+          callback: (_) {
+            // Quiet on purpose, same as the SOS callback: this sits outside
+            // _refreshAll's Future.wait, so the banner cannot represent it.
+            _loadBusIssues().catchError(
+              (Object e) =>
+                  debugPrint('[admin] bus issues live reload failed: $e'),
             );
           },
         )
@@ -264,6 +307,39 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _showError(
         'Could not resolve the SOS alert. Refresh and try again - '
         'the alert may have already been handled.',
+      );
+    }
+  }
+
+  Future<void> _resolveBusIssue(int issueId) async {
+    try {
+      // Same row-count guard as _resolveSOS: a zero-row write must not
+      // show a green "resolved" over a report that is still active.
+      final updated = await supabase
+          .from('bus_issues')
+          .update({
+            'status': 'resolved',
+            'resolved_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', issueId)
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('resolve bus issue affected no rows');
+      }
+      await _refreshAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bus issue marked resolved'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] resolve bus issue failed: $e');
+      _showError(
+        'Could not resolve the bus issue. Refresh and try again - '
+        'it may have already been handled.',
       );
     }
   }
@@ -585,6 +661,58 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                     ),
                   ),
+                ),
+
+              // Bus Issue Reports (Fuel Empty / Bus Fault), reported from
+              // the driver dashboard and delivered live like the SOS feed.
+              const Text(
+                'Bus Issue Reports',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              if (_busIssues.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No active bus issue reports')),
+                  ),
+                )
+              else
+                ..._busIssues.map(
+                  (issue) {
+                    final isFuel = issue['issue_type'] == 'fuel_empty';
+                    final rawBus = issue['bus_number'];
+                    final busLabel = rawBus is String && rawBus.isNotEmpty
+                        ? 'Bus $rawBus'
+                        : 'Bus not selected';
+                    return Card(
+                      color: Colors.orange.shade50,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Icon(
+                          isFuel ? Icons.local_gas_station : Icons.build,
+                          color: isFuel ? Colors.orange : Colors.red,
+                          size: 32,
+                        ),
+                        title: Text(
+                          '${isFuel ? 'Fuel Empty' : 'Bus Fault'} - $busLabel',
+                        ),
+                        subtitle: Text(
+                          '\uD83D\uDC64 ${issue['driver_name'] ?? 'Unknown driver'}\n'
+                          '\uD83D\uDCCD ${issue['latitude']}, ${issue['longitude']}\n'
+                          '\uD83D\uDD50 ${_formatDateTime(issue['created_at'])}',
+                        ),
+                        isThreeLine: true,
+                        trailing: ElevatedButton(
+                          onPressed: () => _resolveBusIssue(issue['id']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Text('Resolve'),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               const SizedBox(height: 24),
 
