@@ -33,6 +33,18 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Password-recovery deep link (PKCE): the Supabase email link
+                 redirects to uplreset://reset-password so the app can
+                 exchange the code and show ResetPasswordScreen. The scheme
+                 is deliberately NOT tied to the applicationId (still under
+                 review) - it keeps working across any package rename. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="uplreset" android:host="reset-password"/>
+            </intent-filter>
         </activity>
         
         <!-- Don't delete the meta-data below -->

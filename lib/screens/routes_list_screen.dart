@@ -184,6 +184,9 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
       onRefresh: _loadRoutes,
       color: Colors.blue,
       child: ListView.builder(
+        // Pull-to-refresh must work when the list is shorter than the
+        // viewport - the default physics disables dragging there.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: _routes.length,
         itemBuilder: (context, index) {

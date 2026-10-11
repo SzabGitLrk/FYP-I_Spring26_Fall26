@@ -90,6 +90,16 @@ class _MapScreenState extends State<MapScreen> {
   /// alerts) - the value used to be re-typed at each call site.
   static const Duration _staleAfter = Duration(minutes: 5);
 
+  /// Newest server-stamped fix seen this session. Freshness ages rows
+  /// against THIS (server clock vs server clock) instead of DateTime.now():
+  /// `bus_locations.timestamp` is written by the database, so comparing it
+  /// to a device clock silently broke the map whenever the two disagreed -
+  /// a phone minutes ahead had `now - 2 min` drop EVERY row (and the same
+  /// cutoff filtered the realtime events out, so nothing could recover),
+  /// while a phone minutes behind kept dead buses drawn live. Monotonic: a
+  /// bad batch cannot rewind it.
+  DateTime? _serverFixHorizon;
+
   /// Re-ages rows and polls over REST every 30 s: the realtime feed only
   /// emits on new inserts, so without a clock nothing ages out when quiet.
   Timer? _refreshTimer;
@@ -1001,6 +1011,9 @@ class _MapScreenState extends State<MapScreen> {
         widget.route.id,
         buses: buses,
       );
+      // First server-stamped rows of the session: seed the fix horizon all
+      // freshness checks age against (see _freshnessNow).
+      _absorbFixHorizon(locations);
 
       // Re-read what is actually stored for this user instead of forcing every
       // toggle back to false on refresh: the old code left the subscriptions
@@ -1061,6 +1074,10 @@ class _MapScreenState extends State<MapScreen> {
         if (!mounted) return;
         // Healthy tick: reopen the restart budget for future failures.
         _busFeedRestarts = 0;
+        // Realtime rows are INSERTs happening now: the freshest skew sample
+        // available. Absorbed before the log so the warning sees the
+        // up-to-date horizon.
+        _absorbFixHorizon(locations);
         _logClockSkew(locations);
         setState(() {
           // Newest row per bus, this route only, fresh only - see
@@ -1237,6 +1254,29 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  /// Advance the fix horizon (monotonic) from a batch of server-stamped rows.
+  void _absorbFixHorizon(Iterable<BusLocation> locations) {
+    for (final loc in locations) {
+      final horizon = _serverFixHorizon;
+      if (horizon == null || loc.timestamp.isAfter(horizon)) {
+        _serverFixHorizon = loc.timestamp;
+      }
+    }
+  }
+
+  /// Clock for freshness checks: server-relative while the newest fix is
+  /// within 15 min of this device (both clocks roughly agree, so ages are
+  /// exact); the device clock once they diverge further - the feed has been
+  /// quiet that long (no new server timestamp to advance the horizon) or
+  /// the device clock is broken. The fallback is logged by _logClockSkew.
+  DateTime _freshnessNow() {
+    final horizon = _serverFixHorizon;
+    if (horizon == null) return DateTime.now();
+    final drift = DateTime.now().difference(horizon);
+    if (drift.abs() > const Duration(minutes: 15)) return DateTime.now();
+    return horizon;
+  }
+
   /// Collapse raw feed rows to what the map shows: this route's buses only,
   /// newest row per bus, nothing older than [_staleAfter].
   ///
@@ -1244,9 +1284,11 @@ class _MapScreenState extends State<MapScreen> {
   /// the per-bus collapse the map drew a trail of ghost markers down the
   /// road and the "N active" pill counted history instead of buses.
   List<BusLocation> _collapseBusRows(Iterable<BusLocation> locations) {
+    // Absorbed first so the freshness clock below already sees this batch.
+    _absorbFixHorizon(locations);
     final routeBusIds = _buses.map((b) => b.id).toSet();
     final newest = <int, BusLocation>{};
-    final now = DateTime.now();
+    final now = _freshnessNow();
     for (final loc in locations) {
       if (!routeBusIds.contains(loc.busId)) continue;
       if (now.difference(loc.timestamp) >= _staleAfter) continue;
@@ -1260,7 +1302,7 @@ class _MapScreenState extends State<MapScreen> {
 
   /// Fresh rows only (younger than [_staleAfter]).
   List<BusLocation> _freshBuses() {
-    final now = DateTime.now();
+    final now = _freshnessNow();
     return _busLocations
         .where((loc) => now.difference(loc.timestamp) < _staleAfter)
         .toList();
@@ -1276,7 +1318,7 @@ class _MapScreenState extends State<MapScreen> {
   BusLocation? _closestServingBus(PickupPoint point) {
     final stopIndex = widget.pickupPoints.indexOf(point);
     if (stopIndex < 0) return null;
-    final now = DateTime.now();
+    final now = _freshnessNow();
     BusLocation? best;
     var bestDistance = double.infinity;
     for (final loc in _busLocations) {
@@ -1296,7 +1338,7 @@ class _MapScreenState extends State<MapScreen> {
   /// Freshest bus near [point] regardless of direction - drives the
   /// distance fallback when no serving bus exists.
   BusLocation? _closestFreshBus(PickupPoint point) {
-    final now = DateTime.now();
+    final now = _freshnessNow();
     BusLocation? best;
     var bestDistance = double.infinity;
     for (final loc in _busLocations) {
@@ -1327,7 +1369,7 @@ class _MapScreenState extends State<MapScreen> {
   /// position - and its "4 min" ETA - on the map forever.
   void _ageOutStaleBuses() {
     if (!mounted || _busLocations.isEmpty) return;
-    final now = DateTime.now();
+    final now = _freshnessNow();
     final fresh = _busLocations
         .where((loc) => now.difference(loc.timestamp) < _staleAfter)
         .toList();
@@ -1378,21 +1420,25 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  /// Warn when the device clock lags the server: every freshness filter is
-  /// computed against DateTime.now(), so a clock minutes behind (cheap
-  /// Android devices) makes `now - 2 min` drop EVERY row and the map shows
-  /// no buses at all while they are running.
+  /// Warn when the device clock disagrees with the server by enough to
+  /// matter. Freshness ages rows against the newest server fix (see
+  /// [_freshnessNow]), so a few minutes of skew is harmless - but beyond
+  /// the 15-minute regime threshold the fallback flips to the device
+  /// clock, and that flip (or a clock badly wrong in either direction)
+  /// must be visible in the log.
   void _logClockSkew(List<BusLocation> locations) {
     if (locations.isEmpty) return;
     DateTime newest = locations.first.timestamp;
     for (final loc in locations) {
       if (loc.timestamp.isAfter(newest)) newest = loc.timestamp;
     }
-    final ahead = newest.difference(DateTime.now());
-    if (ahead > const Duration(minutes: 2)) {
+    // + = the newest server fix is ahead of the device = clock is BEHIND.
+    final skew = newest.difference(DateTime.now());
+    if (skew.abs() > const Duration(minutes: 5)) {
       debugPrint(
-        '[map] WARNING device clock is ${ahead.inMinutes} min behind the '
-        'server - freshness filters may drop live rows',
+        '[map] WARNING device clock ${skew.isNegative ? "ahead of" : "behind"}'
+        ' the server by ${skew.abs().inMinutes} min - freshness falls back '
+        'to the device clock beyond 15 min',
       );
     }
   }
@@ -1448,8 +1494,12 @@ class _MapScreenState extends State<MapScreen> {
       final serving = _closestServingBus(point);
       if (serving == null) continue;
       // A fix older than [_staleAfter] must not produce an "arriving" alert
-      // for a bus that parked (or stopped reporting) long ago.
-      if (now.difference(serving.timestamp) >= _staleAfter) continue;
+      // for a bus that parked (or stopped reporting) long ago. Server clock
+      // (see _freshnessNow): a wrong device clock must neither mute nor
+      // spam these either.
+      if (_freshnessNow().difference(serving.timestamp) >= _staleAfter) {
+        continue;
+      }
 
       final distance = serving.distanceTo(point.latitude, point.longitude);
       final eta = _etaMinutes(serving, point);
@@ -1766,6 +1816,35 @@ class _MapScreenState extends State<MapScreen> {
 
                         try {
                           if (!isNotifying) {
+                            // Gate like profile_screen does: arming an alert
+                            // the OS will never deliver leaves a persisted
+                            // row and a green "you'll be notified" the
+                            // student cannot trust.
+                            if (!await NotificationService()
+                                .ensurePermission()) {
+                              debugPrint(
+                                '[map] notification permission denied by the '
+                                'OS - not subscribing to stop ${point.id}',
+                              );
+                              if (mounted) {
+                                setState(() {
+                                  _notificationsEnabled[point.id] = false;
+                                });
+                              }
+                              if (context.mounted) {
+                                setSheetState(() {});
+                              }
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Notifications are blocked — enable them '
+                                    'for this app in system settings.',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
                             await _service.subscribeToStopNotifications(
                               point.id,
                               routeId: widget.route.id,
@@ -2053,6 +2132,15 @@ class _MapScreenState extends State<MapScreen> {
   void _zoomToFitAllStops() {
     if (widget.pickupPoints.isEmpty) return;
     if (!_mapReady) return;
+    // Zero-area bounds (one stop, or every stop on the same coordinate)
+    // make CameraFit.bounds compute scale = size/0 = Infinity: flutter_map
+    // asserts in debug and TileLayer throws "Infinity is not finite" in
+    // release, erroring the whole map body. Center on the stop instead.
+    if (widget.pickupPoints.length < 2) {
+      final p = widget.pickupPoints.first;
+      _mapController.move(LatLng(p.latitude, p.longitude), 16);
+      return;
+    }
 
     double minLat = widget.pickupPoints
         .map((p) => p.latitude)
@@ -2075,6 +2163,9 @@ class _MapScreenState extends State<MapScreen> {
           LatLng(maxLat, maxLng),
         ),
         padding: const EdgeInsets.all(50),
+        // Never zoom past the tile server's max on a pathologically tight
+        // bounds (all stops nearly coincident but not identical).
+        maxZoom: 17,
       ),
     );
   }

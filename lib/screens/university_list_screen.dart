@@ -282,6 +282,10 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
       onRefresh: _loadUniversities,
       color: Colors.blue,
       child: ListView.builder(
+        // Pull-to-refresh must work when the list is shorter than the
+        // viewport (one university) - the default physics disables
+        // dragging there.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: _universities.length,
         itemBuilder: (context, index) {

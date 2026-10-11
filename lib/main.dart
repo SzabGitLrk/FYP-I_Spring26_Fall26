@@ -37,31 +37,42 @@ void main() async {
   if (initialized) {
     // Own try/catch: a notification-plugin failure must not skip the auth
     // listener below (it used to, silently leaving taps unhandled).
-    try {
-      // Initialize local notifications (mobile only)
-      if (!kIsWeb) {
-        final notificationService = NotificationService();
-        await notificationService.initialize();
-        debugPrint('✅ Local notifications initialized!');
-      } else {
-        debugPrint('🌐 Web detected - skipping notifications');
-      }
-    } catch (e) {
-      debugPrint('❌ Notification init failed: $e');
-    }
-
-    // Optional: Listen to auth changes for debugging
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final session = data.session;
-      if (session != null) {
-        // No PII in logs: debugPrint is NOT stripped in release builds, and
-        // every e-mail here was readable by anyone plugging in a phone.
-        // The user id correlates just as well.
-        debugPrint('🔐 Auth: ${data.event} - User: ${session.user.id}');
-      } else {
-        debugPrint('🔐 Auth: ${data.event} - No session');
+    // Initialize local notifications (mobile only) AFTER the first frame:
+    // initialize() awaits the Android 13+ POST_NOTIFICATIONS prompt, and
+    // awaiting that inside main() held the whole UI behind the static
+    // launch window until the user answered. Arming a specific alert is
+    // still gated by NotificationService.ensurePermission at each site.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (!kIsWeb) {
+          await NotificationService().initialize();
+          debugPrint('✅ Local notifications initialized!');
+        } else {
+          debugPrint('🌐 Web detected - skipping notifications');
+        }
+      } catch (e) {
+        debugPrint('❌ Notification init failed: $e');
       }
     });
+
+    // Optional: Listen to auth changes for debugging
+    Supabase.instance.client.auth.onAuthStateChange.listen(
+      (data) {
+        final session = data.session;
+        if (session != null) {
+          // No PII in logs: debugPrint is NOT stripped in release builds, and
+          // every e-mail here was readable by anyone plugging in a phone.
+          // The user id correlates just as well.
+          debugPrint('🔐 Auth: ${data.event} - User: ${session.user.id}');
+        } else {
+          debugPrint('🔐 Auth: ${data.event} - No session');
+        }
+      },
+      // gotrue pushes auth failures (token refresh, network) onto this same
+      // stream; without a handler every refresh failure became an unhandled
+      // async exception in release.
+      onError: (Object e) => debugPrint('🔐 Auth stream error: $e'),
+    );
   }
 
   runApp(MyApp(canStart: initialized));

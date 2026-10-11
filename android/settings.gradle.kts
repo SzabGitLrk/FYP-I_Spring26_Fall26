@@ -20,7 +20,10 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // 2.3.20: Flutter warned on every build that 2.2.20 support "will soon
+    // be dropped" - bumped before launch rather than at the next Flutter
+    // patch that hard-fails it.
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
 include(":app")

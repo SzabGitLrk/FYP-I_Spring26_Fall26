@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
@@ -93,7 +94,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .from('stop_notifications')
           .select('stop_id, route_id')
           .eq('user_id', user.id)
-          .eq('is_active', true);
+          .eq('is_active', true)
+          // Stable, most-recently-toggled first: without an order the list
+          // re-shuffled between loads. nullsFirst: legacy rows predate the
+          // updated_at writes and must not float to the top.
+          .order('updated_at', ascending: false, nullsFirst: false);
       final subRows = List<Map<String, dynamic>>.from(subs as List);
       final stopIds = [
         for (final s in subRows)
@@ -158,6 +163,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .where((s) => s['notifications'] == true)
             .length;
 
+        // A successful retry must clear the stale error, otherwise one
+        // failed load left this screen on the error branch forever.
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
@@ -166,7 +174,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       debugPrint('[profile] load failed: $e');
       setState(() {
-        _error = 'Could not load your profile. Pull down to retry.';
+        // The error branch has no RefreshIndicator - point at what IS
+        // there (the Retry button below) instead of a gesture that does
+        // nothing.
+        _error = 'Could not load your profile. Tap Retry to try again.';
         _isLoading = false;
       });
     }
@@ -263,7 +274,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // Optimistic flip - rolled back below if the server disagrees, so the
     // bell icon never claims an alert is armed when the write failed.
-    setState(() => stop['notifications'] = enable);
+    setState(() {
+      stop['notifications'] = enable;
+      // Keep the "Alerts ON" stat honest while the bell flips - here and
+      // in both rollback paths below.
+      _notificationCount = _favoriteStops
+          .where((s) => s['notifications'] == true)
+          .length;
+    });
 
     try {
       if (enable) {
@@ -276,14 +294,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'not subscribing to stop $stopId',
           );
           if (!mounted) return;
-          setState(() => stop['notifications'] = false);
+          setState(() {
+            stop['notifications'] = false;
+            _notificationCount = _favoriteStops
+                .where((s) => s['notifications'] == true)
+                .length;
+          });
+          // Actionable: "go enable them" without a route to the Settings
+          // page is a dead end for most users.
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
+            SnackBar(
+              content: const Text(
                 'Notifications are blocked — enable them for this app in '
                 'system settings.',
               ),
               backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'SETTINGS',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Fire-and-forget: opens the OS app-settings page.
+                  Geolocator.openAppSettings().catchError((Object e) {
+                    debugPrint('[profile] openAppSettings failed: $e');
+                    return false;
+                  });
+                },
+              ),
             ),
           );
           return;
@@ -298,7 +334,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint('[profile] notification toggle failed: $e');
       if (!mounted) return;
-      setState(() => stop['notifications'] = !enable);
+      setState(() {
+        stop['notifications'] = !enable;
+        _notificationCount = _favoriteStops
+            .where((s) => s['notifications'] == true)
+            .length;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not update notifications. Please try again.'),
@@ -398,7 +439,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final Color primaryColor = _role == 'driver' ? Colors.green : Colors.blue;
     // Plural-aware labels: "1 Favorites" reads as a bug on a launch build.
     final favoriteLabel = _favoriteCount == 1 ? 'Favorite' : 'Favorites';
-    final alertsLabel = _notificationCount == 1 ? 'Alert On' : 'Alerts ON';
+    // Zero-aware: "Alerts ON" over a 0 read as a bug on a launch build.
+    final alertsLabel = _notificationCount == 0
+        ? 'Alerts Off'
+        : (_notificationCount == 1 ? 'Alert On' : 'Alerts ON');
 
     return Scaffold(
       appBar: AppBar(
@@ -592,7 +636,11 @@ color: primaryColor.withValues(alpha: 0.3),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Member since ${_memberSince?.year ?? 2026}',
+                                  // No fabricated year when the signup stamp
+                                  // is missing - a guess the app cannot back.
+                                  _memberSince == null
+                                      ? 'Member since —'
+                                      : 'Member since ${_memberSince!.year}',
                                   style: TextStyle(color: Colors.grey[600]),
                                 ),
                               ],

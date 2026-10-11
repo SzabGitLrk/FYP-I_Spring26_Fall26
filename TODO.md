@@ -42,6 +42,15 @@ Closed items are summarised at the bottom.
   Sign In / Providers → Email/Password → "Check password against
   HaveIBeenPwned.org") — the only Advisor finding that is a dashboard
   toggle, not SQL.
+- [x] **Add `uplreset://reset-password` to Dashboard → Authentication → URL
+  Configuration → Redirect URLs** — DONE 11 Oct 2026: allow-list now holds
+  `uplreset://reset-password` (matches the manifest intent-filter and
+  `login_screen.dart`'s `redirectTo` exactly), so "Forgot Password?" can
+  deliver the PKCE recovery code into the app. Cleanup leftover: the list
+  also holds the literal placeholder
+  `https://your-project-ref.supabase.co/auth/v1/callback` (can never
+  match — delete when convenient) and Site URL is still the default
+  `http://localhost:3000` (only a fallback; point it at a real page).
 - [ ] `buses.driver_phone` is world-readable to the anon key — move it behind
   an authenticated view / RPC used by the "Contact" button.
 - [ ] Decide the SOS throttling rule (trigger: max 1 active alert per user
@@ -100,6 +109,20 @@ Closed items are summarised at the bottom.
 - [ ] Bottom overlay layout is hard-coded (`bottom:` constants) — restructure
   with `LayoutBuilder` for tablets/small widths; the ETA card now clears the
   SOS FAB and is capped at 2 lines, but a full layout pass is still wanted.
+- [ ] AGP 8.11.1 / Gradle 8.14 now BOTH emit "will soon be dropped"
+  warnings (Flutter wants AGP ≥ 9.0.1 / Gradle ≥ 9.1.0) — builds still
+  succeed; schedule the AGP 9 + Gradle 9 upgrade for right AFTER launch
+  (major migration: could touch signing, Flutter plugin wiring — don't
+  do it pre-ship). Kotlin is already at 2.3.20; that bump required
+  migrating `android/app/build.gradle.kts` off the removed
+  `android.kotlinOptions { jvmTarget = "17" }` string setter (hard
+  error since 2.3.x) to `kotlin { compilerOptions { jvmTarget =
+  JvmTarget.JVM_17 } }`.
+- [ ] `trips.start_time` is still stamped from the device clock (cosmetic
+  only: trip-history dates shift with a wrong clock; durations stay
+  self-consistent because both ends use the same clock). Optional hardening:
+  `ALTER TABLE public.trips ALTER COLUMN start_time SET DEFAULT now();` and
+  stop sending the value from `startTrip`.
 - [x] Stop-detail / "All Stops" bottom sheets now track live ETAs — both
   sheets listen to a `_busRevision` ValueNotifier bumped wherever
   `_busLocations` changes (a modal sheet is its own route and never saw
@@ -219,3 +242,41 @@ DRAWN bus marker onto the route line (≤ 50 m snap; genuine detours shown
 honestly; ETAs/distances keep the raw fix) so a GPS wander no longer
 reads as "the bus left the route". Requires `supabase_bus_issues.sql`
 (§A) to be run.
+
+Full three-track launch audit (11 Oct 2026 — services/backend, screens/
+state, platform/models/navigation; ~35 findings, zero Severity-1s):
+live-map clock skew fixed for good — the device-clock `gte` cutoff is gone
+from BOTH bus-location queries (it emptied the map, and filtered every
+realtime event, whenever the phone clock ran minutes ahead); freshness now
+ages rows against the newest SERVER fix seen (`_serverFixHorizon` +
+`_freshnessNow`, 15-min device-clock fallback, both skew directions
+logged). `endTrip` is row-verified (RLS-filtered zero-row writes no longer
+report success), `sos_alerts.created_at` uses the server default, stop
+subscription writes fail loudly when signed out, bus queries and
+favourites gained stable orders. Driver: logout closes an active trip
+while still authenticated; End Trip is re-entrancy-guarded and keeps the
+trip id on failure so dispose can retry; superseded starts close with
+distance 0 (the old value belonged to the new session); the reap now
+catches NULL-`start_time` orphans; stop-progress tests arrival BEFORE the
+skip scan; a trip refuses to start without location; the GPS listener and
+foreground-service start/stop races are guarded; "Trip started" only
+claims success for a write that happened. Student/profile: `_error` clears
+on successful retry (driver + profile), the "Alerts" stat stays honest
+across toggles (and reads "Alerts Off" at zero), no fabricated member
+year, blocked-notification snackbar offers Settings directly. Login/signup:
+confirm-password field (a typo'd password was an un-lockable account),
+role captured before the awaits, in-flight guard on Forgot Password, and
+the reset flow now actually works end-to-end — `redirectTo`
+`uplreset://reset-password` + manifest intent-filter + `ResetPasswordScreen`
+routed from RoleRouter's `passwordRecovery` event (needs the §A
+allow-list line). Role-router fallback is insert-only (a concurrent row can
+no longer be demoted) and re-reads what is stored; its sign-out awaits
+with feedback. Map: Notify Me is gated by the OS permission like the
+profile is, single-stop routes center instead of computing an Infinity
+zoom, pull-to-refresh works on every short list. Main: notification
+permission prompt moved after the first frame, auth stream got an
+onError. Route follower re-seeds from a whole-route scan whenever the
+continuity window is stale (GNSS gaps no longer latch a false "off route"
+with frozen progress). Platform: `device_info_plus` (never imported) removed,
+SDK floor honest at ^3.12.0, Kotlin 2.3.20, SOS notification got the
+`kIsWeb` guard its siblings had.

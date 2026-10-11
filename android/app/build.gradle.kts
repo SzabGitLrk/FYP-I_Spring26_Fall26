@@ -29,10 +29,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         applicationId = "com.example.university_point_locator"
         minSdk = flutter.minSdkVersion
@@ -71,6 +67,15 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        // Kotlin 2.3.x removed the legacy android.kotlinOptions { jvmTarget = "17" }
+        // string setter (now a hard compile error); this is the supported DSL and
+        // keeps bytecode aligned with compileOptions' Java 17 above.
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 

@@ -68,7 +68,8 @@ class SupabaseService {
           .from('buses')
           .select()
           .eq('route_id', routeId)
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .order('bus_number', ascending: true);
 
       return (response as List).map((item) => Bus.fromJson(item)).toList();
     } catch (e) {
@@ -82,7 +83,8 @@ class SupabaseService {
           .from('buses')
           .select()
           .eq('driver_name', driverName)
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .order('bus_number', ascending: true);
 
       return (response as List).map((item) => Bus.fromJson(item)).toList();
     } catch (e) {
@@ -95,7 +97,8 @@ class SupabaseService {
       final response = await _client
           .from('buses')
           .select()
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .order('bus_number', ascending: true);
 
       return (response as List).map((item) => Bus.fromJson(item)).toList();
     } catch (e) {
@@ -135,14 +138,24 @@ class SupabaseService {
 
   Future<void> endTrip(int tripId, double distanceKm) async {
     try {
-      await _client
+      // Row-verified: PostgREST answers 204 for a write that affected ZERO
+      // rows, and "Trips update" RLS (auth.uid() = driver_id) filters the
+      // row out when the session is already gone - that silent no-op used
+      // to report success while the trip stayed "active" with no distance.
+      // Callers now see the failure and can retry (or the 12-hour reap
+      // closes the row later).
+      final updated = await _client
           .from('trips')
           .update({
             'end_time': DateTime.now().toUtc().toIso8601String(),
             'distance_km': distanceKm,
             'status': 'completed',
           })
-          .eq('id', tripId);
+          .eq('id', tripId)
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('end trip affected no rows');
+      }
     } catch (e) {
       throw Exception('Failed to end trip: $e');
     }
@@ -187,18 +200,16 @@ class SupabaseService {
       // would download that whole history on every map open; the 500 most
       // recent rows always cover one fix per bus.
       //
-      // Ghost-bus guard on top: without an age floor, "newest row per bus"
-      // for a bus that stopped reporting yesterday IS yesterday's last fix,
-      // drawn live with a plausible ETA. Only the last 2 minutes count.
-      final cutoff = DateTime.now()
-          .toUtc()
-          .subtract(const Duration(minutes: 2))
-          .toIso8601String();
+      // No age floor HERE on purpose: `timestamp` is stamped by the SERVER,
+      // and a device-clock cutoff silently emptied the map whenever the
+      // phone's clock ran minutes ahead. Freshness is owned by map_screen,
+      // which ages rows against the newest server fix seen - one clock, no
+      // skew (ghost-bus protection lives there too, in _freshnessNow /
+      // _ageOutStaleBuses).
       final response = await _client
           .from('bus_locations')
           .select()
           .inFilter('bus_id', busIds)
-          .gte('timestamp', cutoff)
           .order('timestamp', ascending: false)
           .limit(500);
 
@@ -230,19 +241,15 @@ class SupabaseService {
   /// at least keeps the replayed history bounded instead of re-downloading
   /// the table's entire append-only past on every subscribe.
   ///
-  /// The same 2-minute age floor as [getBusLocationsForRoute] applies: the
-  /// cutoff is fixed at subscribe time (the screen's lifetime is short), and
-  /// consumers re-check age before acting on a row, so an old fix can neither
-  /// replay on first subscribe nor produce a phantom alert later.
+  /// No age filter here either - on a `.stream()` the same predicate is
+  /// ALSO passed to the realtime channel as a server-side filter, so a
+  /// device-clock cutoff didn't just empty the first replay: it dropped
+  /// every live event while the clock was wrong. Consumers age rows on the
+  /// server clock instead (map_screen's fix horizon, see _freshnessNow).
   Stream<List<BusLocation>> subscribeToBusLocations() {
-    final cutoff = DateTime.now()
-        .toUtc()
-        .subtract(const Duration(minutes: 2))
-        .toIso8601String();
     return _client
         .from('bus_locations')
         .stream(primaryKey: ['id'])
-        .gte('timestamp', cutoff)
         .order('timestamp', ascending: false)
         .limit(500)
         .map((maps) {
@@ -265,7 +272,10 @@ class SupabaseService {
     int? routeId,
   }) async {
     final uid = _getUserId();
-    if (uid == null) return;
+    // Honest failure instead of a silent no-op: callers show "enabled" over
+    // the return value, and a signed-out write that does nothing must not
+    // claim otherwise. Both callers surface this through their catch blocks.
+    if (uid == null) throw StateError('Not signed in');
     try {
       // Update first, insert only when no row exists yet - deliberately NOT
       // an `upsert()`. Without knowing whether `stop_notifications` carries a
@@ -312,7 +322,7 @@ class SupabaseService {
     int? routeId,
   }) async {
     final uid = _getUserId();
-    if (uid == null) return;
+    if (uid == null) throw StateError('Not signed in');
     try {
       final builder = _client
           .from('stop_notifications')
@@ -372,13 +382,15 @@ class SupabaseService {
     required double longitude,
   }) async {
     try {
+      // `created_at` is deliberately NOT sent: the column default is the
+      // SERVER's clock (same contract bus_issues documents), so dispatch's
+      // "reported at" ordering cannot be scrambled by a wrong device clock.
       await _client.from('sos_alerts').insert({
         'user_id': userId,
         'user_name': userName,
         'latitude': latitude,
         'longitude': longitude,
         'status': 'active',
-        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
       rethrow;

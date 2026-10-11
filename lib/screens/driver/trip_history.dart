@@ -48,7 +48,10 @@ class _TripHistoryState extends State<TripHistory> {
           .from('trips')
           .select('*, routes(route_name)')
           .eq('driver_id', userId)
-          .order('start_time', ascending: false);
+          // nullsFirst: false - PostgreSQL's DESC default is NULLS FIRST, so
+          // legacy rows with no start_time sorted ABOVE every real trip as
+          // "Date unknown / Trip #1".
+          .order('start_time', ascending: false, nullsFirst: false);
       if (mounted) {
         setState(() {
           _trips = List<Map<String, dynamic>>.from(trips);
@@ -148,6 +151,10 @@ class _TripHistoryState extends State<TripHistory> {
               : RefreshIndicator(
                   onRefresh: _loadTrips,
                   child: ListView.builder(
+                    // Pull-to-refresh must work when the list is shorter
+                    // than the viewport (a driver with a few trips) - the
+                    // default physics disables dragging there.
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     itemCount: _trips.length,
                     itemBuilder: (context, index) {
@@ -175,7 +182,12 @@ class _TripHistoryState extends State<TripHistory> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              if (distance != null)
+                              // Completed only: `distance_km` defaults to 0
+                              // and is written by End Trip, so in-progress
+                              // and reaped rows would show a fabricated
+                              // "0.0 km".
+                              if (trip['status'] == 'completed' &&
+                                  distance != null)
                                 Chip(
                                   label: Text(
                                       '${distance.toStringAsFixed(1)} km'),

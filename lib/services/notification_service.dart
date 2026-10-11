@@ -140,6 +140,10 @@ class NotificationService {
   }
 
   Future<void> showSOSNotification() async {
+    // Same platform guard as ensurePermission/showBusArrivalNotification:
+    // the unawaited calls from map_screen/driver_dashboard would otherwise
+    // raise an unhandled MissingPluginException on web.
+    if (kIsWeb) return;
     const androidDetails = AndroidNotificationDetails(
       'sos_alerts',
       'SOS Emergency Alerts',

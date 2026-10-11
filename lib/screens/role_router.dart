@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/screens/login_screen.dart';
+import 'package:university_point_locator/screens/reset_password_screen.dart';
 import 'package:university_point_locator/screens/university_list_screen.dart';
 import 'package:university_point_locator/screens/driver/driver_dashboard.dart';
 import 'package:university_point_locator/screens/admin/admin_dashboard.dart';
@@ -43,6 +44,14 @@ class _RoleRouterState extends State<RoleRouter> {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
+        }
+
+        // Password-recovery deep link (PKCE): the session exists but the
+        // user has not chosen a new password yet - route to the reset
+        // screen instead of a dashboard. Covers warm links and cold starts
+        // alike: gotrue emits passwordRecovery for both.
+        if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+          return const ResetPasswordScreen();
         }
 
         final session = Supabase.instance.client.auth.currentSession;
@@ -123,20 +132,32 @@ class _RoleRouterState extends State<RoleRouter> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': userId,
-        'name': user.userMetadata?['name'] ?? 'User',
-        'email': user.email,
-        'role': 'student',
-        'is_approved': false,
-      });
-
-      if (mounted && _resolvedForUserId == userId) {
-        setState(() {
-          _resolvedRole = 'student';
-          _isApproved = false;
+      // Insert-only: an `upsert` could overwrite a row the signup trigger
+      // (or an admin) created CONCURRENTLY - demoting a driver back to
+      // 'student'. A unique-violation just means the row exists now; the
+      // re-read below renders whatever is actually stored.
+      try {
+        await Supabase.instance.client.from('profiles').insert({
+          'id': userId,
+          'name': user.userMetadata?['name'] ?? 'User',
+          'email': user.email,
+          'role': 'student',
+          'is_approved': false,
         });
+      } catch (_) {
+        // Row already there (created concurrently) - fall through to the
+        // re-read; any other failure surfaces via that lookup's own error.
       }
+      final created = await Supabase.instance.client
+          .from('profiles')
+          .select('role, is_approved')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!mounted || _resolvedForUserId != userId) return;
+      setState(() {
+        _resolvedRole = created?['role'] as String? ?? 'student';
+        _isApproved = created?['is_approved'] == true;
+      });
     } catch (e) {
       // Fail closed: never GUESS a role from a failed lookup - and never
       // silently resolve to `student` either. A transient error used to
@@ -223,7 +244,25 @@ class _PendingApprovalScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: () => Supabase.instance.client.auth.signOut(),
+              onPressed: () async {
+                // Awaited with feedback: a failed sign-out (offline) used
+                // to leave the user staring at the same screen with no hint
+                // the tap did nothing.
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                } catch (e) {
+                  debugPrint('[role_router] sign-out failed: $e');
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Could not sign out. Check your connection and try again.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),
@@ -276,7 +315,25 @@ class _RoleResolveErrorScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: () => Supabase.instance.client.auth.signOut(),
+              onPressed: () async {
+                // Awaited with feedback: a failed sign-out (offline) used
+                // to leave the user staring at the same screen with no hint
+                // the tap did nothing.
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                } catch (e) {
+                  debugPrint('[role_router] sign-out failed: $e');
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Could not sign out. Check your connection and try again.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),

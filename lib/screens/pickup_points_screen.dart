@@ -227,6 +227,9 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
       onRefresh: _loadPickupPoints,
       color: Colors.blue,
       child: ListView.builder(
+        // Pull-to-refresh must work when the list is shorter than the
+        // viewport - the default physics disables dragging there.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: _pickupPoints.length,
         itemBuilder: (context, index) {

@@ -12,8 +12,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLogin = true;
   bool _isLoading = false;
+  bool _isSendingReset = false;
   String? _selectedRole = 'student';
 
   @override
@@ -21,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -46,6 +49,12 @@ class _LoginScreenState extends State<LoginScreen> {
       error = 'Password must be at least 6 characters';
     } else if (!_isLogin && _nameController.text.trim().isEmpty) {
       error = 'Please enter your name';
+    } else if (!_isLogin &&
+        _confirmPasswordController.text != _passwordController.text) {
+      // A typo'd first password used to become an account nobody can sign
+      // into - there is no self-service recovery for a password the user
+      // never knew they set.
+      error = 'Passwords do not match';
     }
 
     if (error == null) return true;
@@ -67,6 +76,10 @@ class _LoginScreenState extends State<LoginScreen> {
     // Also captured: the error copy below must describe the action that was
     // actually running, not a toggle the user may have flipped mid-request.
     final isLogin = _isLogin;
+    // Same reasoning for the role: read AFTER the awaits, it would report -
+    // and write - whatever the dropdown was flipped to mid-request, making
+    // profiles.role disagree with the signup metadata.
+    final selectedRole = _selectedRole ?? 'student';
 
     try {
       if (isLogin) {
@@ -80,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
           password: password,
           data: {
             'name': name,
-            'role': _selectedRole,
+            'role': selectedRole,
             'created_at': DateTime.now().toUtc().toIso8601String(),
           },
         );
@@ -101,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Only 'student' / 'driver' are selectable above, and the
                 // database guard re-validates this regardless: a client can
                 // never self-assign 'admin' or self-approve.
-                'role': _selectedRole,
+                'role': selectedRole,
                 'is_approved': false,
               });
             }
@@ -170,6 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _resetPassword() async {
+    if (_isSendingReset) return; // double tap = duplicate mail + rate limit
     final email = _emailController.text.trim();
     if (email.isEmpty) {
       if (!mounted) return;
@@ -182,8 +196,17 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    setState(() => _isSendingReset = true);
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      // redirectTo delivers the PKCE code INTO the app (custom scheme
+      // registered in AndroidManifest, handled by ResetPasswordScreen via
+      // RoleRouter). Without it the link opened the browser and dead-ended
+      // at the Supabase Site URL - the app never saw the recovery while
+      // the UI claimed the reset was underway.
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'uplreset://reset-password',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -208,6 +231,8 @@ class _LoginScreenState extends State<LoginScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      if (mounted) setState(() => _isSendingReset = false);
     }
   }
 
@@ -345,12 +370,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                      if (!_isLogin) ...[
+                        const SizedBox(height: 16),
+                        // A typo'd first password used to become an account
+                        // nobody can sign into.
+                        TextField(
+                          controller: _confirmPasswordController,
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            labelText: 'Confirm password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       if (_isLogin)
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: _resetPassword,
+                            onPressed: _isSendingReset ? null : _resetPassword,
                             child: const Text(
                               'Forgot Password?',
                               style: TextStyle(color: Colors.blue),

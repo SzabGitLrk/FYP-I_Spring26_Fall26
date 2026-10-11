@@ -180,8 +180,32 @@ class RouteFollower {
         along = _cumulative[i - 1] + projection.fraction * segAlong;
       }
     }
+    // A fix more than [_continuityWindow] away from every windowed segment
+    // (or a window that matched no segment at all) means the window itself
+    // is stale: a GNSS gap, an urban-canyon teleport, or the burst after
+    // the send throttle. Re-seed from a whole-route scan instead of
+    // accepting the stale projection - which reported the jump as
+    // off-route (latching a needless debounced reroute) while progress
+    // lagged at the old mark and self-healed only ~200 m per fix.
+    if (offRoute > _continuityWindow) {
+      for (var i = 1; i < points.length; i++) {
+        final segStart = _cumulative[i - 1];
+        final segAlong = _segmentMeters(points[i - 1], points[i]);
+        if (segAlong == 0) continue;
+        final projection = _projectOnSegment(
+          position,
+          points[i - 1],
+          points[i],
+        );
+        if (projection.perpendicular < offRoute) {
+          offRoute = projection.perpendicular;
+          along = segStart + projection.fraction * segAlong;
+        }
+      }
+    }
     if (offRoute == double.infinity) {
-      // Degenerate single-point route: treat the position as at the start.
+      // Degenerate route: a single point, or every segment zero-length
+      // (duplicate vertices) - the position counts as at that point.
       offRoute = distanceMeters(position, points.first);
     }
 

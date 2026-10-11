@@ -4,7 +4,9 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.0
+  # Matches what pubspec.lock actually resolved (dart >=3.12.0): the old
+  # ^3.11.0 advertised a compatibility resolution could not honour.
+  sdk: ^3.12.0
 
 # ✅ DEPENDENCIES SECTION - AT ROOT LEVEL
 dependencies:
@@ -25,8 +27,7 @@ dependencies:
   # without one - students would see frozen buses on every real trip).
   flutter_foreground_task: ^11.0.3
 
-  # Device info
-  device_info_plus: ^10.0.0
+
   
   # Local notifications (no Firebase needed)
   flutter_local_notifications: ^18.0.0

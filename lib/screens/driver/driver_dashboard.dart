@@ -99,9 +99,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void dispose() {
     _positionSubscription?.cancel();
     _locationHeartbeatTimer?.cancel();
+    // Clearing the flag FIRST stops the GPS listener/heartbeat from touching
+    // state, and lets an in-flight _startForegroundService see that nothing
+    // is tracking and tear the service down itself (its post-await guard).
     // Leaving the dashboard mid-trip must not orphan the "Trip in progress"
-    // notification (stopWithTask only covers swiping the app away).
-    if (_isTracking) _stopForegroundService();
+    // notification either (stopWithTask only covers swiping the app away).
+    final wasTracking = _isTracking;
+    _isTracking = false;
+    if (wasTracking) _stopForegroundService();
     // dispose() cannot await: close the trip row fire-and-forget so signing
     // out or navigating away does not leave the trip "active" forever.
     // (If End Trip already ran, `_currentTripId` is null and this is a no-op;
@@ -172,6 +177,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       if (!mounted) return;
       setState(() {
         _assignedRoutes = allRoutes;
+        // A successful retry must clear the stale error, otherwise one
+        // failed load left the dashboard on the error branch forever.
+        _error = null;
         _isLoading = false;
       });
       // Close trips orphaned by a crash or a failed End Trip. Fire-and-
@@ -218,7 +226,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .select('id, start_time')
           .eq('driver_id', driverId)
           .eq('status', 'active')
-          .lt('start_time', cutoff)
+          // `.lt` alone never matches a NULL start_time (a failed insert
+          // can leave one behind), so those orphans stayed "active"
+          // forever - the reap must include them.
+          .or('start_time.lt.$cutoff,start_time.is.null')
           .order('start_time', ascending: true);
 
       for (final row in stale as List) {
@@ -276,26 +287,29 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   'your phone Settings > Apps > University Point Locator > '
                   'Permissions > Location and allow it, then start your trip.'
               : 'Students can only follow your bus if the app can share its '
-                  'location. Please allow location access when prompted - '
-                  'without it, tracking will not work.',
+                  'location. Location access was declined - allow it in the '
+                  'phone Settings, or re-approve it when prompted, then '
+                  'start your trip.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('OK'),
           ),
-          if (permanentlyDenied)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                // Fire-and-forget: opens the OS app-settings page.
-                Geolocator.openAppSettings().catchError((Object e) {
-                  debugPrint('[driver] openAppSettings failed: $e');
-                  return false;
-                });
-              },
-              child: const Text('Open settings'),
-            ),
+          // Shown for ANY non-granted result, not just deniedForever: after
+          // a plain "denied" the prompt will not come back on its own, so
+          // the Settings shortcut is the only actionable path there too.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              // Fire-and-forget: opens the OS app-settings page.
+              Geolocator.openAppSettings().catchError((Object e) {
+                debugPrint('[driver] openAppSettings failed: $e');
+                return false;
+              });
+            },
+            child: const Text('Open settings'),
+          ),
         ],
       ),
     );
@@ -443,6 +457,36 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // insert and leave an orphaned "active" trip behind. [_isStartingTrip]
     // additionally covers the await on the bus-picker dialog below.
     if (_isTracking || _isStartingTrip) return;
+    // Refuse the trip outright without location: a drive tracked from zero
+    // GPS fixes shows students nothing (the FGS start would fail silently
+    // too, and "Trip started successfully!" would be a lie). denied gets
+    // one more prompt attempt; the dialog explains and offers Settings.
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled ||
+        permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (!mounted) return;
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location is turned off - enable it, then start your trip.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else {
+        _showLocationPermissionDialog(permission);
+      }
+      return;
+    }
+    // Re-guarded after the permission awaits above: the lint (correctly)
+    // refuses the context uses below across that async gap otherwise.
+    if (!mounted) return;
     final route = _selectedRoute;
     if (route == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -517,9 +561,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // afterwards could lose the race, or match an orphaned row with a
       // NULL start_time that sorts first under the DESC default - writing
       // the drive's distance onto the wrong trip.)
+      final driverUid = user?.id;
+      if (driverUid == null || driverUid.isEmpty) {
+        // `trips.driver_id` is a uuid: an empty string would only surface
+        // as a raw "invalid input syntax for type uuid" 400 - this way the
+        // caller's catch shows honest, actionable copy instead.
+        throw StateError('no signed-in driver for the trip insert');
+      }
       tripId = await _service.startTrip(
         busId: bus.id,
-        driverId: user?.id ?? '',
+        driverId: driverUid,
         routeId: route.id,
       );
     } catch (e) {
@@ -542,7 +593,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (!mounted || session != _trackSession) {
       if (tripId != null && tripId != _currentTripId) {
         try {
-          await _service.endTrip(tripId, _totalDistance);
+          // Distance 0, not `_totalDistance`: by now that counter belongs
+          // to the NEW session - the abandoned trip's own km are unknown
+          // and must not be written onto its row.
+          await _service.endTrip(tripId, 0);
         } catch (e) {
           // Session was superseded; nothing more can be done here.
           debugPrint('[driver] superseded-session endTrip failed: $e');
@@ -579,7 +633,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _positionSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
-            if (!_isTracking) return;
+            // mounted too: dispose cancels the subscription, but a callback
+            // already queued must not call setState on a defunct State.
+            if (!_isTracking || !mounted) return;
 
             if (_lastPosition != null) {
               double distance = Geolocator.distanceBetween(
@@ -632,7 +688,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
       if (!_isTracking) await _stopForegroundService();
       return;
     }
-    _showSuccessSnackBar('Trip started successfully!');
+    // Only claim success for a write that actually happened: a failed trip
+    // INSERT was already reported above with honest, actionable copy.
+    if (tripId != null) {
+      _showSuccessSnackBar('Trip started successfully!');
+    }
   }
 
   /// Pushes one GPS fix to the students' maps.
@@ -717,11 +777,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Future<void> _stopTracking() async {
+    // Re-entrancy guard: a double tap on End Trip used to run endTrip twice
+    // and stack two snackbars. The flag flips synchronously below, so the
+    // second tap is rejected before its first await resolves.
+    if (!_isTracking) return;
     // Invalidate any _startTracking still awaiting inside its queries: it
     // must not install a GPS listener (or resurrect this trip) afterwards.
     ++_trackSession;
     _locationHeartbeatTimer?.cancel();
     _locationHeartbeatTimer = null;
+    // Synchronous flip (it used to happen AFTER the endTrip await): stops
+    // the GPS listener/heartbeat immediately and hides the End Trip button.
+    if (mounted) setState(() => _isTracking = false);
     var tripSaved = false;
     if (_currentTripId != null) {
       try {
@@ -734,12 +801,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
         debugPrint('[driver] end trip write failed: $e');
       }
     }
-    // Guarded: the await above can outlive this screen (driver navigated
-    // away mid-save) - setState on a defunct State would throw.
-    if (mounted) setState(() => _isTracking = false);
     _positionSubscription?.cancel();
     _positionSubscription = null;
-    _currentTripId = null;
+    // Only forget the id when the close actually succeeded: on failure it
+    // is kept so dispose()'s retry (fire-and-forget endTrip) can still
+    // close the row instead of leaving the trip "active" forever.
+    if (tripSaved) _currentTripId = null;
     await _stopForegroundService();
 
     if (!mounted) return;
@@ -791,35 +858,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     const arrivalRadiusMeters = 50.0;
 
-    // Skip-ahead: if the bus reached a LATER stop while earlier ones were
-    // still pending (bypassed stop, detour, driver forgot), those stops
-    // will never be reached - without this jump the readout froze at the
-    // first unvisited stop ("Next stop: #2" for the rest of the trip) and
-    // the pickup counter stayed at 0. Bypassed stops are marked visited-
-    // but-skipped: added to [_countedStopIds] so they can never later be
-    // counted as a pickup, and tracked in [_skippedStopIds] for clarity.
-    for (var j = firstUnvisited + 1; j < _tripStops.length; j++) {
-      final laterStop = _tripStops[j];
-      final laterDistance = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        laterStop.latitude,
-        laterStop.longitude,
-      );
-      if (laterDistance > arrivalRadiusMeters) continue;
-      for (var k = firstUnvisited; k < j; k++) {
-        _countedStopIds.add(_tripStops[k].id);
-        _skippedStopIds.add(_tripStops[k].id);
-      }
-      debugPrint(
-        '[driver] stop ${laterStop.pointName} reached while '
-        '${j - firstUnvisited} earlier stop(s) were still pending - '
-        '${_skippedStopIds.length} skipped so far',
-      );
-      firstUnvisited = j;
-      break;
-    }
-
+    // Arrival at the FIRST unvisited stop is tested BEFORE the skip scan:
+    // when two stops sit within the radius of each other, the old order let
+    // the later one win and wrongly marked the earlier stop skipped - a
+    // real pickup counted as bypassed and "Next stop" jumping ahead.
     final stop = _tripStops[firstUnvisited];
     final distance = Geolocator.distanceBetween(
       position.latitude,
@@ -832,6 +874,35 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _countedStopIds.add(stop.id) &&
         mounted) {
       setState(() => _pickupCount++);
+    } else {
+      // Skip-ahead, only when the first unvisited stop was NOT reached: if
+      // the bus reached a LATER stop while earlier ones were still pending
+      // (bypassed stop, detour, driver forgot), those stops will never be
+      // reached - without this jump the readout froze at the first
+      // unvisited stop ("Next stop: #2" for the rest of the trip) and the
+      // pickup counter stayed at 0. Bypassed stops are marked visited-but-
+      // skipped: added to [_countedStopIds] so they can never later be
+      // counted as a pickup, and tracked in [_skippedStopIds] for clarity.
+      for (var j = firstUnvisited + 1; j < _tripStops.length; j++) {
+        final laterStop = _tripStops[j];
+        final laterDistance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          laterStop.latitude,
+          laterStop.longitude,
+        );
+        if (laterDistance > arrivalRadiusMeters) continue;
+        for (var k = firstUnvisited; k < j; k++) {
+          _countedStopIds.add(_tripStops[k].id);
+          _skippedStopIds.add(_tripStops[k].id);
+        }
+        debugPrint(
+          '[driver] stop ${laterStop.pointName} reached while '
+          '${j - firstUnvisited} earlier stop(s) were still pending - '
+          '${_skippedStopIds.length} skipped so far',
+        );
+        break;
+      }
     }
 
     for (var i = 0; i < _tripStops.length; i++) {
@@ -1195,6 +1266,24 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 );
 
                 try {
+                  // Close any active trip WHILE STILL AUTHENTICATED: after
+                  // signOut the dispose-time retry runs unauthenticated and
+                  // "Trips update" (auth.uid() = driver_id) matches zero
+                  // rows - silently leaving the trip "active" forever.
+                  final activeTrip = _currentTripId;
+                  if (activeTrip != null) {
+                    try {
+                      await _service.endTrip(activeTrip, _totalDistance);
+                      _currentTripId = null;
+                    } catch (tripError) {
+                      // Non-blocking: logging out must not be held hostage
+                      // by the trip close. If this fails too, the 12-hour
+                      // reap in _reapStaleTrips closes the row later.
+                      debugPrint(
+                        '[driver] logout-time endTrip failed: $tripError',
+                      );
+                    }
+                  }
                   await _service.signOut();
                 } catch (e) {
                   // Raw exception stays in the log; the driver gets copy
