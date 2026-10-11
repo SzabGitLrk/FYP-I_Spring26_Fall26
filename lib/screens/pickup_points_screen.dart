@@ -204,7 +204,7 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Add pickup points in Supabase Dashboard for ${widget.route.routeName}',
+              'This route has no stops yet. Please check back soon.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),

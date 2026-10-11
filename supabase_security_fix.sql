@@ -434,7 +434,7 @@ END $$;
 --  TO GRANT ADMIN (there is no in-app way to do this, by design):
 --      UPDATE public.profiles
 --      SET role = 'admin', is_approved = true
---      WHERE email = 'you@example.com';
+--      WHERE email = 'REPLACE_WITH_YOUR_EMAIL';
 --    Run as postgres/service_role (SQL Editor). auth.uid() is NULL on that
 --    path, so the guard in Section 3 lets it through deliberately.
 -- =============================================================================

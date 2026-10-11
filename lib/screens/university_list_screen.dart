@@ -264,7 +264,7 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Add universities in Supabase Dashboard',
+              'No universities available yet. Please check back later.',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
           ],

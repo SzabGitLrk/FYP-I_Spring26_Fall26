@@ -4,7 +4,6 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.24+-blue.svg)](https://flutter.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green.svg)](https://supabase.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 📱 Project Overview
 
@@ -23,9 +22,9 @@ University Point Locator is a mobile application designed to solve the critical 
 ## ✨ Key Features
 
 ### 👨‍🎓 Student Features
-- View The University of Larkana
-- Select from 3 routes (PTS, Nae Dare → PTS, OPP Colony)
-- View 8 pickup points with order numbers and landmarks
+- Browse your university's bus routes
+- Select any route to see its pickup points
+- View each route's stops with order numbers and landmarks
 - Real-time bus tracking on OpenStreetMap (flutter_map)
 - Color-coded markers (Green=First, Blue=Intermediate, Red=Last)
 - Bus markers (Azure=Moving, Purple=Stopped) rotated to the bus heading
@@ -179,17 +178,8 @@ flutter build apk --release
 
 ## 📊 Statistics
 
-| Metric | Value |
-|--------|-------|
-| **Total Lines of Code** | 5,000+ |
-| **Screens Developed** | 10 |
-| **Database Tables** | 13 |
-| **Universities Covered** | 1 |
-| **Routes** | 3 |
-| **Pickup Points** | 8 |
-| **Buses** | 4 |
-| **User Roles** | 3 |
-| **External APIs Integrated** | 4 |
+All counts (routes, stops, buses) are live data managed in Supabase; no
+figures are hard-coded in the app.
 
 ## 👥 Team Members
 

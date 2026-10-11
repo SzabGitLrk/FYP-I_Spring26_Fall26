@@ -1,11 +1,11 @@
 {
-    "name": "university_point_locator",
-    "short_name": "university_point_locator",
+    "name": "University Point Locator",
+    "short_name": "UniPointLocator",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Live university bus tracking: routes, stops, ETAs and navigation for students.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

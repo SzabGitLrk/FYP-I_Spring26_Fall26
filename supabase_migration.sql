@@ -69,19 +69,16 @@ INSERT INTO pickup_points (route_id, point_name, latitude, longitude, address, o
 ((SELECT id FROM routes WHERE route_name = 'OPP Colony Route' LIMIT 1), 'OPP Colony Gate', 27.5630, 68.2200, 'Opposite Colony Main Gate', 1),
 ((SELECT id FROM routes WHERE route_name = 'OPP Colony Route' LIMIT 1), 'Qamber Bus Stop', 27.6000, 68.2500, 'Qamber City Road', 2);
 
--- Step 12: Add new buses
-INSERT INTO buses (route_id, bus_number, driver_name, status) VALUES
-((SELECT id FROM routes WHERE route_name = 'PTS Route' LIMIT 1), 'LARK-101', 'Driver PTS', 'active'),
-((SELECT id FROM routes WHERE route_name = 'PTS Route' LIMIT 1), 'LARK-102', 'Driver Route A', 'active'),
-((SELECT id FROM routes WHERE route_name = 'Nae Dare → PTS Route' LIMIT 1), 'LARK-201', 'Driver Nae Dare', 'active'),
-((SELECT id FROM routes WHERE route_name = 'OPP Colony Route' LIMIT 1), 'LARK-301', 'Driver OPP', 'active');
+-- Step 12: Add new buses. driver_name stays NULL until a real driver is
+-- assigned ("Not assigned" in the bus details sheet) - never invent names.
+INSERT INTO buses (route_id, bus_number, status) VALUES
+((SELECT id FROM routes WHERE route_name = 'PTS Route' LIMIT 1), 'LARK-101', 'active'),
+((SELECT id FROM routes WHERE route_name = 'PTS Route' LIMIT 1), 'LARK-102', 'active'),
+((SELECT id FROM routes WHERE route_name = 'Nae Dare → PTS Route' LIMIT 1), 'LARK-201', 'active'),
+((SELECT id FROM routes WHERE route_name = 'OPP Colony Route' LIMIT 1), 'LARK-301', 'active');
 
--- Step 13: Add initial bus locations
-INSERT INTO bus_locations (bus_id, latitude, longitude, speed, heading, next_stop_index) VALUES
-((SELECT id FROM buses WHERE bus_number = 'LARK-101'), 27.5880, 68.2220, 25.5, 45, 2),
-((SELECT id FROM buses WHERE bus_number = 'LARK-102'), 27.5680, 68.2220, 0.0, 0, 1),
-((SELECT id FROM buses WHERE bus_number = 'LARK-201'), 27.5550, 68.2280, 30.2, 90, 2),
-((SELECT id FROM buses WHERE bus_number = 'LARK-301'), 27.5630, 68.2200, 15.0, 180, 2);
+-- Step 13: Bus locations are deliberately NOT seeded - positions must come
+-- from real driver trips only (frozen fake positions mislead students).
 
 -- Step 14: Verify everything
 SELECT 'Verification Results:' as message;
