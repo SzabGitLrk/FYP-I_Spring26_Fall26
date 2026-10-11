@@ -183,3 +183,11 @@ UA; Google handoff opens in `travelmode=driving` + `dir_action=navigate`;
 pluralization/raw-exception sweep; `utils/helpers.dart` delegates to the
 ceil ETA model (no round-trap); `bus_locations` 7-day retention SQL
 documented in `supabase_launch_cleanup.sql`.
+
+Driver SOS (11 Oct 2026): the dashboard has an emergency button, parity
+with the student map's SOS — confirm dialog, best-effort GPS fix (live
+stream → OS-cached → one fresh reading, honest refusal when location is
+off), a 30 s session cooldown against duplicate taps, and the alert lands
+in `sos_alerts` as `Bus <number> - <name>` so the live admin feed shows
+WHICH bus has the problem. Zero schema change: there is no message column,
+so the bus context rides in `user_name`.

@@ -7,6 +7,7 @@ import 'package:university_point_locator/models/route_model.dart';
 import 'package:university_point_locator/models/bus.dart';
 import 'package:university_point_locator/models/pickup_point.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:university_point_locator/services/notification_service.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -23,6 +24,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   List<Bus> _availableBuses = [];
   bool _isTracking = false;
   Position? _currentPosition;
+  /// Last SOS sent this session - a coarse 30 s cooldown so a bouncing bus
+  /// cannot stack duplicate alerts the admin must resolve one by one.
+  DateTime? _lastSosAt;
   RouteModel? _selectedRoute;
   bool _isLoading = true;
   String? _error;
@@ -833,6 +837,150 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return 0;
   }
 
+  /// Confirmation for the driver-side emergency button (parity with the
+  /// student map's SOS): nothing is sent until the driver taps SEND SOS.
+  void _confirmDriverSOS() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.sos, color: Colors.red),
+            SizedBox(width: 8),
+            Text('EMERGENCY SOS'),
+          ],
+        ),
+        content: const Text(
+          'Send an SOS to the admin with this bus\'s current GPS location?\n\n'
+          'Use it for a breakdown, accident or safety emergency.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              unawaited(_sendDriverSOS());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('SEND SOS'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sends the driver's SOS: bus number + best GPS fix into `sos_alerts`,
+  /// the exact table the admin dashboard subscribes to live, so a bus
+  /// problem reaches dispatch without a phone call.
+  Future<void> _sendDriverSOS() async {
+    // Captured before the first await: the messenger is app-level and
+    // outlives any route, so the snackbars below are safe after the await.
+    final messenger = ScaffoldMessenger.of(context);
+    final last = _lastSosAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 30)) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('An SOS was just sent - the admin already has it.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Best available fix: live stream (or the heartbeat's cached fix),
+    // then the OS's cached position, then one fresh reading. The stream
+    // yields nothing while parked at distanceFilter 10 and before a trip
+    // it has never run - relying on it alone would fail exactly when a
+    // stationary bus breaks down.
+    Position? position;
+    try {
+      position = _currentPosition ?? _lastPosition;
+      position ??= await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      // Detail stays in the log; the honest fallback message is below.
+      debugPrint('[driver] SOS position fetch failed: $e');
+    }
+    if (position == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Location is unavailable - an SOS must carry the bus position. '
+            'Enable location for this app and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final account = user;
+    if (account == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('You must be logged in to send SOS'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // sos_alerts has no message column: the bus number rides along in
+    // user_name so the admin sees WHICH bus has the problem, not just a
+    // person and a pin.
+    final name = account.userMetadata?['name'] ?? 'Driver';
+    final busNumber = _selectedBus?.busNumber;
+    final userName = (busNumber == null || busNumber.isEmpty)
+        ? name
+        : 'Bus $busNumber - $name';
+    try {
+      await _service.sendSOSAlert(
+        userId: account.id,
+        userName: userName,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      _lastSosAt = DateTime.now();
+      unawaited(NotificationService().showSOSNotification());
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.sos, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'SOS sent - the admin has this bus\'s live location.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[driver] SOS failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not send SOS. Check your connection and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _showLogoutDialog() async {
     return showDialog(
       context: context,
@@ -929,6 +1077,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
         foregroundColor: Colors.white,
         elevation: 4,
         actions: [
+          // Emergency SOS - same pipeline as the student SOS (sos_alerts ->
+          // the live admin dashboard), carrying the bus number and a GPS fix.
+          IconButton(
+            icon: const Icon(Icons.sos),
+            onPressed: _confirmDriverSOS,
+            tooltip: 'Send emergency SOS',
+          ),
           // Trip History button
           IconButton(
             icon: const Icon(Icons.history),
