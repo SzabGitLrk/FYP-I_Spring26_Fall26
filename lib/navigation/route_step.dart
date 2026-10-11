@@ -32,6 +32,17 @@ class RouteStep {
   /// Where the maneuver happens.
   final LatLng location;
 
+  /// Whether this step is an arrival maneuver ("Arrive at your stop").
+  ///
+  /// OSRM emits an `arrive` step at the end of EVERY leg, so a multi-stop
+  /// navigation gets one per intermediate stop - callers use this getter to
+  /// avoid announcing those as the final stop. Derived from [maneuver] on
+  /// purpose: both routers normalise arrival keys ('arrive' from Valhalla,
+  /// 'arrive-left'/'arrive-straight'/... from OSRM), and hand-constructed
+  /// steps stay correct without touching the constructor.
+  bool get isArrival =>
+      maneuver == 'arrive' || maneuver.startsWith('arrive-');
+
   /// Compact distance for banners and speech: "850 m" below a kilometer,
   /// "1.2 km" above. Rounded first, so 999.6 m reads "1.0 km" instead of
   /// "1000 m".

@@ -75,6 +75,35 @@ class _MapScreenState extends State<MapScreen> {
   /// alert per bus per stop per 10 minutes instead of one per GPS tick.
   static final Map<String, DateTime> _lastArrivalAlert = {};
 
+  /// A bus row older than this is history, not live data. Single source of
+  /// truth for every freshness check on this screen (feed, poll, ETA,
+  /// alerts) - the value used to be re-typed at each call site.
+  static const Duration _staleAfter = Duration(minutes: 5);
+
+  /// Re-ages rows and polls over REST every 30 s: the realtime feed only
+  /// emits on new inserts, so without a clock nothing ages out when quiet.
+  Timer? _refreshTimer;
+
+  /// Location-help dialog shown at most once per session.
+  bool _locationHelpShown = false;
+
+  /// Which distanceFilter the position stream currently runs with (walking
+  /// 10 m normally, 0 while navigating - see _startMyLocationStream).
+  int _positionFilter = 10;
+
+  /// Throttle for fixes while navigating (the stream runs unfiltered during
+  /// guidance, so raw fixes arrive about once a second).
+  DateTime _lastNavFix = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 0 = maneuver far, 1 = within 80 m, 2 = within 25 m. Steps are spoken
+  /// on entry AND at each bucket crossing, instead of exactly once.
+  int _lastSpokenBucket = 0;
+
+  /// Via-stop names this guidance passes, captured when the route is
+  /// adopted (leg k ends at via k) - used to relabel intermediate
+  /// "arrive" steps as "Passing `<stop>`".
+  List<String> _navViaNames = const [];
+
   bool _isLoading = true;
   String? _error;
   bool _followBus = true;
@@ -130,6 +159,12 @@ class _MapScreenState extends State<MapScreen> {
     // bus list is known, so its events can be filtered from the first tick.
     _loadBusData();
     _setupNotificationHandler();
+    // Re-age stale rows and poll over REST: realtime only speaks on new
+    // inserts, and a dropped websocket must not freeze the map.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _ageOutStaleBuses();
+      _pollBusLocations();
+    });
   }
 
   @override
@@ -137,6 +172,7 @@ class _MapScreenState extends State<MapScreen> {
     _myPositionSubscription?.cancel();
     _busSubscription?.cancel();
     _busFeedRestart?.cancel();
+    _refreshTimer?.cancel();
     // NotificationService is a singleton that outlives this screen; leaving
     // the callback registered would let a later notification tap call
     // _mapController.move() on an already-disposed controller.
@@ -160,25 +196,71 @@ class _MapScreenState extends State<MapScreen> {
     // Refused, either just now or on a previous run. Opening a stream that
     // can never deliver would only hold a dead subscription open, so leave
     // the map exactly as it renders today - no dot, everything else intact.
+    // But DO explain why: a silent no-dot map reads as broken.
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
+      _offerLocationHelp();
       return;
     }
     _startMyLocationStream();
   }
 
+  /// One dialog per session when GPS is refused: says what breaks (live bus
+  /// positions, ETAs, turn-by-turn) and offers the system settings page.
+  void _offerLocationHelp() {
+    if (_locationHelpShown || !mounted) return;
+    _locationHelpShown = true;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.location_off, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Location is off'),
+          ],
+        ),
+        content: const Text(
+          'Live bus positions, ETAs and turn-by-turn navigation need GPS. '
+          'Allow location for this app to use them.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Maybe later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Geolocator.openAppSettings();
+            },
+            child: const Text('Open settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Streams GPS fixes for the blue dot.
   ///
-  /// [LocationSettings.distanceFilter] means the marker is only rebuilt once
-  /// the device has genuinely moved 10 m, rather than on every raw fix - a
-  /// [setState] that would otherwise rebuild all marker layers while
-  /// stationary.
-  void _startMyLocationStream() {
-    const LocationSettings settings = LocationSettings(
+  /// Normally [distanceFilter] is 10 m so the marker is only rebuilt once
+  /// the device has genuinely moved - not on every raw fix (a [setState]
+  /// that would rebuild all marker layers while stationary). While
+  /// navigating the stream restarts at distanceFilter 0: a student who
+  /// stops walking must still produce fixes, or arrival and reroute can
+  /// never re-evaluate. Processing is throttled in [_handlePosition].
+  void _startMyLocationStream({int distanceFilter = 10}) {
+    if (distanceFilter == _positionFilter &&
+        _myPositionSubscription != null) {
+      return;
+    }
+    _positionFilter = distanceFilter;
+    final LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 10,
+      distanceFilter: distanceFilter,
     );
 
+    unawaited(_myPositionSubscription?.cancel());
     _myPositionSubscription =
         Geolocator.getPositionStream(locationSettings: settings).listen(
           _handlePosition,
@@ -200,8 +282,18 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
+    // Guidance runs the stream at distanceFilter 0 (stationary students
+    // still need fixes), so throttle processing to one every 2 s: GPS noise
+    // would otherwise rebuild every marker layer ~1 Hz for no new facts.
+    final now = DateTime.now();
+    if (now.difference(_lastNavFix) < const Duration(seconds: 2)) return;
+    _lastNavFix = now;
+
     final previousStep = _progress?.nextStepIndex;
-    final progress = _follower!.update(p);
+    final progress = _follower!.update(
+      p,
+      speedMps: pos.speed > 0 ? pos.speed : null,
+    );
     setState(() {
       _myPosition = pos;
       _progress = progress;
@@ -228,18 +320,38 @@ class _MapScreenState extends State<MapScreen> {
     }
     if (previousStep != null && previousStep != progress.nextStepIndex) {
       HapticFeedback.mediumImpact();
+      _lastSpokenBucket = _maneuverBucket(progress.distanceToManeuver);
       _speakStep(progress.nextStepIndex);
+    } else {
+      // Re-announce the current maneuver at 80 m and again at 25 m: each
+      // step used to be spoken exactly once - one late cue at driving speed
+      // and no follow-up at all.
+      final bucket = _maneuverBucket(progress.distanceToManeuver);
+      if (bucket > _lastSpokenBucket) {
+        _lastSpokenBucket = bucket;
+        _spokenStepIndex = -1; // let the same step speak again
+        _speakStep(progress.nextStepIndex);
+      }
     }
     // Hysteresis: enter the off-route state past 45 m, leave it only under
     // 30 m, so a fix oscillating at the threshold cannot retrigger a reroute.
+    // The 50 m remaining floor closes the old dead zone: with 120 m, a GPS
+    // 60-90 m off the polyline near the destination neither rerouted
+    // (remaining too small) nor arrived (still >30 m) - guidance hung on
+    // "In 118 m - Turn left..." forever.
     if (progress.distanceOffRoute > (_offRouteEpisode ? 30.0 : 45.0) &&
-        progress.remainingMeters > 120) {
+        progress.remainingMeters > 50) {
       _offRouteEpisode = true;
       unawaited(_maybeReroute());
     } else if (progress.distanceOffRoute < 30.0) {
       _offRouteEpisode = false;
     }
   }
+
+  /// 0 = too far to announce, 1 = within 80 m of the maneuver, 2 = within
+  /// 25 m (spoken distance bands for the re-announce ladder).
+  int _maneuverBucket(double distance) =>
+      distance <= 25 ? 2 : (distance <= 80 ? 1 : 0);
 
   void _setupNotificationHandler() {
     NotificationService().onNotificationOpened = (data) {
@@ -298,24 +410,32 @@ class _MapScreenState extends State<MapScreen> {
     if (widget.pickupPoints.length < 2) return;
 
     setState(() {
-      _polylines = [
-        Polyline(
-          points: widget.pickupPoints
-              .map((p) => LatLng(p.latitude, p.longitude))
-              .toList(),
-          color: Colors.blue,
-          strokeWidth: 4,
-          // Equivalent to Google's [dash(20), gap(10)]: alternating
-          // dash/gap segment lengths in logical pixels. Not `const` because
-          // StrokePattern.dashed asserts on `segments.length`, which cannot be
-          // evaluated in a constant expression.
-          pattern: StrokePattern.dashed(segments: const [20, 10]),
-        ),
-      ];
+      // Paint the straight stop-to-stop placeholder ONLY when nothing is on
+      // screen (first load). After guidance ends - or a nav start fails -
+      // the road geometry from before is still good: flashing the crude
+      // line over it (or leaving it when the routers are down) was a
+      // downgrade to a lie about the road.
+      if (_polylines.isEmpty) {
+        _polylines = [
+          Polyline(
+            points: widget.pickupPoints
+                .map((p) => LatLng(p.latitude, p.longitude))
+                .toList(),
+            color: Colors.blue,
+            strokeWidth: 4,
+            // Equivalent to Google's [dash(20), gap(10)]: alternating
+            // dash/gap segment lengths in logical pixels. Not `const` because
+            // StrokePattern.dashed asserts on `segments.length`, which cannot
+            // be evaluated in a constant expression.
+            pattern: StrokePattern.dashed(segments: const [20, 10]),
+          ),
+        ];
+      }
     });
 
-    // Drawn straight stop-to-stop as an instant placeholder, then replaced
-    // by the real road geometry below.
+    // Upgrades the placeholder (or refreshes existing geometry) with the
+    // real road route; RouteService caches identical requests, so a
+    // start/cancel navigation cycle no longer costs four router calls.
     _fetchRoadGeometry();
   }
 
@@ -360,7 +480,13 @@ class _MapScreenState extends State<MapScreen> {
   /// waypoint, so the polyline and the maneuver steps describe *their* path
   /// - not the abstract bus route.
   Future<void> _startNavigation(PickupPoint destination) async {
-    if (_navRouting) return;
+    if (_navRouting) {
+      // Silently swallowing a second tap looked like a dead button.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Still calculating your route...')),
+      );
+      return;
+    }
 
     final pos = _myPosition;
     if (pos == null) {
@@ -376,7 +502,11 @@ class _MapScreenState extends State<MapScreen> {
     final destinationIndex = widget.pickupPoints.indexOf(destination);
     if (destinationIndex < 0) return;
 
-    // Join the bus route at the nearest stop, never past the destination.
+    // Join the bus route at a stop near the user, never past the
+    // destination. The 15% tolerance means a LATER stop that is almost as
+    // close wins: on a route that loops near itself, snapping to the
+    // earlier pass dragged the student backwards and then forward again
+    // over the same road.
     var nearest = 0;
     var nearestDistance = double.infinity;
     for (var i = 0; i <= destinationIndex; i++) {
@@ -385,7 +515,7 @@ class _MapScreenState extends State<MapScreen> {
         LatLng(pos.latitude, pos.longitude),
         LatLng(stop.latitude, stop.longitude),
       );
-      if (distance < nearestDistance) {
+      if (distance < nearestDistance * 1.15) {
         nearestDistance = distance;
         nearest = i;
       }
@@ -406,7 +536,12 @@ class _MapScreenState extends State<MapScreen> {
       _navDestination = destination;
       _navDestinationIndex = destinationIndex;
       _spokenStepIndex = -1;
+      _lastSpokenBucket = 0;
+      _navViaNames = const [];
     });
+    // Full fixes while calculating/guiding: a student who stops walking
+    // must still produce position updates or arrival can never latch.
+    _startMyLocationStream(distanceFilter: 0);
 
     final route = await RouteService().fetchRoute(
       _navWaypoints(LatLng(pos.latitude, pos.longitude)),
@@ -414,6 +549,8 @@ class _MapScreenState extends State<MapScreen> {
     if (!mounted || session != _navSession) return;
     if (route == null) {
       setState(() => _navRouting = false);
+      // Guidance never started: hand the stream back to the 10 m filter.
+      _startMyLocationStream(distanceFilter: 10);
       // Whatever route was drawn before stays/returns; nothing was adopted.
       _setupRoutePolyline();
       if (mounted) {
@@ -474,7 +611,21 @@ class _MapScreenState extends State<MapScreen> {
       _follower = RouteFollower(points: route.points, steps: route.steps);
       _progress = null;
       _spokenStepIndex = -1;
+      _lastSpokenBucket = 0;
     });
+    // Via-stop names for this guidance (leg k ends at via k), captured NOW:
+    // _navNextStopIndex keeps advancing during the trip and must not shift
+    // the arrive-step <-> stop-name mapping while speaking.
+    _navViaNames = [
+      for (var i = _navNextStopIndex;
+          i <=
+              math.min(
+                _navDestinationIndex,
+                widget.pickupPoints.length - 1,
+              );
+          i++)
+        widget.pickupPoints[i].pointName,
+    ];
     debugPrint(
       '[nav] route adopted (${route.source}: ${route.points.length} points, '
       '${route.steps.length} steps)',
@@ -484,6 +635,7 @@ class _MapScreenState extends State<MapScreen> {
     if (pos == null) return;
     final progress = _follower!.update(LatLng(pos.latitude, pos.longitude));
     setState(() => _progress = progress);
+    _lastSpokenBucket = _maneuverBucket(progress.distanceToManeuver);
     _speakStep(progress.nextStepIndex);
   }
 
@@ -512,8 +664,8 @@ class _MapScreenState extends State<MapScreen> {
       _navWaypoints(LatLng(pos.latitude, pos.longitude)),
     );
     // Measure the debounce from when the ATTEMPT ENDED, not when it started:
-    // OSRM+Valhalla can burn ~27 s in timeouts, which - timed from the start
-    // - already exceeded the old flat 20 s window and retried instantly.
+    // OSRM+Valhalla can burn ~14 s in timeouts, which - timed from the start
+    // - nearly exhausts the flat 20 s window and would retry almost instantly.
     _lastRerouteAt = DateTime.now();
     if (!mounted || session != _navSession) return;
     if (route == null) {
@@ -538,6 +690,8 @@ class _MapScreenState extends State<MapScreen> {
       _progress = null;
       _navDestination = null;
       _spokenStepIndex = -1;
+      _lastSpokenBucket = 0;
+      _navViaNames = const [];
       _lastRerouteAt = null;
       _rerouteFailures = 0;
       _offRouteEpisode = false;
@@ -549,7 +703,11 @@ class _MapScreenState extends State<MapScreen> {
       unawaited(_tts?.stop());
     }
     // The full-route line takes over again after guidance.
-    if (wasNavigating) _setupRoutePolyline();
+    if (wasNavigating) {
+      _setupRoutePolyline();
+      // Back to the walking-distance filter now that nobody is guiding.
+      _startMyLocationStream(distanceFilter: 10);
+    }
   }
 
   /// Announces maneuver [index] once. Speech is async, hence unawaited -
@@ -565,7 +723,33 @@ class _MapScreenState extends State<MapScreen> {
     final prefix = distance >= 20
         ? 'In ${RouteStep.formatDistance(distance)}, '
         : '';
-    unawaited(_speakNow('$prefix${steps[index].instruction}'));
+    // Intermediate arrive-steps are relabelled: OSRM voices "Arrive at your
+    // stop" at the end of EVERY leg, wrong while merely passing a via stop.
+    unawaited(_speakNow('$prefix${_stepInstruction(steps, index)}'));
+  }
+
+  /// Instruction for [index], with intermediate arrivals relabelled to
+  /// "Passing `<stop>`". Only the LAST arrive step is the destination.
+  String _stepInstruction(List<RouteStep> steps, int index) {
+    if (index < 0 || index >= steps.length) return '';
+    final step = steps[index];
+    if (step.isArrival) {
+      var lastArrival = -1;
+      for (var i = 0; i < steps.length; i++) {
+        if (steps[i].isArrival) lastArrival = i;
+      }
+      if (index < lastArrival) {
+        var leg = 0;
+        for (var i = 0; i < index; i++) {
+          if (steps[i].isArrival) leg++;
+        }
+        final name = leg < _navViaNames.length
+            ? _navViaNames[leg]
+            : 'the next stop';
+        return 'Passing $name';
+      }
+    }
+    return step.instruction;
   }
 
   /// Speaks [text], replacing anything queued. Speech failures are logged,
@@ -620,7 +804,11 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildNavigationBanner() {
     final progress = _progress;
     final steps = _follower?.steps ?? const <RouteStep>[];
-    final nextStep = (progress != null && steps.isNotEmpty)
+    // nextStepIndex can equal steps.length once the last maneuver is
+    // passed - indexing blindly there was a latent RangeError.
+    final nextStep = (progress != null &&
+            progress.nextStepIndex >= 0 &&
+            progress.nextStepIndex < steps.length)
         ? steps[progress.nextStepIndex]
         : null;
 
@@ -641,7 +829,9 @@ class _MapScreenState extends State<MapScreen> {
     if (_navRouting) {
       detail = 'Following your GPS position';
     } else {
-      detail = nextStep?.instruction ?? 'Follow the highlighted route';
+      detail = nextStep == null
+          ? 'Follow the highlighted route'
+          : _stepInstruction(steps, progress!.nextStepIndex);
     }
 
     return Card(
@@ -851,13 +1041,11 @@ class _MapScreenState extends State<MapScreen> {
         if (!mounted) return;
         // Healthy tick: reopen the restart budget for future failures.
         _busFeedRestarts = 0;
-        final routeBusIds = _buses.map((b) => b.id).toSet();
+        _logClockSkew(locations);
         setState(() {
-          _busLocations = routeBusIds.isEmpty
-              ? <BusLocation>[]
-              : locations
-                    .where((loc) => routeBusIds.contains(loc.busId))
-                    .toList();
+          // Newest row per bus, this route only, fresh only - see
+          // _collapseBusRows; the raw stream is an append history.
+          _busLocations = _collapseBusRows(locations);
           _busRevision.value++;
         });
         _updateBusMarkers();
@@ -885,7 +1073,17 @@ class _MapScreenState extends State<MapScreen> {
   void _scheduleBusFeedRestart() {
     if (!mounted) return;
     if (_busFeedRestarts >= 3) {
-      debugPrint('[map] bus feed closed - restart budget spent, giving up');
+      // The rapid-retry budget is spent - cool down instead of giving up
+      // forever: a student opening the map in a basement used to end up
+      // with a dead feed until they found the refresh button.
+      _busFeedRestart?.cancel();
+      _busFeedRestart = Timer(const Duration(seconds: 60), () {
+        if (!mounted) return;
+        debugPrint('[map] bus feed cool-down over - resubscribing');
+        _busFeedRestarts = 0;
+        _subscribeToBusLocations();
+      });
+      debugPrint('[map] bus feed closed - restart budget spent, cool-down 60 s');
       return;
     }
     _busFeedRestart?.cancel();
@@ -1004,48 +1202,197 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  /// Collapse raw feed rows to what the map shows: this route's buses only,
+  /// newest row per bus, nothing older than [_staleAfter].
+  ///
+  /// The realtime stream APPENDS every insert since subscribe, so without
+  /// the per-bus collapse the map drew a trail of ghost markers down the
+  /// road and the "N active" pill counted history instead of buses.
+  List<BusLocation> _collapseBusRows(Iterable<BusLocation> locations) {
+    final routeBusIds = _buses.map((b) => b.id).toSet();
+    final newest = <int, BusLocation>{};
+    final now = DateTime.now();
+    for (final loc in locations) {
+      if (!routeBusIds.contains(loc.busId)) continue;
+      if (now.difference(loc.timestamp) >= _staleAfter) continue;
+      final prev = newest[loc.busId];
+      if (prev == null || loc.timestamp.isAfter(prev.timestamp)) {
+        newest[loc.busId] = loc;
+      }
+    }
+    return newest.values.toList();
+  }
+
+  /// Fresh rows only (younger than [_staleAfter]).
+  List<BusLocation> _freshBuses() {
+    final now = DateTime.now();
+    return _busLocations
+        .where((loc) => now.difference(loc.timestamp) < _staleAfter)
+        .toList();
+  }
+
+  /// The bus closest to [point] that is actually still serving it.
+  ///
+  /// Excludes rows older than [_staleAfter] (history, not live data) and
+  /// buses whose next stop is already beyond [point] - a bus that left must
+  /// not keep reporting a shrinking "arrives in 1 min" for a stop it will
+  /// never reach again. [BusLocation.nextStopIndex] is 1-based; 0 = every
+  /// stop on the route has been served.
+  BusLocation? _closestServingBus(PickupPoint point) {
+    final stopIndex = widget.pickupPoints.indexOf(point);
+    if (stopIndex < 0) return null;
+    final now = DateTime.now();
+    BusLocation? best;
+    var bestDistance = double.infinity;
+    for (final loc in _busLocations) {
+      if (now.difference(loc.timestamp) >= _staleAfter) continue;
+      if (loc.nextStopIndex == 0 || loc.nextStopIndex > stopIndex + 1) {
+        continue;
+      }
+      final distance = loc.distanceTo(point.latitude, point.longitude);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = loc;
+      }
+    }
+    return best;
+  }
+
+  /// Freshest bus near [point] regardless of direction - drives the
+  /// distance fallback when no serving bus exists.
+  BusLocation? _closestFreshBus(PickupPoint point) {
+    final now = DateTime.now();
+    BusLocation? best;
+    var bestDistance = double.infinity;
+    for (final loc in _busLocations) {
+      if (now.difference(loc.timestamp) >= _staleAfter) continue;
+      final distance = loc.distanceTo(point.latitude, point.longitude);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = loc;
+      }
+    }
+    return best;
+  }
+
+  /// ETA minutes for [bus] to [point]: straight-line distance x a 1.3
+  /// road-circuity factor (streets are not straight lines) divided by an
+  /// urban cruise floor of 20 km/h - a bus waiting at a red light must not
+  /// inflate an 800 m ETA to 45 minutes. Ceiled: "0 min" stays reserved
+  /// for a bus actually at the stop.
+  int _etaMinutes(BusLocation bus, PickupPoint point) {
+    final straightKm = bus.distanceTo(point.latitude, point.longitude);
+    if (straightKm <= 0) return 0;
+    final speedKmh = math.max(bus.speed, 20.0);
+    return ((straightKm * 1.3 / speedKmh) * 60).ceil();
+  }
+
+  /// Ages rows out when the feed goes quiet: realtime only emits on new
+  /// inserts, so without a clock a bus that stopped reporting kept its last
+  /// position - and its "4 min" ETA - on the map forever.
+  void _ageOutStaleBuses() {
+    if (!mounted || _busLocations.isEmpty) return;
+    final now = DateTime.now();
+    final fresh = _busLocations
+        .where((loc) => now.difference(loc.timestamp) < _staleAfter)
+        .toList();
+    if (fresh.length == _busLocations.length) return;
+    debugPrint(
+      '[map] aged out ${_busLocations.length - fresh.length} stale bus row(s)',
+    );
+    setState(() {
+      _busLocations = fresh;
+      _busRevision.value++;
+    });
+    _updateBusMarkers();
+    _updateETAInfo();
+    _checkNotifications();
+  }
+
+  /// Low-rate REST poll every 30 s: a dropped websocket or a flaky campus
+  /// network must not freeze the map - realtime is the optimization, this
+  /// is the floor.
+  Future<void> _pollBusLocations() async {
+    if (!mounted || _buses.isEmpty || _isLoading || _error != null) return;
+    try {
+      final locations = await _service.getBusLocationsForRoute(
+        widget.route.id,
+        buses: _buses,
+      );
+      if (!mounted) return;
+      final collapsed = _collapseBusRows(locations);
+      final unchanged =
+          collapsed.length == _busLocations.length &&
+          collapsed.every(
+            (loc) => _busLocations.any(
+              (cur) =>
+                  cur.busId == loc.busId && cur.timestamp == loc.timestamp,
+            ),
+          );
+      if (unchanged) return;
+      setState(() {
+        _busLocations = collapsed;
+        _busRevision.value++;
+      });
+      _updateBusMarkers();
+      _updateETAInfo();
+      _checkNotifications();
+      debugPrint('[map] REST poll refreshed ${collapsed.length} bus row(s)');
+    } catch (e) {
+      debugPrint('[map] REST poll failed: $e');
+    }
+  }
+
+  /// Warn when the device clock lags the server: every freshness filter is
+  /// computed against DateTime.now(), so a clock minutes behind (cheap
+  /// Android devices) makes `now - 2 min` drop EVERY row and the map shows
+  /// no buses at all while they are running.
+  void _logClockSkew(List<BusLocation> locations) {
+    if (locations.isEmpty) return;
+    DateTime newest = locations.first.timestamp;
+    for (final loc in locations) {
+      if (loc.timestamp.isAfter(newest)) newest = loc.timestamp;
+    }
+    final ahead = newest.difference(DateTime.now());
+    if (ahead > const Duration(minutes: 2)) {
+      debugPrint(
+        '[map] WARNING device clock is ${ahead.inMinutes} min behind the '
+        'server - freshness filters may drop live rows',
+      );
+    }
+  }
+
   void _updateETAInfo() {
     if (_busLocations.isEmpty || widget.pickupPoints.isEmpty) {
       _etaInfo = '';
       return;
     }
 
-    // A fix older than 5 minutes is history, not live data: an ETA from a
-    // bus that stopped reporting would be fiction.
-    final fresh = _busLocations
-        .where((loc) => DateTime.now().difference(loc.timestamp).inMinutes < 5)
-        .toList();
-    if (fresh.isEmpty) {
+    if (_freshBuses().isEmpty) {
       _etaInfo = 'Waiting for live bus positions...';
       return;
     }
 
-    // Get closest fresh bus to first stop
     final firstStop = widget.pickupPoints[0];
-    final closestBus = fresh.reduce(
-      (a, b) =>
-          a.distanceTo(firstStop.latitude, firstStop.longitude) <
-              b.distanceTo(firstStop.latitude, firstStop.longitude)
-          ? a
-          : b,
-    );
+    final serving = _closestServingBus(firstStop);
+    if (serving == null) {
+      _etaInfo = 'No bus is heading to ${firstStop.pointName} right now';
+      return;
+    }
 
-    final eta = closestBus.estimatedTimeTo(
-      firstStop.latitude,
-      firstStop.longitude,
-    );
-
+    final eta = _etaMinutes(serving, firstStop);
     if (eta == 0) {
       _etaInfo = 'Bus is at ${firstStop.pointName} now';
-    } else if (eta != null) {
-      _etaInfo = 'First bus arrives at ${firstStop.pointName} in $eta min';
     } else {
-      _etaInfo = 'Tracking ${fresh.length} buses';
+      _etaInfo = 'First bus arrives at ${firstStop.pointName} in $eta min';
     }
   }
 
   String _getNextStopName(int nextStopIndex) {
-    if (nextStopIndex <= 0 || nextStopIndex > widget.pickupPoints.length) {
+    // 0 = the driver has served every stop on the route (the dashboard's
+    // next-stop helper returns 0 at the end). "Unknown" read as a bug.
+    if (nextStopIndex == 0) return 'End of route';
+    if (nextStopIndex < 0 || nextStopIndex > widget.pickupPoints.length) {
       return 'Unknown';
     }
     return widget.pickupPoints[nextStopIndex - 1].pointName;
@@ -1053,33 +1400,41 @@ class _MapScreenState extends State<MapScreen> {
 
   void _checkNotifications() {
     final now = DateTime.now();
-    for (var loc in _busLocations) {
-      // A fix older than 5 minutes must not produce an "arriving" alert for
-      // a bus that parked (or stopped reporting) long ago.
-      if (now.difference(loc.timestamp).inMinutes >= 5) continue;
-      for (var point in widget.pickupPoints) {
-        if (_notificationsEnabled[point.id] != true) continue;
+    // Prune: one entry per stop x bus over a long map session otherwise
+    // grows without bound.
+    _lastArrivalAlert.removeWhere(
+      (_, t) => now.difference(t) > const Duration(minutes: 10),
+    );
+    for (final point in widget.pickupPoints) {
+      if (_notificationsEnabled[point.id] != true) continue;
 
-        final distance = loc.distanceTo(point.latitude, point.longitude);
-        final eta = loc.estimatedTimeTo(point.latitude, point.longitude);
+      // Only a bus actually heading here can trigger an approach alert -
+      // a bus that just left the stop used to fire one too.
+      final serving = _closestServingBus(point);
+      if (serving == null) continue;
+      // A fix older than [_staleAfter] must not produce an "arriving" alert
+      // for a bus that parked (or stopped reporting) long ago.
+      if (now.difference(serving.timestamp) >= _staleAfter) continue;
 
-        // Notify if bus is within 0.5 km and within 5 minutes out.
-        if (distance >= 0.5 || eta == null || eta > 5) continue;
+      final distance = serving.distanceTo(point.latitude, point.longitude);
+      final eta = _etaMinutes(serving, point);
 
-        // One alert per stop+bus per 10 minutes. The old code flipped the
-        // toggle off locally while the server subscription stayed armed - the
-        // UI lied, and reopening the map re-armed the alert - and reused the
-        // stop id as the notification id, so a second bus's alert replaced
-        // the first one instead of stacking.
-        final key = '${point.id}:${loc.busId}';
-        final last = _lastArrivalAlert[key];
-        if (last != null &&
-            now.difference(last) < const Duration(minutes: 10)) {
-          continue;
-        }
-        _lastArrivalAlert[key] = now;
-        _showArrivalNotification(point, eta, loc);
+      // Notify if bus is within 0.5 km and within 5 minutes out.
+      if (distance >= 0.5 || eta > 5) continue;
+
+      // One alert per stop+bus per 10 minutes. The old code flipped the
+      // toggle off locally while the server subscription stayed armed - the
+      // UI lied, and reopening the map re-armed the alert - and reused the
+      // stop id as the notification id, so a second bus's alert replaced
+      // the first one instead of stacking.
+      final key = '${point.id}:${serving.busId}';
+      final last = _lastArrivalAlert[key];
+      if (last != null &&
+          now.difference(last) < const Duration(minutes: 10)) {
+        continue;
       }
+      _lastArrivalAlert[key] = now;
+      _showArrivalNotification(point, eta, serving);
     }
   }
 
@@ -1245,21 +1600,13 @@ class _MapScreenState extends State<MapScreen> {
           builder: (context, _, _) {
             return StatefulBuilder(
               builder: (context, setSheetState) {
-            // Calculate ETA using closest bus
+            // ETA comes from a bus that is actually still serving this
+            // stop (fresh, not yet past it); [live] is the freshest bus
+            // either way and drives the distance fallback.
             final eta = _calculateETA(point);
+            final serving = _closestServingBus(point);
+            final live = _closestFreshBus(point);
             final isNotifying = _notificationsEnabled[point.id] ?? false;
-
-            // Find closest bus for this stop
-            BusLocation? closestBus;
-            if (_busLocations.isNotEmpty) {
-              closestBus = _busLocations.reduce(
-                (a, b) =>
-                    a.distanceTo(point.latitude, point.longitude) <
-                        b.distanceTo(point.latitude, point.longitude)
-                    ? a
-                    : b,
-              );
-            }
 
             return Container(
               padding: const EdgeInsets.all(20),
@@ -1318,8 +1665,11 @@ class _MapScreenState extends State<MapScreen> {
                     ],
                     const SizedBox(height: 16),
 
-                    // ETA card
-                    if (eta != null && closestBus != null)
+                    // ETA card. Shown whenever a FRESH bus exists; the copy
+                    // degrades honestly (ETA -> passed -> distance) instead
+                    // of vanishing when a bus stops in traffic, which used
+                    // to blank the card completely.
+                    if (live != null)
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -1338,7 +1688,11 @@ class _MapScreenState extends State<MapScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Bus arrives in $eta minutes',
+                                  eta == null
+                                      ? 'The last bus has already passed this stop'
+                                      : eta == 0
+                                      ? 'Bus is at this stop now'
+                                      : 'Bus arrives in $eta minutes',
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -1349,7 +1703,7 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Distance: ${closestBus.distanceTo(point.latitude, point.longitude).toStringAsFixed(2)} km',
+                              'Distance: ${(serving ?? live).distanceTo(point.latitude, point.longitude).toStringAsFixed(2)} km',
                               style: TextStyle(color: Colors.grey[600]),
                             ),
                           ],
@@ -1379,7 +1733,7 @@ class _MapScreenState extends State<MapScreen> {
                           if (!isNotifying) {
                             await _service.subscribeToStopNotifications(
                               point.id,
-                              widget.route.id,
+                              routeId: widget.route.id,
                             );
                           } else {
                             await _service.unsubscribeFromStopNotifications(
@@ -1596,18 +1950,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   int? _calculateETA(PickupPoint point) {
-    if (_busLocations.isEmpty) return null;
-
-    // Use closest bus for ETA
-    final closestBus = _busLocations.reduce(
-      (a, b) =>
-          a.distanceTo(point.latitude, point.longitude) <
-              b.distanceTo(point.latitude, point.longitude)
-          ? a
-          : b,
-    );
-
-    return closestBus.estimatedTimeTo(point.latitude, point.longitude);
+    // A bus that already passed this stop (or only stale rows) must not
+    // produce an ETA; see _closestServingBus.
+    final serving = _closestServingBus(point);
+    if (serving == null) return null;
+    return _etaMinutes(serving, point);
   }
 
   Future<void> _getDirections(PickupPoint point) async {
@@ -1622,7 +1969,9 @@ class _MapScreenState extends State<MapScreen> {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
       '$origin'
-      '&destination=${point.latitude},${point.longitude}',
+      '&destination=${point.latitude},${point.longitude}'
+      // Open straight into driving turn-by-turn, not a route overview.
+      '&travelmode=driving&dir_action=navigate',
     );
     debugPrint('[dirs] ${point.pointName} -> $uri');
 
@@ -1643,10 +1992,13 @@ class _MapScreenState extends State<MapScreen> {
         );
       }
     } catch (e) {
+      debugPrint('[dirs] launch failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open directions: $e'),
+        const SnackBar(
+          content: Text(
+            'Could not open directions - is a maps app installed?',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1704,7 +2056,9 @@ class _MapScreenState extends State<MapScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              '${_buses.length} buses • ${widget.pickupPoints.length} stops',
+              '${_buses.length} ${_buses.length == 1 ? 'bus' : 'buses'} • '
+              '${widget.pickupPoints.length} '
+              '${widget.pickupPoints.length == 1 ? 'stop' : 'stops'}',
               style: const TextStyle(fontSize: 12),
             ),
           ],
@@ -2106,7 +2460,7 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       trailing: eta != null
                           ? Chip(
-                              label: Text('$eta min'),
+                              label: Text(eta == 0 ? 'Here' : '$eta min'),
                               backgroundColor: Colors.blue[50],
                               labelStyle: const TextStyle(
                                 color: Colors.blue,

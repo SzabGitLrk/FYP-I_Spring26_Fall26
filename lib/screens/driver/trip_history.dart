@@ -41,9 +41,12 @@ class _TripHistoryState extends State<TripHistory> {
       }
       // Own trips only: RLS should block other drivers' rows anyway, but the
       // explicit filter keeps the screen correct regardless of RLS state.
+      // Outer join on purpose: `routes!inner(...)` silently HID every trip
+      // whose route row was deleted (trips.route_id is ON DELETE SET NULL),
+      // so a driver's completed history vanished from the app.
       final trips = await supabase
           .from('trips')
-          .select('*, routes!inner(route_name)')
+          .select('*, routes(route_name)')
           .eq('driver_id', userId)
           .order('start_time', ascending: false);
       if (mounted) {
@@ -64,11 +67,16 @@ class _TripHistoryState extends State<TripHistory> {
     }
   }
 
-  String _getRouteName(Map<String, dynamic> trip) {
-    if (trip['routes'] != null && trip['routes']['route_name'] != null) {
-      return trip['routes']['route_name'];
+  /// Null-safe: with the outer join, `routes` is null for exactly the trips
+  /// whose route was deleted - the builder's own index keeps the fallback
+  /// label stable (the old `_trips.indexOf(trip)` was O(n), broke on
+  /// duplicate maps, and could never run for those rows behind an inner join).
+  String _getRouteName(Map<String, dynamic> trip, int index) {
+    final routes = trip['routes'];
+    if (routes is Map && routes['route_name'] != null) {
+      return '${routes['route_name']}';
     }
-    return 'Trip #${_trips.indexOf(trip) + 1}';
+    return 'Trip #${index + 1}';
   }
 
   String _calculateDuration(Map<String, dynamic> trip) {
@@ -157,7 +165,7 @@ class _TripHistoryState extends State<TripHistory> {
                             backgroundColor: Colors.green[100],
                             child: Text('${index + 1}'),
                           ),
-                          title: Text(_getRouteName(trip)),
+                          title: Text(_getRouteName(trip, index)),
                           subtitle: Text(
                             date != null
                                 ? '${date.day}/${date.month}/${date.year} • ${date.hour}:${date.minute.toString().padLeft(2, '0')}'

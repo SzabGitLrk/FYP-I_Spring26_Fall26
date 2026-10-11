@@ -147,20 +147,26 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
                 try {
                   await _service.signOut();
                 } catch (e) {
+                  // Raw exception text is for the log, not the screen.
+                  debugPrint('[universities] sign out failed: $e');
                   navigator.pop(); // dismiss the loading dialog
                   messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Error logging out: $e'),
+                    const SnackBar(
+                      content: Text(
+                        'Could not log out. Check your connection and try again.',
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
                   return;
                 }
 
-                // RoleRouter rebuilds to the login screen on sign-out, but the
-                // loading dialog is a *separate route* on the Navigator —
-                // without this pop it would spin forever over the login screen.
-                navigator.pop();
+                // RoleRouter rebuilds to the login screen on sign-out, but
+                // this screen (and the loading dialog) are separate routes on
+                // the Navigator - without popping them the university list -
+                // and the previous account's menu - would stay stacked over
+                // the login screen on a shared phone.
+                navigator.popUntil((route) => route.isFirst);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

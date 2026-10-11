@@ -64,9 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final name = _nameController.text.trim();
+    // Also captured: the error copy below must describe the action that was
+    // actually running, not a toggle the user may have flipped mid-request.
+    final isLogin = _isLogin;
 
     try {
-      if (_isLogin) {
+      if (isLogin) {
         await Supabase.instance.client.auth.signInWithPassword(
           email: email,
           password: password,
@@ -113,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
             content: Text(
               response.session != null
                   ? 'Registration successful!'
-                  : 'Registration successful! Please login.',
+                  : 'Registration successful! Please sign in.',
             ),
             backgroundColor: Colors.green,
           ),
@@ -122,10 +125,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on AuthException catch (e) {
       if (!mounted) return;
-      String message;
-      if (e.message.toLowerCase().contains('already registered')) {
+      final lower = e.message.toLowerCase();
+      final String message;
+      if (lower.contains('already registered')) {
         message = 'Already registered with this email';
-      } else if (e.message.toLowerCase().contains(
+      } else if (lower.contains(
         'database error saving new user',
       )) {
         // Detail goes to the log, not to the student: nobody in the app can
@@ -133,8 +137,19 @@ class _LoginScreenState extends State<LoginScreen> {
         debugPrint('[login] profile trigger failed: ${e.message}');
         message =
             'Registration could not save your profile. Please contact your administrator.';
+      } else if (lower.contains('invalid login credentials')) {
+        // Supabase deliberately does not say which of the two was wrong.
+        message = 'Email or password is incorrect.';
+      } else if (lower.contains('email not confirmed')) {
+        message = 'Please confirm your email before signing in.';
+      } else if (lower.contains('rate limit') || lower.contains('too many')) {
+        message = 'Too many attempts - wait a minute and try again.';
       } else {
-        message = e.message;
+        // Raw auth detail (SQL states, internals) is for the log only.
+        debugPrint('[login] auth error: ${e.message}');
+        message = isLogin
+            ? 'Could not sign in. Please try again.'
+            : 'Could not create your account. Please try again.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: Colors.red),
@@ -256,9 +271,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Login/Signup Toggle
                       Row(
                         children: [
-                          Expanded(child: _buildToggleButton('Login', true)),
                           Expanded(
-                            child: _buildToggleButton('Register', false),
+                            child: _buildToggleButton('Sign in', true),
+                          ),
+                          Expanded(
+                            child: _buildToggleButton('Create account', false),
                           ),
                         ],
                       ),
@@ -359,7 +376,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? const CircularProgressIndicator(
                                   color: Colors.white,
                                 )
-                              : Text(_isLogin ? 'Login' : 'Register'),
+                              : Text(
+                                  _isLogin ? 'Sign in' : 'Create account',
+                                ),
                         ),
                       ),
                     ],

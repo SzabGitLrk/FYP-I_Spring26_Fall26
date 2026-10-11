@@ -28,6 +28,27 @@ class _DriverDashboardState extends State<DriverDashboard> {
   String? _error;
   StreamSubscription<Position>? _positionSubscription;
 
+  /// The bus the driver explicitly confirmed (via the picker) this session.
+  /// Never guessed from a list - see [_busForRoute].
+  Bus? _selectedBus;
+
+  /// True when no bus row carries this driver's name, so every bus shown is
+  /// a pool the driver must pick from, not an assignment.
+  bool _noAssignedBus = false;
+
+  /// Guards the await on the bus-picker dialog so a second tap on
+  /// "Start Trip" cannot open a second picker on top of it.
+  bool _isStartingTrip = false;
+
+  /// Periodic heartbeat that re-sends the last known fix while the GPS
+  /// stream is quiet (parked bus) - see [_startLocationHeartbeat].
+  Timer? _locationHeartbeatTimer;
+  DateTime? _lastLocationSentAt;
+
+  /// Last trustworthy bearing ([Position.heading] jitters while slow, which
+  /// used to spin the bus icon in place).
+  double _lastGoodHeading = 0;
+
   // Stats tracking
   DateTime? _tripStartTime;
   double _totalDistance = 0.0;
@@ -42,6 +63,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   /// Stops already visited on this trip, so each one is counted exactly once.
   final Set<int> _countedStopIds = {};
+
+  /// Subset of [_countedStopIds] that was passed WITHOUT the bus arriving
+  /// (bypassed on the way to a later stop) - skipped stops are never counted
+  /// as pickups.
+  final Set<int> _skippedStopIds = {};
 
   /// Ownership token for the tracking session; bumped by every start/stop so
   /// a coroutine suspended in [_startTracking] can tell it was superseded.
@@ -65,9 +91,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _locationHeartbeatTimer?.cancel();
     // Leaving the dashboard mid-trip must not orphan the "Trip in progress"
     // notification (stopWithTask only covers swiping the app away).
     if (_isTracking) _stopForegroundService();
+    // dispose() cannot await: close the trip row fire-and-forget so signing
+    // out or navigating away does not leave the trip "active" forever.
+    // (If End Trip already ran, `_currentTripId` is null and this is a no-op;
+    // a duplicate close would be an idempotent UPDATE anyway.)
+    final tripId = _currentTripId;
+    if (tripId != null) {
+      unawaited(
+        _service.endTrip(tripId, _totalDistance).catchError((Object e) {
+          debugPrint('[driver] dispose-time endTrip failed: $e');
+        }),
+      );
+    }
     super.dispose();
   }
 
@@ -88,19 +127,34 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // Load buses assigned to this driver by driver_name
       List<Bus> driverBuses = await _service.getBusesForDriver(driverName);
 
-      // Fallback: if no buses assigned by name, show all active buses.
-      // Never silent: the driver would otherwise start tracking a bus that
-      // is not theirs and students would follow the wrong vehicle.
-      var fallbackToAllBuses = false;
+      // No buses matched the driver's name: keep the pool of active buses so
+      // the driver can still be ASKED which bus they are driving (see the
+      // picker in _startTracking) - but never auto-assign one of them to a
+      // trip: the bus table matches on a free-text name, and silently
+      // picking `.first` here used to record the wrong bus_id and teleport
+      // the students' marker onto another vehicle.
+      _noAssignedBus = driverBuses.isEmpty;
       if (driverBuses.isEmpty) {
         driverBuses = await _service.getAllActiveBuses();
-        fallbackToAllBuses = driverBuses.isNotEmpty;
       }
 
       _availableBuses = driverBuses;
 
+      // A stale selection must not survive a reload: if the previously
+      // selected route was deleted (or this retry reloaded a changed list),
+      // it would pre-fill buses and stops for a route that no longer exists.
+      final previouslySelected = _selectedRoute;
+      if (previouslySelected != null &&
+          !allRoutes.any((r) => r.id == previouslySelected.id)) {
+        debugPrint(
+          '[driver] selected route ${previouslySelected.id} no longer '
+          'exists - clearing selection',
+        );
+        _selectedRoute = null;
+      }
+
       // Pre-select route if driver has only one bus with a route
-      if (_availableBuses.length == 1) {
+      if (_selectedRoute == null && _availableBuses.length == 1) {
         final busRouteId = _availableBuses.first.routeId;
         final matchingRoute = allRoutes.where((r) => r.id == busRouteId);
         if (matchingRoute.isNotEmpty) {
@@ -113,10 +167,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _assignedRoutes = allRoutes;
         _isLoading = false;
       });
-      if (fallbackToAllBuses) {
+      // Close trips orphaned by a crash or a failed End Trip. Fire-and-
+      // forget: housekeeping must never delay or fail the dashboard load,
+      // and the driver's own UPDATE policy scopes it to their own rows.
+      unawaited(_reapStaleTrips());
+      if (_noAssignedBus) {
         _showErrorSnackBar(
-          'No bus is assigned to your name - showing all active buses. '
-          'Ask an administrator to assign you a bus before starting a trip.',
+          'No bus is assigned to your name - you will be asked to pick the '
+          'bus you are driving. Ask an administrator to assign you a bus.',
         );
       }
     } catch (e) {
@@ -131,14 +189,109 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
+  /// Closes orphaned "active" trips for the signed-in driver.
+  ///
+  /// A crash mid-trip, a lost connection during End Trip, or a failed trip
+  /// insert used to leave the row "active" forever, which distorts trip
+  /// history. Anything still active 12 hours after it started cannot be a
+  /// real drive. Only the values this app writes for `trips.status` are
+  /// used (`active`/`completed` - the column is plain TEXT, see
+  /// supabase_final.sql), and the schema is not altered. Distance stays as
+  /// it is: the real figure is unknown, so none is invented.
+  Future<void> _reapStaleTrips() async {
+    final driverId = user?.id;
+    if (driverId == null || driverId.isEmpty) return;
+    try {
+      final cutoff = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(hours: 12))
+          .toIso8601String();
+      final stale = await Supabase.instance.client
+          .from('trips')
+          .select('id, start_time')
+          .eq('driver_id', driverId)
+          .eq('status', 'active')
+          .lt('start_time', cutoff)
+          .order('start_time', ascending: true);
+
+      for (final row in stale as List) {
+        final tripId = row['id'] as int;
+        await Supabase.instance.client
+            .from('trips')
+            .update({
+              'status': 'completed',
+              // Close at start: stamping "now" would fake a 12-hour drive,
+              // and the real end time/distance are genuinely unknown.
+              'end_time': row['start_time'] ?? cutoff,
+            })
+            .eq('id', tripId);
+      }
+      if (stale.isNotEmpty) {
+        debugPrint('[driver] reaped ${stale.length} stale trip(s)');
+      }
+    } catch (e) {
+      // Housekeeping only - never block or fail the dashboard load.
+      debugPrint('[driver] stale-trip reap failed: $e');
+    }
+  }
+
   Future<void> _checkLocationPermissions() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return;
-      }
     }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (!mounted) return;
+      debugPrint('[driver] location permission unavailable: $permission');
+      // Post-frame: initState runs before the first build, and a dialog
+      // raised there races the Navigator's first layout.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showLocationPermissionDialog(permission);
+      });
+    }
+  }
+
+  /// Explains WHY the driver needs location (students cannot follow a bus
+  /// the app cannot locate) and, when access is permanently blocked, offers
+  /// a shortcut to the app settings page. A silent failure here used to let
+  /// trips run with no GPS at all while the dashboard looked normal.
+  void _showLocationPermissionDialog(LocationPermission permission) {
+    final permanentlyDenied = permission == LocationPermission.deniedForever;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Location permission needed'),
+        content: Text(
+          permanentlyDenied
+              ? 'Students can only follow your bus if the app can share its '
+                  'location. Location access is blocked for this app. Open '
+                  'your phone Settings > Apps > University Point Locator > '
+                  'Permissions > Location and allow it, then start your trip.'
+              : 'Students can only follow your bus if the app can share its '
+                  'location. Please allow location access when prompted - '
+                  'without it, tracking will not work.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+          if (permanentlyDenied)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                // Fire-and-forget: opens the OS app-settings page.
+                Geolocator.openAppSettings().catchError((Object e) {
+                  debugPrint('[driver] openAppSettings failed: $e');
+                  return false;
+                });
+              },
+              child: const Text('Open settings'),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Registers the foreground-service options once per app launch.
@@ -228,12 +381,63 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  void _startTracking() async {
+  /// The bus to drive: a previously confirmed session choice (still valid
+  /// for this route), or the single bus assigned to the driver's name.
+  ///
+  /// `null` means the driver must be asked - the app never falls back to
+  /// `.first`: with two drivers on one route, guessing wrote the wrong
+  /// `bus_id` onto the trip and teleported the students' marker between
+  /// vehicles.
+  Bus? _busForRoute(List<Bus> routeBuses) {
+    final remembered = _selectedBus;
+    if (remembered != null && routeBuses.any((b) => b.id == remembered.id)) {
+      return remembered;
+    }
+    // Auto-select only in the unambiguous, driver-owned case: exactly one
+    // bus assigned to their name on this route. An unassigned pool is never
+    // auto-picked, even when it happens to hold a single bus.
+    if (!_noAssignedBus && routeBuses.length == 1) {
+      _selectedBus = routeBuses.first;
+      return _selectedBus;
+    }
+    return null;
+  }
+
+  /// Asks the driver which of [buses] they are actually driving.
+  Future<Bus?> _askDriverToPickBus(List<Bus> buses) {
+    return showDialog<Bus>(
+      context: context,
+      builder: (dialogContext) {
+        return SimpleDialog(
+          title: const Text('Which bus are you driving?'),
+          children: [
+            if (_noAssignedBus)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  'No bus is assigned to you - select the bus you are driving.',
+                  style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                ),
+              ),
+            for (final bus in buses)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, bus),
+                child: Text(bus.busNumber),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _startTracking() async {
     // Re-entrancy guard: a second tap while the awaits below are still
     // running used to install a second GPS listener, double every position
-    // insert and leave an orphaned "active" trip behind.
-    if (_isTracking) return;
-    if (_selectedRoute == null) {
+    // insert and leave an orphaned "active" trip behind. [_isStartingTrip]
+    // additionally covers the await on the bus-picker dialog below.
+    if (_isTracking || _isStartingTrip) return;
+    final route = _selectedRoute;
+    if (route == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a route first'), backgroundColor: Colors.red),
       );
@@ -241,16 +445,38 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
 
     final routeBuses = _availableBuses
-        .where((b) => b.routeId == _selectedRoute!.id)
+        .where((b) => b.routeId == route.id)
         .toList();
     if (routeBuses.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No bus available for this route'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text(
+            'No active bus is on this route yet - ask an administrator to assign one.',
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
-    final bus = routeBuses.first;
+    // Resolve the bus: an existing/auto choice, otherwise an explicit pick.
+    final Bus bus;
+    final candidate = _busForRoute(routeBuses);
+    if (candidate != null) {
+      bus = candidate;
+    } else {
+      _isStartingTrip = true;
+      Bus? picked;
+      try {
+        picked = await _askDriverToPickBus(routeBuses);
+      } finally {
+        _isStartingTrip = false;
+      }
+      if (!mounted || picked == null) return; // dialog dismissed - no trip
+      bus = picked;
+      // Remembered for the rest of this session (validated per route above).
+      _selectedBus = picked;
+    }
 
     // Ownership token: bumped by every start/stop, so this coroutine can tell
     // after each await whether it still owns the tracking session.
@@ -268,6 +494,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // ...and the previous trip's stop progress.
       _tripStops = [];
       _countedStopIds.clear();
+      _skippedStopIds.clear();
+      // ...and the previous trip's bearing/send bookkeeping.
+      _lastGoodHeading = 0;
+      _lastLocationSentAt = null;
       // ...and the previous trip's id: a start whose queries fail must not
       // leave End writing distance/time onto the old trip's row.
       _currentTripId = null;
@@ -275,24 +505,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     int? tripId;
     try {
-      await _service.startTrip(
+      // The INSERT returns the id the database assigned: this is the ONLY
+      // trustworthy trip identity. (Re-querying "my latest active trip"
+      // afterwards could lose the race, or match an orphaned row with a
+      // NULL start_time that sorts first under the DESC default - writing
+      // the drive's distance onto the wrong trip.)
+      tripId = await _service.startTrip(
         busId: bus.id,
         driverId: user?.id ?? '',
-        routeId: _selectedRoute!.id,
+        routeId: route.id,
       );
-      final tripResult = await Supabase.instance.client
-          .from('trips')
-          .select('id')
-          .eq('driver_id', user?.id ?? '')
-          .eq('status', 'active')
-          .order('start_time', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      tripId = tripResult?['id'] as int?;
-    } catch (_) {
+    } catch (e) {
+      // Raw exception stays in the log; the driver gets actionable copy.
       // Trip recording is non-critical for live tracking - but never claim
       // success for a write that failed: without a trip row, End Trip has
       // nothing to close and the drive vanishes from trip history.
+      debugPrint('[driver] trip insert failed: $e');
       if (mounted && session == _trackSession) {
         _showErrorSnackBar(
           'Trip recording is unavailable - live tracking is on, but this '
@@ -308,8 +536,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       if (tripId != null && tripId != _currentTripId) {
         try {
           await _service.endTrip(tripId, _totalDistance);
-        } catch (_) {
+        } catch (e) {
           // Session was superseded; nothing more can be done here.
+          debugPrint('[driver] superseded-session endTrip failed: $e');
         }
       }
       return;
@@ -320,13 +549,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // if this fails the trip still tracks - it just reports no pickups and no
     // next stop (both default to 0 = unknown), which beats dropping the fix.
     try {
-      _tripStops = await _service.getPickupPointsForRoute(_selectedRoute!.id);
+      _tripStops = await _service.getPickupPointsForRoute(route.id);
     } catch (_) {
       _tripStops = [];
     }
 
     if (!mounted || session != _trackSession) return;
 
+    // 10 m of movement still gets its own callback; a PARKED bus gets none
+    // at all, so the stationary heartbeat below keeps re-sending the last
+    // fix and students don't see the marker go stale exactly when the bus
+    // is waiting at a stop.
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10,
@@ -358,47 +591,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
             final nextStopIndex = _updateStopProgress(position);
 
-            _service
-                .updateBusLocation(
-                  busId: bus.id,
-                  latitude: position.latitude,
-                  longitude: position.longitude,
-                  // `Position.speed` is metres per second; everything reading
-                  // this column - the "km/h" labels, the map's moving/stopped
-                  // thresholds, `estimatedTimeTo`'s ETA maths - expects km/h,
-                  // so it is converted once at the source instead of being
-                  // 3.6x wrong at every consumer.
-                  speed: position.speed.isFinite && position.speed > 0
-                      ? position.speed * 3.6
-                      : 0,
-                  // Degrees clockwise from north: the same convention the bus
-                  // marker's rotation uses. Unknown bearings arrive as a
-                  // negative or NaN value and would point the icon sideways.
-                  heading: position.heading.isFinite && position.heading > 0
-                      ? position.heading
-                      : 0,
-                  nextStopIndex: nextStopIndex,
-                )
-                .then<void>((_) {
-                  // A good write clears the failure streak.
-                  _locationWriteFailures = 0;
-                })
-                // Fire-and-forget by design: awaiting would stall the GPS
-                // stream, and an unhandled rejection would surface as an
-                // async error on every dropped fix. The next tick retries -
-                // but never silently: after 5 straight failures the driver
-                // is told their position is not reaching the students' maps.
-                .catchError((Object e) {
-                  _locationWriteFailures++;
-                  debugPrint('[driver] bus location insert failed: $e');
-                  if (_locationWriteFailures >= 5 && mounted) {
-                    _locationWriteFailures = 0;
-                    _showErrorSnackBar(
-                      'Live tracking failing - students may not see your '
-                      'position. Check connection and GPS.',
-                    );
-                  }
-                });
+            _sendBusLocation(bus, position, nextStopIndex);
           },
           onError: (error) {
             // Raw Geolocator internals stay in the log; the driver gets
@@ -415,6 +608,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
           },
         );
 
+    // The stream alone goes silent while the bus is parked; the heartbeat
+    // pushes the last known fix every ~20 s so the marker (and the map's
+    // 2-minute freshness window) stays alive at a stop.
+    _startLocationHeartbeat(bus);
+
     // Keep the process alive after the screen turns off, otherwise Android
     // 12+ pauses the GPS stream minutes into every real trip and students
     // see a frozen bus.
@@ -430,26 +628,122 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _showSuccessSnackBar('Trip started successfully!');
   }
 
-  void _stopTracking() async {
+  /// Pushes one GPS fix to the students' maps.
+  ///
+  /// Shared by the GPS stream callback and the stationary heartbeat so the
+  /// km/h conversion, the heading rule and the failure-streak warning can
+  /// never drift apart between the two paths.
+  void _sendBusLocation(Bus bus, Position position, int nextStopIndex) {
+    // Degrees clockwise from north: the same convention the bus marker's
+    // rotation uses. `Position.heading` is only trustworthy while moving -
+    // at low speed the GPS bearing jitters and the bus icon spins in place -
+    // so a good bearing is captured once the bus is properly moving (>1.5
+    // m/s) and the last good value is forwarded at a standstill.
+    if (position.heading.isFinite &&
+        position.heading >= 0 &&
+        position.heading <= 360 &&
+        position.speed > 1.5) {
+      _lastGoodHeading = position.heading;
+    }
+
+    _lastLocationSentAt = DateTime.now();
+    _service
+        .updateBusLocation(
+          busId: bus.id,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          // `Position.speed` is metres per second; everything reading
+          // this column - the "km/h" labels, the map's moving/stopped
+          // thresholds, `estimatedTimeTo`'s ETA maths - expects km/h,
+          // so it is converted once at the source instead of being
+          // 3.6x wrong at every consumer.
+          speed: position.speed.isFinite && position.speed > 0
+              ? position.speed * 3.6
+              : 0,
+          heading: _lastGoodHeading,
+          nextStopIndex: nextStopIndex,
+        )
+        .then<void>((_) {
+          // A good write clears the failure streak.
+          _locationWriteFailures = 0;
+        })
+        // Fire-and-forget by design: awaiting would stall the GPS
+        // stream, and an unhandled rejection would surface as an
+        // async error on every dropped fix. The next tick retries -
+        // but never silently: after 5 straight failures the driver
+        // is told their position is not reaching the students' maps.
+        .catchError((Object e) {
+          _locationWriteFailures++;
+          debugPrint('[driver] bus location insert failed: $e');
+          if (_locationWriteFailures >= 5 && mounted) {
+            _locationWriteFailures = 0;
+            _showErrorSnackBar(
+              'Live tracking failing - students may not see your '
+              'position. Check connection and GPS.',
+            );
+          }
+        });
+  }
+
+  /// Re-sends the last known fix whenever the GPS stream goes quiet, so a
+  /// parked bus keeps reporting "bus is here" instead of freezing a stale
+  /// marker (Android delivers no callback at all below the 10 m
+  /// `distanceFilter`). Started with the trip, cancelled on stop/dispose,
+  /// and never inserts without an active tracking session.
+  void _startLocationHeartbeat(Bus bus) {
+    _locationHeartbeatTimer?.cancel();
+    _locationHeartbeatTimer = Timer.periodic(const Duration(seconds: 20), (
+      _,
+    ) {
+      if (!mounted || !_isTracking) return;
+      final position = _currentPosition;
+      // No fix yet - nothing honest to send.
+      if (position == null) return;
+      // A row that just went out is still fresh; don't double-write.
+      final lastSent = _lastLocationSentAt;
+      if (lastSent != null &&
+          DateTime.now().difference(lastSent) < const Duration(seconds: 15)) {
+        return;
+      }
+      _sendBusLocation(bus, position, _updateStopProgress(position));
+    });
+  }
+
+  Future<void> _stopTracking() async {
     // Invalidate any _startTracking still awaiting inside its queries: it
     // must not install a GPS listener (or resurrect this trip) afterwards.
     ++_trackSession;
+    _locationHeartbeatTimer?.cancel();
+    _locationHeartbeatTimer = null;
+    var tripSaved = false;
     if (_currentTripId != null) {
       try {
         await _service.endTrip(_currentTripId!, _totalDistance);
+        tripSaved = true;
       } catch (e) {
         // Silently swallowing this lost the trip's end time and distance
         // with no trace at all — the driver was told "Trip ended!" while
-        // nothing was written.
-        _showErrorSnackBar('Trip ended, but saving it failed: $e');
+        // nothing was written. Raw exception stays in the log.
+        debugPrint('[driver] end trip write failed: $e');
       }
     }
-    setState(() => _isTracking = false);
+    // Guarded: the await above can outlive this screen (driver navigated
+    // away mid-save) - setState on a defunct State would throw.
+    if (mounted) setState(() => _isTracking = false);
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _currentTripId = null;
     await _stopForegroundService();
 
+    if (!mounted) return;
+    if (!tripSaved) {
+      // Honest failure instead of a fake success: without a closed trip
+      // row there is no recorded duration/distance to report.
+      _showErrorSnackBar(
+        'Drive was not recorded - check your connection and try again.',
+      );
+      return;
+    }
     if (_tripStartTime != null) {
       final duration = DateTime.now().difference(_tripStartTime!);
       _showSuccessSnackBar(
@@ -467,6 +761,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// The counter used to bump on any fix with `speed < 1` - i.e. it counted
   /// red lights rather than pickups, capped at 10 - and `next_stop_index` was
   /// never sent at all, so students always saw "Next stop: Unknown".
+  ///
+  /// Bypassed stops are handled too: reaching a LATER stop marks the pending
+  /// ones before it as skipped (never counted as pickups) and jumps the
+  /// first-unvisited marker forward, instead of freezing the whole trip on
+  /// the first stop the bus never reached.
   int _updateStopProgress(Position position) {
     if (_tripStops.isEmpty) return 0;
 
@@ -484,6 +783,36 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (firstUnvisited >= _tripStops.length) return 0; // every stop visited
 
     const arrivalRadiusMeters = 50.0;
+
+    // Skip-ahead: if the bus reached a LATER stop while earlier ones were
+    // still pending (bypassed stop, detour, driver forgot), those stops
+    // will never be reached - without this jump the readout froze at the
+    // first unvisited stop ("Next stop: #2" for the rest of the trip) and
+    // the pickup counter stayed at 0. Bypassed stops are marked visited-
+    // but-skipped: added to [_countedStopIds] so they can never later be
+    // counted as a pickup, and tracked in [_skippedStopIds] for clarity.
+    for (var j = firstUnvisited + 1; j < _tripStops.length; j++) {
+      final laterStop = _tripStops[j];
+      final laterDistance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        laterStop.latitude,
+        laterStop.longitude,
+      );
+      if (laterDistance > arrivalRadiusMeters) continue;
+      for (var k = firstUnvisited; k < j; k++) {
+        _countedStopIds.add(_tripStops[k].id);
+        _skippedStopIds.add(_tripStops[k].id);
+      }
+      debugPrint(
+        '[driver] stop ${laterStop.pointName} reached while '
+        '${j - firstUnvisited} earlier stop(s) were still pending - '
+        '${_skippedStopIds.length} skipped so far',
+      );
+      firstUnvisited = j;
+      break;
+    }
+
     final stop = _tripStops[firstUnvisited];
     final distance = Geolocator.distanceBetween(
       position.latitude,
@@ -545,10 +874,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 try {
                   await _service.signOut();
                 } catch (e) {
+                  // Raw exception stays in the log; the driver gets copy
+                  // they can act on.
+                  debugPrint('[driver] sign-out failed: $e');
                   navigator.pop(); // dismiss the loading dialog
                   messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Error logging out: $e'),
+                    const SnackBar(
+                      content: Text(
+                        'Could not log out. Check your connection and try again.',
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -556,9 +890,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 }
 
                 // RoleRouter rebuilds to the login screen on sign-out, but the
-                // loading dialog is a *separate route* on the Navigator —
-                // without this pop it would spin forever over the login screen.
-                navigator.pop();
+                // loading dialog is a *separate route* on the Navigator -
+                // without this pop it would spin forever over the login
+                // screen. popUntil(isFirst) then clears anything else the
+                // signed-out session pushed (history, profile), so no
+                // signed-out screen stays reachable via Back.
+                navigator.pop(); // dismiss the loading dialog
+                navigator.popUntil((route) => route.isFirst);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

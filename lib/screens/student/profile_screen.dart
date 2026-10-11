@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -11,7 +12,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final SupabaseService _service = SupabaseService();
-  final user = Supabase.instance.client.auth.currentUser;
 
   bool _isLoading = true;
   String? _error;
@@ -22,12 +22,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _role;
   DateTime? _memberSince;
 
-  // Favorites and history
+  // Favorites. There is no `user` field on purpose: it captured
+  // `auth.currentUser` once when this State was created and outlived
+  // sign-out, so a stale account could be rendered after re-entry.
+  // `_loadUserData` always reads the CURRENT user instead.
   List<Map<String, dynamic>> _favoriteStops = [];
-  List<Map<String, dynamic>> _recentTrips = [];
 
-  // Statistics
-  int _totalTrips = 0;
+  // Statistics. Both are derived from `_favoriteStops` - real data for THIS
+  // user. `_recentTrips`/`_totalTrips` are gone: students own no trip rows
+  // (trips belong to drivers), so they were always a fabricated 0 / empty
+  // "Recent Trips" list.
   int _favoriteCount = 0;
   int _notificationCount = 0;
 
@@ -41,15 +45,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Read the CURRENT signed-in user at load time - never a snapshot
+      // captured when this State was created. Otherwise a profile pushed
+      // before a sign-out could keep rendering the previous account.
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        // Signed out mid-flight (or a restored session already gone): say so
+        // instead of rendering a half-empty profile of nobody.
+        if (!mounted) return;
+        setState(() {
+          _error = 'You are signed out. Please sign in again.';
+          _isLoading = false;
+        });
+        return;
+      }
       // Get user metadata
       // `?? 'Student'` only guards null: an empty-string name (signup with an
       // empty name field) used to reach `_displayName![0]` in build() and
       // crash the screen with a RangeError.
-      final rawName = user?.userMetadata?['name'];
+      final rawName = user.userMetadata?['name'];
       _displayName = rawName is String && rawName.trim().isNotEmpty
           ? rawName.trim()
           : 'Student';
-      _email = user?.email ?? '';
+      _email = user.email ?? '';
       // Role from the profiles row, never from userMetadata: the badge must
       // show the same enforced value the router used (metadata is
       // client-controlled and goes stale after an admin changes a role).
@@ -57,18 +75,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final profile = await Supabase.instance.client
             .from('profiles')
             .select('role')
-            .eq('id', user?.id ?? '')
+            .eq('id', user.id)
             .maybeSingle();
         _role = profile?['role'] as String? ?? 'student';
       } catch (_) {
         // Non-critical: the badge falls back to the default label.
         _role = 'student';
       }
-      // Handle createdAt - Supabase returns it as a String in ISO8601 format
-      final createdAtValue = user?.createdAt;
-      if (createdAtValue != null) {
-        _memberSince = DateTime.tryParse(createdAtValue.toString());
-      }
+      // Supabase returns createdAt as a non-nullable ISO8601 String.
+      _memberSince = DateTime.tryParse(user.createdAt);
 
       // Real favourites: this account's active stop subscriptions joined
       // against stop and route names. The old version showed three hard-coded
@@ -77,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final subs = await Supabase.instance.client
           .from('stop_notifications')
           .select('stop_id, route_id')
-          .eq('user_id', user?.id ?? '')
+          .eq('user_id', user.id)
           .eq('is_active', true);
       final subRows = List<Map<String, dynamic>>.from(subs as List);
       final stopIds = [
@@ -112,27 +127,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
         for (final r in routes) r['id']: r['route_name'],
       };
 
+      // Dedupe by stop id: `unsubscribe` only flips is_active and never
+      // deletes, so on schemas without a unique (user_id, stop_id)
+      // constraint a sync edge can leave two active rows for one stop and
+      // it would show - and toggle - twice.
+      final seenStopIds = <int>{};
+      final favorites = <Map<String, dynamic>>[];
+      for (final sub in subRows) {
+        final stopId = sub['stop_id'];
+        if (stopId is! int) continue;
+        if (!seenStopIds.add(stopId)) continue;
+        final pointName = pointNameById[stopId];
+        if (pointName == null) continue;
+        favorites.add({
+          'name': pointName,
+          'route': routeNameById[sub['route_id']] ?? 'Route',
+          'notifications': true,
+          'stopId': stopId,
+          'routeId': sub['route_id'],
+        });
+      }
+
       if (!mounted) return;
       setState(() {
-        _favoriteStops = [
-          for (final sub in subRows)
-            if (pointNameById[sub['stop_id']] != null)
-              {
-                'name': pointNameById[sub['stop_id']],
-                'route': routeNameById[sub['route_id']] ?? 'Route',
-                'notifications': true,
-                'stopId': sub['stop_id'],
-                'routeId': sub['route_id'],
-              },
-        ];
-        // Students own no trip rows (trips belong to drivers), so there is
-        // nothing real to show - an empty list beats the fake "Mar 10, 2026"
-        // entries that used to ship.
-        _recentTrips = [];
+        _favoriteStops = favorites;
 
-        // Calculate statistics
+        // Calculate statistics - both real, both derived from the list above.
         _favoriteCount = _favoriteStops.length;
-        _totalTrips = _recentTrips.length;
         _notificationCount = _favoriteStops
             .where((s) => s['notifications'] == true)
             .length;
@@ -192,20 +213,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 try {
                   await _service.signOut();
                 } catch (e) {
+                  // Raw exception text is for the log, not the screen.
+                  debugPrint('[profile] sign out failed: $e');
                   navigator.pop(); // dismiss the loading dialog
                   messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Error logging out: $e'),
+                    const SnackBar(
+                      content: Text(
+                        'Could not log out. Check your connection and try again.',
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
                   return;
                 }
 
-                // RoleRouter rebuilds to the login screen on sign-out, but the
-                // loading dialog is a *separate route* on the Navigator —
-                // without this pop it would spin forever over the login screen.
-                navigator.pop();
+                // RoleRouter rebuilds to the login screen on sign-out, but
+                // this ProfileScreen is a PUSHED route on top of `home:` -
+                // the loading dialog AND the signed-out profile (name,
+                // e-mail, favourite stops) would stay stacked over the login
+                // screen on a shared phone. pop to the first route so only
+                // the login screen remains.
+                navigator.popUntil((route) => route.isFirst);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
@@ -220,7 +248,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _toggleNotification(int index) async {
+    // Everything the callback needs is captured BEFORE the first await: the
+    // list can be reloaded/removed while a request is in flight, and
+    // re-reading `_favoriteStops[index]` afterwards produced the wrong stop's
+    // name or a RangeError outside this try/catch.
     final stop = _favoriteStops[index];
+    final stopId = stop['stopId'] as int;
+    // Legacy rows can have stop_notifications.route_id NULL, so this must be
+    // a nullable cast - `as int` threw a TypeError and made ENABLE always
+    // fail while disable worked.
+    final routeId = stop['routeId'] as int?;
+    final name = '${stop['name']}';
     final enable = stop['notifications'] != true;
 
     // Optimistic flip - rolled back below if the server disagrees, so the
@@ -229,12 +267,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       if (enable) {
+        // OS-level check FIRST: a persisted subscription whose notification
+        // can never be delivered is a silent no-op the student would trust.
+        final granted = await NotificationService().ensurePermission();
+        if (!granted) {
+          debugPrint(
+            '[profile] notification permission denied by the OS - '
+            'not subscribing to stop $stopId',
+          );
+          if (!mounted) return;
+          setState(() => stop['notifications'] = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Notifications are blocked — enable them for this app in '
+                'system settings.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
         await _service.subscribeToStopNotifications(
-          stop['stopId'] as int,
-          stop['routeId'] as int,
+          stopId,
+          routeId: routeId,
         );
       } else {
-        await _service.unsubscribeFromStopNotifications(stop['stopId'] as int);
+        await _service.unsubscribeFromStopNotifications(stopId);
       }
     } catch (e) {
       debugPrint('[profile] notification toggle failed: $e');
@@ -253,26 +312,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _favoriteStops[index]['notifications']
-              ? '🔔 Notifications enabled for ${_favoriteStops[index]['name']}'
-              : '🔕 Notifications disabled',
+          enable
+              ? '🔔 Notifications enabled for $name'
+              : '🔕 Notifications disabled for $name',
         ),
         duration: const Duration(seconds: 2),
-        backgroundColor: _favoriteStops[index]['notifications']
-            ? Colors.green
-            : Colors.grey,
+        backgroundColor: enable ? Colors.green : Colors.grey,
       ),
     );
   }
 
   void _removeFavorite(int index) {
+    // Captured now: the list may be reloaded between the dialog opening and
+    // the server call returning, so the callback must not re-index it later.
+    final stop = _favoriteStops[index];
+    final name = '${stop['name']}';
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Remove Favorite'),
           content: Text(
-            'Remove ${_favoriteStops[index]['name']} from favorites?',
+            'Remove $name from favorites?',
           ),
           actions: [
             TextButton(
@@ -292,7 +353,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // was silently restored by every pull-to-refresh).
                 try {
                   await _service.unsubscribeFromStopNotifications(
-                    _favoriteStops[index]['stopId'] as int,
+                    stop['stopId'] as int,
                   );
                 } catch (e) {
                   debugPrint('[profile] remove favorite failed: $e');
@@ -307,8 +368,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 if (!mounted) return;
                 setState(() {
-                  _favoriteStops.removeAt(index);
+                  // By identity, not index: a refresh while the request was
+                  // in flight would have shifted (or dropped) this index.
+                  _favoriteStops.remove(stop);
                   _favoriteCount = _favoriteStops.length;
+                  _notificationCount = _favoriteStops
+                      .where((s) => s['notifications'] == true)
+                      .length;
                 });
                 messenger.showSnackBar(
                   const SnackBar(
@@ -330,6 +396,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final role = _role == 'driver' ? 'Driver' : 'Student';
     final Color primaryColor = _role == 'driver' ? Colors.green : Colors.blue;
+    // Plural-aware labels: "1 Favorites" reads as a bug on a launch build.
+    final favoriteLabel = _favoriteCount == 1 ? 'Favorite' : 'Favorites';
+    final alertsLabel = _notificationCount == 1 ? 'Alert On' : 'Alerts ON';
 
     return Scaffold(
       appBar: AppBar(
@@ -374,7 +443,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Icon(Icons.error_outline, color: Colors.red, size: 60),
                   const SizedBox(height: 16),
                   Text(
-                    'Error: $_error',
+                    // `_error` only ever holds friendly, user-facing copy -
+                    // the raw cause goes to debugPrint above.
+                    _error!,
                     style: const TextStyle(color: Colors.red),
                     textAlign: TextAlign.center,
                   ),
@@ -532,24 +603,18 @@ color: primaryColor.withValues(alpha: 0.3),
                     ),
                     const SizedBox(height: 20),
 
-                    // Statistics Cards
+                    // Statistics Cards. Both cards are real numbers for THIS
+                    // user. The old third card ("Total Trips: 0") was
+                    // fabricated - students own no trip rows - so it is gone
+                    // rather than lying with a 0.
                     Row(
                       children: [
                         Expanded(
                           child: _buildStatCard(
                             Icons.star,
                             '$_favoriteCount',
-                            'Favorites',
+                            favoriteLabel,
                             Colors.amber,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            Icons.history,
-                            '$_totalTrips',
-                            'Total Trips',
-                            Colors.blue,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -557,7 +622,7 @@ color: primaryColor.withValues(alpha: 0.3),
                           child: _buildStatCard(
                             Icons.notifications_active,
                             '$_notificationCount',
-                            'Alerts ON',
+                            alertsLabel,
                             Colors.green,
                           ),
                         ),
@@ -661,71 +726,10 @@ backgroundColor: Colors.amber.withValues(alpha: 0.1),
                               );
                             },
                           ),
-                    const SizedBox(height: 24),
-
-                    // Recent Trips Section. "View All" was a no-op; trip
-                    // history is a driver feature (Trip History screen) and
-                    // this student list is always empty.
-                    const Text(
-                      'Recent Trips',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _recentTrips.length,
-                        separatorBuilder: (_, _) => const Divider(),
-                        itemBuilder: (context, index) {
-                          final trip = _recentTrips[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.blue[50],
-                              child: Text(
-                                '${index + 1}',
-                                style: const TextStyle(
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              trip['university'],
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${trip['route']} • ${trip['date']}',
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  trip['time'],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              // View trip details
-                            },
-                          );
-                        },
-                      ),
-                    ),
+                    // The "Recent Trips" section was removed: students own
+                    // no trip rows, so it was a heading over an always-empty
+                    // card - fabricated data on a launch build. Trip history
+                    // is a driver feature (see the Trip History screen).
                     const SizedBox(height: 16),
                   ],
                 ),

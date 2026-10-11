@@ -103,19 +103,31 @@ class SupabaseService {
     }
   }
 
-  Future<void> startTrip({
+  /// Inserts a new trip row and returns the id the database assigned it.
+  ///
+  /// The id comes straight off the INSERT result - never from re-querying
+  /// "my latest active trip" afterwards: a re-query can lose the race, and
+  /// an orphaned older row with a NULL `start_time` sorts first under the
+  /// DESC default, so End Trip would write the distance onto the WRONG
+  /// trip. With the inserted id, a driver has exactly one row to close.
+  Future<int> startTrip({
     required int busId,
     required String driverId,
     required int routeId,
   }) async {
     try {
-      await _client.from('trips').insert({
-        'bus_id': busId,
-        'driver_id': driverId,
-        'route_id': routeId,
-        'start_time': DateTime.now().toUtc().toIso8601String(),
-        'status': 'active',
-      });
+      final row = await _client
+          .from('trips')
+          .insert({
+            'bus_id': busId,
+            'driver_id': driverId,
+            'route_id': routeId,
+            'start_time': DateTime.now().toUtc().toIso8601String(),
+            'status': 'active',
+          })
+          .select('id')
+          .single();
+      return row['id'] as int;
     } catch (e) {
       throw Exception('Failed to start trip: $e');
     }
@@ -243,10 +255,15 @@ class SupabaseService {
     return user?.id;
   }
 
+  /// Toggles the stop alert on for the signed-in user.
+  ///
+  /// [routeId] is optional: when supplied it is stored/filtered on, when
+  /// omitted the write leaves `route_id` untouched (the column is nullable)
+  /// so existing call sites keep their exact behavior.
   Future<void> subscribeToStopNotifications(
-    int stopId,
-    int routeId,
-  ) async {
+    int stopId, {
+    int? routeId,
+  }) async {
     final uid = _getUserId();
     if (uid == null) return;
     try {
@@ -258,40 +275,55 @@ class SupabaseService {
       // violation; without it, every cycle stacks another duplicate row.
       // This order needs only the INSERT and UPDATE policies the feature
       // already proves exist (subscribing and unsubscribing both work).
+      final update = <String, dynamic>{
+        'is_active': true,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+      if (routeId != null) update['route_id'] = routeId;
+
       final existing = await _client
           .from('stop_notifications')
-          .update({
-            'is_active': true,
-            'route_id': routeId,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
+          .update(update)
           .eq('user_id', uid)
           .eq('stop_id', stopId)
           .select('id');
 
       if (existing.isEmpty) {
-        await _client.from('stop_notifications').insert({
+        final insert = <String, dynamic>{
           'user_id': uid,
           'stop_id': stopId,
-          'route_id': routeId,
           'is_active': true,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
-        });
+        };
+        if (routeId != null) insert['route_id'] = routeId;
+        await _client.from('stop_notifications').insert(insert);
       }
     } catch (e) {
       throw Exception('Failed to subscribe: $e');
     }
   }
 
-  Future<void> unsubscribeFromStopNotifications(int stopId) async {
+  /// Turns the stop alert off for the signed-in user.
+  ///
+  /// Optional [routeId] narrows the write to that route's row; omitted, it
+  /// deactivates the stop for the user across routes - the original behavior.
+  Future<void> unsubscribeFromStopNotifications(
+    int stopId, {
+    int? routeId,
+  }) async {
     final uid = _getUserId();
     if (uid == null) return;
     try {
-      await _client
+      final builder = _client
           .from('stop_notifications')
           .update({'is_active': false})
           .eq('user_id', uid)
           .eq('stop_id', stopId);
+      if (routeId != null) {
+        await builder.eq('route_id', routeId);
+      } else {
+        await builder;
+      }
     } catch (e) {
       throw Exception('Failed to unsubscribe: $e');
     }

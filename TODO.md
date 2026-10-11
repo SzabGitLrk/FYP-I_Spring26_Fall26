@@ -74,10 +74,13 @@ Closed items are summarised at the bottom.
   The leftovers are closed too: the GPS stream error and the password-reset
   snackbar got friendly copy (reset keeps a specific rate-limit variant).
   The remaining `Error: ` prefixes render already-friendly text.
-- [ ] Driver bus matching falls back to **all active buses** when
-  `userMetadata['name']` mismatches — it now WARNS loudly (snackbar) instead
-  of failing silently; the proper fix is matching on `driver_id` (needs a
-  `buses.driver_id` column + migration).
+- [x] Driver bus matching no longer falls back to **all active buses** and
+  never silently picks `routeBuses.first` — a bus-picker dialog must be
+  confirmed whenever more than one candidate exists (and when the driver's
+  name matches none, with a "No bus is assigned to you" subtitle); a route
+  with zero buses refuses Start Trip with a clear message. Matching on
+  `driver_id` (a `buses.driver_id` column + migration) remains a separate,
+  deliberately unmade decision.
 - [ ] Bottom overlay layout is hard-coded (`bottom:` constants) — restructure
   with `LayoutBuilder` for tablets/small widths; the ETA card now clears the
   SOS FAB and is capped at 2 lines, but a full layout pass is still wanted.
@@ -114,8 +117,10 @@ Closed items are summarised at the bottom.
   both "View All" buttons and the dead Settings gear removed (no fake
   affordances). Trip-history rows stay non-interactive on purpose - they
   show no tap affordance; add a detail expansion only if wanted.
-- [ ] If realtime is unavailable, add a 30–60 s polling fallback so the map
-  can recover without an app restart.
+- [x] Realtime fallback: the map re-ages stale rows on a 30 s timer, polls
+  `bus_locations` over REST every 30 s (cold floor if the websocket dies),
+  and the feed's restart budget now cools down 60 s and retries instead of
+  giving up until an app restart.
 - [ ] Dead code pending your decision (~543 lines): `utils/helpers.dart`,
   `utils/app_theme.dart`, `models/profile.dart`, `widgets/map_legend.dart`,
   `widgets/bus_count_indicator.dart`, `widgets/loading_error.dart`
@@ -147,3 +152,34 @@ deep link removed, POST_NOTIFICATIONS declared, release signing fails loudly
 instead of silently using the debug key, keystores/`main`/`sage` untracked,
 README claims corrected, bootstrap SQL scripts marked DO-NOT-RE-RUN, security
 SQL extended with Sections 8–11.
+
+Navigation/routing audit pass (11 Oct 2026, full Severity 1–3 + dummy-data
+sweep follow-through): bus-feed rows collapsed to newest-per-bus (no more
+ghost-marker trails or row-count "active" pills); one `_staleAfter` 5-min
+constant governs feed/poll/ETA/alerts, with a 30 s age-out timer and a 30 s
+REST poll; ETA only from a bus that is fresh and has not passed the stop,
+with a 1.3 road-circuity factor and a 20 km/h urban speed floor (distance
+card degrades honestly instead of blanking); reroute dead zone closed
+(120→50 m floor) and guidance switches the GPS stream to unfiltered fixes
+with a 2 s throttle so a stationary student can still latch arrival; feed
+restart budget cools down 60 s + retries; join-at-stop prefers the later
+near-equal stop (no backwards first leg); turn re-announce ladder (80 m /
+25 m) + speed-scaled lookahead (5 s of travel), depart step held for 25 m,
+arrival second gate within 15 m of the final maneuver; intermediate OSRM
+arrive-steps voiced/shown as "Passing <stop>"; `startTrip` returns the
+inserted trip id (no re-query guess, stale active trips reaped, dispose
+ends the trip, honest "not recorded" message); stationary-bus 20 s
+heartbeat; skipped-stop advance (head-only freeze gone); bus picker
+instead of silent `.first`/all-buses; heading written only above 1.5 m/s;
+logout `popUntil(isFirst)` (no signed-out PII stacked over login) on all
+three roles; profile notification toggle captures state before `await` +
+nullable `routeId`; admin mutations `.select('id')` row-verification +
+ordered driver list; trip history outer-joins deleted routes; fabricated
+student stats removed; notification permission reverts the toggle honestly
+when denied; location-denied explains itself and offers Settings; route
+cache (15 min TTL, 32 entries) with 6 s/8 s timeouts and a repo contact
+UA; Google handoff opens in `travelmode=driving` + `dir_action=navigate`;
+"End of route" copy; arrival-alert map pruned; device-clock skew warning;
+pluralization/raw-exception sweep; `utils/helpers.dart` delegates to the
+ceil ETA model (no round-trap); `bus_locations` 7-day retention SQL
+documented in `supabase_launch_cleanup.sql`.

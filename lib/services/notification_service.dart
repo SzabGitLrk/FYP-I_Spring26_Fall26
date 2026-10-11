@@ -44,6 +44,63 @@ class NotificationService {
         AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
   }
 
+  /// Verifies that the OS will actually deliver this app's notifications,
+  /// requesting the permission first if it has never been asked for.
+  ///
+  /// Returns true when notifications can be shown, false when the user has
+  /// blocked them (or the status could not be verified). Callers MUST NOT
+  /// persist an alert subscription when this returns false - the UI would
+  /// claim an alert is armed that can never fire.
+  ///
+  /// Additive on purpose: [initialize], [showBusArrivalNotification] and
+  /// [showSOSNotification] keep their existing signatures for other screens.
+  Future<bool> ensurePermission() async {
+    // No plugin implementation exists on web (main.dart skips init there).
+    if (kIsWeb) return true;
+    try {
+      // resolvePlatformSpecificImplementation matches on the target platform,
+      // so a null here simply means "not this OS" - no dart:io import needed.
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        final enabled = await android.areNotificationsEnabled();
+        if (enabled == true) return true;
+        final granted = await android.requestNotificationsPermission();
+        if (granted != true) {
+          debugPrint(
+            '[notif] android notifications blocked '
+            '(enabled: $enabled, granted: $granted)',
+          );
+        }
+        return granted == true;
+      }
+
+      final ios = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      if (ios != null) {
+        final permissions = await ios.checkPermissions();
+        if (permissions?.isEnabled == true) return true;
+        final granted = await ios.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        if (granted != true) {
+          debugPrint('[notif] ios notifications blocked (granted: $granted)');
+        }
+        return granted == true;
+      }
+
+      // Desktop / unsupported platform: no OS permission model to consult.
+      return true;
+    } catch (e) {
+      // Never crash a toggle over the permission probe - but also never claim
+      // a permission that could not be verified.
+      debugPrint('[notif] permission check failed: $e');
+      return false;
+    }
+  }
+
   Future<void> showBusArrivalNotification({
     required String stopName,
     required int etaMinutes,

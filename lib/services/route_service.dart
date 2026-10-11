@@ -46,15 +46,43 @@ class RoadRoute {
 class RouteService {
   /// Identifies these requests to the shared public routers: their usage
   /// policies ask for a real User-Agent (with contact info), not the default
-  /// `Dart/<version>` string.
+  /// `Dart/<version>` string. The contact points at the project repository
+  /// (no personal email is published with every request).
   static const String _userAgent =
-      'UniversityPointLocator/1.0 (university final-year student project)';
+      'UniversityPointLocator/1.0 (university final-year student project; '
+      'contact=https://github.com/SzabGitLrk/FYP-I_Spring26_Fall26)';
+
+  /// Public demo routers occasionally hang; fail over fast. Serial worst
+  /// case is now 6 s + 8 s = 14 s instead of 27 s.
+  static const Duration _osrmTimeout = Duration(seconds: 6);
+  static const Duration _valhallaTimeout = Duration(seconds: 8);
+
+  /// How long a cached route stays valid - long enough to cover a student
+  /// opening the map, starting guidance, ending it and reopening it.
+  static const Duration _cacheTtl = Duration(minutes: 15);
+
+  /// Hard cap on cached routes; the oldest entry is evicted first.
+  static const int _cacheMaxEntries = 32;
+
+  /// Successful routes keyed by [_cacheKey]. STATIC because production call
+  /// sites construct a fresh [RouteService] per fetch - an instance field
+  /// would never hit the cache in practice.
+  static final Map<String, _RouteCacheEntry> _cache = {};
 
   /// [client] is injected by tests; production call sites omit it and keep
   /// the one-shot `http.get` behaviour (no pooled client to outlive).
-  RouteService({http.Client? client}) : _client = client;
+  ///
+  /// With an injected client the response cache is bypassed: the test suite
+  /// pins per-call request counts and the OSRM-before-Valhalla ordering,
+  /// which a shared cache would short-circuit.
+  RouteService({http.Client? client})
+    : _client = client,
+      _cacheEnabled = client == null;
 
   final http.Client? _client;
+
+  /// Whether [fetchRoute] may read from and write to the shared cache.
+  final bool _cacheEnabled;
 
   /// GET [uri] with the identifying User-Agent, via the injected client
   /// when one was supplied.
@@ -68,12 +96,61 @@ class RouteService {
 
   Future<RoadRoute?> fetchRoute(List<LatLng> waypoints) async {
     if (waypoints.length < 2) return null;
+
+    // Identical geometry (map open / nav start / nav end / reroute over the
+    // same waypoints) is served from cache instead of another 6-14 s serial
+    // trip to the keyless public demo routers.
+    final cacheKey = _cacheEnabled ? _cacheKey(waypoints) : null;
+    if (cacheKey != null) {
+      final hit = _readCache(cacheKey);
+      if (hit != null) {
+        debugPrint('[route] cache hit (${hit.source}) - no network round-trip');
+        return hit;
+      }
+    }
+
     debugPrint('[route] fetching road geometry for ${waypoints.length} waypoints');
 
     final osrm = await _fetchOsrm(waypoints);
-    if (osrm != null) return osrm;
+    final route = osrm ?? await _fetchValhalla(waypoints);
+    if (route != null && cacheKey != null) _writeCache(cacheKey, route);
+    return route;
+  }
 
-    return _fetchValhalla(waypoints);
+  /// Normalized cache key for [waypoints]: coordinates on a ~1 m grid (5
+  /// decimals), so identical stop lists hit while live GPS positions (which
+  /// change every fix) do not - plus the request options, which are fixed
+  /// today but must be part of the key if they ever vary.
+  static String _cacheKey(List<LatLng> waypoints) {
+    final normalized = waypoints
+        .map(
+          (p) =>
+              '${p.latitude.toStringAsFixed(5)},'
+              '${p.longitude.toStringAsFixed(5)}',
+        )
+        .join(';');
+    // costing=driving (OSRM) / auto (Valhalla), overview=full, steps=true -
+    // every option the service requests today.
+    return 'driving/overview=full/steps=true|$normalized';
+  }
+
+  /// Cache read honoring [_cacheTtl]; expired entries are dropped on sight.
+  static RoadRoute? _readCache(String key) {
+    final entry = _cache[key];
+    if (entry == null) return null;
+    if (DateTime.now().difference(entry.storedAt) > _cacheTtl) {
+      _cache.remove(key);
+      return null;
+    }
+    return entry.route;
+  }
+
+  /// Cache write with simple oldest-first eviction at [_cacheMaxEntries].
+  static void _writeCache(String key, RoadRoute route) {
+    if (_cache.length >= _cacheMaxEntries) {
+      _cache.remove(_cache.keys.first); // Map iterates in insertion order.
+    }
+    _cache[key] = _RouteCacheEntry(route, DateTime.now());
   }
 
   Future<RoadRoute?> _fetchOsrm(List<LatLng> waypoints) async {
@@ -85,7 +162,7 @@ class RouteService {
         'https://router.project-osrm.org/route/v1/driving/$path'
         '?overview=full&geometries=geojson&steps=true',
       );
-      final response = await _get(uri).timeout(const Duration(seconds: 12));
+      final response = await _get(uri).timeout(_osrmTimeout);
       if (response.statusCode != 200) {
         debugPrint(
           '[route] OSRM: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
@@ -136,7 +213,7 @@ class RouteService {
           'directions_options': {'units': 'kilometers'},
         }),
       });
-      final response = await _get(uri).timeout(const Duration(seconds: 15));
+      final response = await _get(uri).timeout(_valhallaTimeout);
       if (response.statusCode != 200) {
         debugPrint(
           '[route] Valhalla: HTTP ${response.statusCode} - ${_bodySnippet(response.body)}',
@@ -247,4 +324,13 @@ class RouteService {
     final clipped = body.length > 120 ? body.substring(0, 120) : body;
     return clipped.replaceAll(RegExp(r'\s+'), ' ');
   }
+}
+
+/// One cached route plus the instant it was stored, so [_readCache] can
+/// expire it after [_cacheTtl].
+class _RouteCacheEntry {
+  const _RouteCacheEntry(this.route, this.storedAt);
+
+  final RoadRoute route;
+  final DateTime storedAt;
 }

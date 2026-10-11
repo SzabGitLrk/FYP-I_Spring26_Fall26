@@ -157,10 +157,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadDrivers() async {
+    // Explicit ascending name order: supabase-dart's .order() defaults to
+    // DESCENDING, which would list drivers Z->A.
     final drivers = await supabase
         .from('profiles')
         .select()
-        .eq('role', 'driver');
+        .eq('role', 'driver')
+        .order('name', ascending: true);
 
     if (mounted) {
       setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
@@ -169,10 +172,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _approveDriver(String driverId) async {
     try {
-      await supabase
+      // `.select('id')` returns the rows actually affected: RLS (or a stale
+      // id) can make this a zero-row write that Supabase still reports as a
+      // success - and the old code showed a green "Driver approved" for it.
+      final updated = await supabase
           .from('profiles')
           .update({'is_approved': true})
-          .eq('id', driverId);
+          .eq('id', driverId)
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('approve driver affected no rows');
+      }
       await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -183,28 +193,63 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
     } catch (e) {
-      _showError('Could not approve driver: $e');
+      // Raw exception text goes to the log, never to the screen.
+      debugPrint('[admin] approve driver failed: $e');
+      _showError(
+        'Could not approve the driver. Refresh and try again - '
+        'the record may have already changed.',
+      );
     }
   }
 
+  /// Month abbreviations for [_formatDateTime].
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
   /// `created_at` arrives straight from the backend: one null or malformed
-  /// value must not throw inside build() and take every other SOS card
-  /// down with it.
-  static String _formatSosTime(dynamic raw) {
+  /// value must not throw inside build() and take every other card down with
+  /// it. Formats as `11 Oct 2026, 2:05 PM` - the raw `DateTime.toString()`
+  /// this used to return is not something an administrator should have to
+  /// parse during an emergency.
+  static String _formatDateTime(dynamic raw) {
     final parsed = DateTime.tryParse('${raw ?? ''}');
     if (parsed == null) return '—';
-    return '${parsed.toLocal()}';
+    final local = parsed.toLocal();
+    final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour < 12 ? 'AM' : 'PM';
+    return '${local.day} ${_months[local.month - 1]} ${local.year}, '
+        '$hour12:$minute $period';
   }
 
   Future<void> _resolveSOS(int alertId) async {
     try {
-      await supabase
+      // `.select('id')` + the emptiness check: a write RLS filtered to zero
+      // rows must not show a green "SOS resolved" over an alert that is
+      // still active.
+      final updated = await supabase
           .from('sos_alerts')
           .update({
             'status': 'resolved',
             'resolved_at': DateTime.now().toUtc().toIso8601String(),
           })
-          .eq('id', alertId);
+          .eq('id', alertId)
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('resolve SOS affected no rows');
+      }
       await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -215,16 +260,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
     } catch (e) {
-      _showError('Could not resolve SOS alert: $e');
+      debugPrint('[admin] resolve SOS failed: $e');
+      _showError(
+        'Could not resolve the SOS alert. Refresh and try again - '
+        'the alert may have already been handled.',
+      );
     }
   }
 
   Future<void> _rejectDriver(String driverId) async {
     try {
-      await supabase
+      // See _approveDriver: verify the write actually affected a row.
+      final updated = await supabase
           .from('profiles')
           .update({'is_approved': false})
-          .eq('id', driverId);
+          .eq('id', driverId)
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('reject driver affected no rows');
+      }
       await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -235,23 +289,51 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
     } catch (e) {
-      _showError('Could not reject driver: $e');
+      debugPrint('[admin] reject driver failed: $e');
+      _showError(
+        'Could not reject the driver. Refresh and try again - '
+        'the record may have already changed.',
+      );
     }
   }
 
   Future<void> _loadBuses() async {
+    // Outer join (not `!inner`) so a bus keeps rendering even if its route
+    // row disappears, and the list can show the route NAME - the raw
+    // route_id number meant nothing to an admin.
     final buses = await supabase
         .from('buses')
-        .select()
+        .select('*, routes(route_name)')
         .order('bus_number', ascending: true);
     if (mounted) {
       setState(() => _buses = List<Map<String, dynamic>>.from(buses));
     }
   }
 
+  /// Route label for a bus row: the route NAME first, the id only as a
+  /// fallback (a missing route renders as "Unassigned"). An admin should not
+  /// have to remember that route 7 is "North Campus".
+  static String _busRouteLabel(Map<String, dynamic> bus) {
+    final routes = bus['routes'];
+    if (routes is Map && routes['route_name'] != null) {
+      return 'Route: ${routes['route_name']}';
+    }
+    final routeId = bus['route_id'];
+    return 'Route: ${routeId == null ? 'Unassigned' : '#$routeId'}';
+  }
+
   Future<void> _deleteBus(int busId) async {
     try {
-      await supabase.from('buses').delete().eq('id', busId);
+      // `.select('id')` + emptiness check: a zero-row DELETE (RLS, or the
+      // bus was already gone) must not show a green "Bus deleted".
+      final deleted = await supabase
+          .from('buses')
+          .delete()
+          .eq('id', busId)
+          .select('id');
+      if (deleted.isEmpty) {
+        throw StateError('delete bus affected no rows');
+      }
       await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -262,7 +344,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
     } catch (e) {
-      _showError('Could not delete bus: $e');
+      debugPrint('[admin] delete bus failed: $e');
+      _showError(
+        'Could not delete the bus. Refresh and try again - '
+        'it may have already been removed.',
+      );
     }
   }
 
@@ -311,10 +397,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 await supabase.auth.signOut();
               } catch (e) {
                 // Without this the failure escaped as an unhandled async
-                // error and the admin saw no feedback at all.
+                // error and the admin saw no feedback at all. Raw exception
+                // text goes to the log, never to the screen.
+                debugPrint('[admin] sign out failed: $e');
                 messenger.showSnackBar(
-                  SnackBar(
-                    content: Text('Could not sign out: $e'),
+                  const SnackBar(
+                    content: Text(
+                      'Could not sign out. Check your connection and try again.',
+                    ),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -365,7 +455,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 children: [
                   Expanded(
                     child: _buildStatCard(
-                      'Students',
+                      _plural(_totalStudents, 'Student', 'Students'),
                       _totalStudents,
                       Icons.school,
                       Colors.blue,
@@ -374,7 +464,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      'Drivers',
+                      _plural(_totalDrivers, 'Driver', 'Drivers'),
                       _totalDrivers,
                       Icons.directions_bus,
                       Colors.green,
@@ -387,7 +477,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 children: [
                   Expanded(
                     child: _buildStatCard(
-                      'Buses',
+                      _plural(_totalBuses, 'Bus', 'Buses'),
                       _totalBuses,
                       Icons.bus_alert,
                       Colors.orange,
@@ -396,7 +486,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      'Active Trips',
+                      _plural(_activeTrips, 'Active Trip', 'Active Trips'),
                       _activeTrips,
                       Icons.route,
                       Colors.purple,
@@ -484,7 +574,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       title: Text(alert['user_name'] ?? 'Unknown User'),
                       subtitle: Text(
                         '📍 ${alert['latitude']}, ${alert['longitude']}\n'
-                        '🕐 ${_formatSosTime(alert['created_at'])}',
+                        '🕐 ${_formatDateTime(alert['created_at'])}',
                       ),
                       trailing: ElevatedButton(
                         onPressed: () => _resolveSOS(alert['id']),
@@ -532,8 +622,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         size: 32,
                       ),
                       title: Text(bus['bus_number'] ?? 'Unknown'),
+                      // Route NAME first - the raw id only as a fallback -
+                      // plus the added-on date as a human date+time instead
+                      // of the raw ISO timestamp.
                       subtitle: Text(
-                        'Route: ${bus['route_id'] ?? 'N/A'} • ${bus['status'] ?? 'active'}',
+                        '${_busRouteLabel(bus)} • ${bus['status'] ?? 'active'}\n'
+                        'Added ${_formatDateTime(bus['created_at'])}',
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
@@ -555,6 +649,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
     );
   }
+
+  /// "1 Buses" reads as a bug in a list the admin reads during an incident:
+  /// every count label next to a number is singular/plural aware.
+  static String _plural(int count, String singular, String plural) =>
+      count == 1 ? singular : plural;
 
   Widget _buildStatCard(String title, int value, IconData icon, Color color) {
     return Card(

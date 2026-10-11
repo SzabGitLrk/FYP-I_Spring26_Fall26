@@ -119,6 +119,22 @@ class RouteFollower {
   /// from the stop, or jumping straight to the end and declaring arrival.
   static const double _continuityWindow = 200;
 
+  /// With a speed fix, the step-advance lookahead covers this many seconds
+  /// of travel (scaled by speedMps, never below [stepAdvanceBefore]).
+  static const double _speedLookaheadSeconds = 5.0;
+
+  /// The `depart` maneuver sits at the route start, so its along-mark
+  /// (~0 m) is always inside the lookahead and the plain loop skipped it
+  /// on the very first fix - students never saw or heard "Head north on
+  /// ...". Treat step 0 as the current step until the position is at least
+  /// this many meters along the route.
+  static const double _departHoldMeters = 25;
+
+  /// Second arrival gate: within this many meters of the FINAL step's
+  /// maneuver point (and not wildly off-route) also counts as near the end
+  /// - see the arrived calculation in [update].
+  static const double _finalManeuverArrivalRadius = 15;
+
   /// Where the previous fix projected onto the route; null until the first
   /// fix, which seeds the window with the whole route.
   double? _lastAlong;
@@ -132,7 +148,13 @@ class RouteFollower {
   double get totalMeters => _total;
 
   /// Progress of [position] along the route. Safe to call at any rate.
-  RouteProgress update(LatLng position) {
+  ///
+  /// [speedMps], when supplied and > 0, widens the step-advance lookahead
+  /// to ~5 seconds of travel (never below [stepAdvanceBefore]): a fixed
+  /// 15 m flips the banner only ~1.4 s before an intersection at 40 km/h,
+  /// which is too late to react. Default (null) keeps the fixed-lookahead
+  /// behaviour callers and tests rely on.
+  RouteProgress update(LatLng position, {double? speedMps}) {
     var along = 0.0;
     var offRoute = double.infinity;
 
@@ -167,13 +189,26 @@ class RouteFollower {
     _lastAlong = along;
     final remaining = math.max(_total - along, 0.0);
 
-    // First maneuver the user has not passed yet (15 m of lookahead, so GPS
-    // noise does not flicker the banner between two steps).
+    // First maneuver the user has not passed yet. Lookahead is
+    // [stepAdvanceBefore] m of GPS-noise guard, widened to ~5 s of travel
+    // when the caller supplies a speed: 15 m alone flips the banner only
+    // ~1.4 s before an intersection at 40 km/h.
+    var lookahead = stepAdvanceBefore;
+    if (speedMps != null && speedMps > 0) {
+      lookahead = math.max(lookahead, speedMps * _speedLookaheadSeconds);
+    }
+
     var next = 0;
-    while (next < steps.length && _stepAlong[next] <= along + stepAdvanceBefore) {
+    while (next < steps.length && _stepAlong[next] <= along + lookahead) {
       next++;
     }
     if (next >= steps.length) next = math.max(steps.length - 1, 0);
+    // Hold the `depart` step for the first [_departHoldMeters] m: its mark
+    // sits at the route start, so the loop above would skip it on the very
+    // first fix (see [_departHoldMeters]).
+    if (steps.isNotEmpty && next > 0 && along < _departHoldMeters) {
+      next = 0;
+    }
 
     final distanceToManeuver = steps.isEmpty
         ? remaining
@@ -184,9 +219,21 @@ class RouteFollower {
     // they stand at the destination - that fell between the arrival gate
     // (off-route <= 45 m) and the reroute trigger (remaining > 120 m), so
     // guidance hung forever. Three consecutive near-end fixes settle it.
+    // Second gate: a fix with 30-120 m remaining that reports 45-90 m
+    // off-route (busy built-up stop area) neither arrived nor got rerouted
+    // (the caller suppresses reroutes near the stop) - standing within
+    // [_finalManeuverArrivalRadius] m of the FINAL step's maneuver point
+    // while not wildly off-route (<= 2x [offRouteThreshold]) also counts
+    // as near the end, settled by the same 3-fix latch.
     // A degenerate zero-length route never arrives: `remaining` is 0 from
     // the first fix, and standing at the route's *start* is not the end.
-    final nearEnd = _total > 0 && remaining <= arrivalRadius;
+    final nearEndManeuver =
+        steps.isNotEmpty &&
+        _total > 0 &&
+        math.max(_stepAlong.last - along, 0.0) <= _finalManeuverArrivalRadius &&
+        offRoute <= 2 * offRouteThreshold;
+    final nearEnd =
+        _total > 0 && (remaining <= arrivalRadius || nearEndManeuver);
     bool arrived;
     if (!nearEnd) {
       _nearEndFixes = 0;
