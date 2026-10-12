@@ -52,6 +52,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Timer? _locationHeartbeatTimer;
   DateTime? _lastLocationSentAt;
 
+  /// Last time the bus was genuinely moving. Drives the battery-adaptive
+  /// heartbeat: a long-parked bus re-sends less often (fewer redundant
+  /// inserts + radio wakeups) while staying well inside the map's 5-minute
+  /// freshness window, then snaps back to the fast cadence the moment it
+  /// moves again. null = "moving right now / just started".
+  DateTime? _lastMotionAt;
+
   /// Last trustworthy bearing ([Position.heading] jitters while slow, which
   /// used to spin the bus icon in place).
   double _lastGoodHeading = 0;
@@ -549,6 +556,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // ...and the previous trip's bearing/send bookkeeping.
       _lastGoodHeading = 0;
       _lastLocationSentAt = null;
+      // ...and the motion clock: a fresh trip starts on the fast heartbeat
+      // cadence (null = "moving now"), stretching only once it parks.
+      _lastMotionAt = null;
       // ...and the previous trip's id: a start whose queries fail must not
       // leave End writing distance/time onto the old trip's row.
       _currentTripId = null;
@@ -645,6 +655,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 position.longitude,
               );
               _totalDistance += distance / 1000;
+            }
+
+            // Genuinely moving (>1 m/s): refresh the motion clock so the
+            // battery-adaptive heartbeat below keeps its fast cadence while
+            // the bus is actually live, and only stretches once it parks.
+            if (position.speed > 1.0) {
+              _lastMotionAt = DateTime.now();
             }
 
             setState(() {
@@ -766,10 +783,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final position = _currentPosition;
       // No fix yet - nothing honest to send.
       if (position == null) return;
-      // A row that just went out is still fresh; don't double-write.
+      // A row that just went out is still fresh; don't double-write. The gap
+      // is battery-adaptive: once the bus has been parked a couple of
+      // minutes, stretch the re-send (fewer identical inserts + radio
+      // wakeups during a long terminal wait); the moment it moves again,
+      // _lastMotionAt refreshes and the fast cadence returns. Either way it
+      // stays well inside the map's 5-minute freshness window.
+      final now = DateTime.now();
+      final parkedFor = _lastMotionAt == null
+          ? Duration.zero
+          : now.difference(_lastMotionAt!);
+      final minGap = parkedFor > const Duration(minutes: 2)
+          ? const Duration(seconds: 45)
+          : const Duration(seconds: 15);
       final lastSent = _lastLocationSentAt;
-      if (lastSent != null &&
-          DateTime.now().difference(lastSent) < const Duration(seconds: 15)) {
+      if (lastSent != null && now.difference(lastSent) < minGap) {
         return;
       }
       _sendBusLocation(bus, position, _updateStopProgress(position));
