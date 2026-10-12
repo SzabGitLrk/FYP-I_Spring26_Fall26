@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../navigation/route_step.dart';
 
@@ -64,6 +66,15 @@ class RouteService {
   /// Hard cap on cached routes; the oldest entry is evicted first.
   static const int _cacheMaxEntries = 32;
 
+  /// On-disk geometry cache (SharedPreferences). Roads essentially never
+  /// change, and Larkana has a handful of fixed bus routes, so a route drawn
+  /// once is good for days - a restart re-reads it instead of re-hitting the
+  /// keyless public routers, which rate-limit (429) and randomly fail to
+  /// draw. Deliberately much longer TTL than the in-memory cache.
+  static const String _diskCacheKey = 'route_geometry_cache_v1';
+  static const Duration _diskCacheTtl = Duration(days: 7);
+  static const int _diskCacheMaxEntries = 16;
+
   /// Successful routes keyed by [_cacheKey]. STATIC because production call
   /// sites construct a fresh [RouteService] per fetch - an instance field
   /// would never hit the cache in practice.
@@ -107,13 +118,27 @@ class RouteService {
         debugPrint('[route] cache hit (${hit.source}) - no network round-trip');
         return hit;
       }
+      // A route already drawn in a previous app session: pull it from disk
+      // so a restart (or a rate-limited public router) still draws the line.
+      final diskHit = await _readDiskCache(cacheKey);
+      if (diskHit != null) {
+        debugPrint(
+          '[route] disk cache hit (${diskHit.source}) - no network round-trip',
+        );
+        _writeCache(cacheKey, diskHit); // warm the in-memory cache too
+        return diskHit;
+      }
     }
 
     debugPrint('[route] fetching road geometry for ${waypoints.length} waypoints');
 
     final osrm = await _fetchOsrm(waypoints);
     final route = osrm ?? await _fetchValhalla(waypoints);
-    if (route != null && cacheKey != null) _writeCache(cacheKey, route);
+    if (route != null && cacheKey != null) {
+      _writeCache(cacheKey, route);
+      // Persist for next session (best-effort; never blocks the return).
+      unawaited(_writeDiskCache(cacheKey, route));
+    }
     return route;
   }
 
@@ -181,6 +206,120 @@ class RouteService {
       _cache.remove(_cache.keys.first); // Map iterates in insertion order.
     }
     _cache[key] = _RouteCacheEntry(route, DateTime.now());
+  }
+
+  /// Reads [key] from the on-disk geometry cache, honoring [_diskCacheTtl].
+  /// Returns null on any miss, expiry, or unreadable entry.
+  static Future<RoadRoute?> _readDiskCache(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_diskCacheKey);
+      if (raw == null) return null;
+      final Object? blob = jsonDecode(raw);
+      if (blob is! Map<String, dynamic>) return null;
+      final entry = blob[key];
+      if (entry is! Map<String, dynamic>) return null;
+      final savedAt = DateTime.tryParse(entry['savedAt'] as String? ?? '');
+      if (savedAt == null ||
+          DateTime.now().difference(savedAt) > _diskCacheTtl) {
+        return null;
+      }
+      return _routeFromJson(entry['route']);
+    } catch (e) {
+      debugPrint('[route] disk cache read failed: $e');
+      return null;
+    }
+  }
+
+  /// Writes [route] under [key] to the on-disk cache, evicting the oldest
+  /// entries beyond [_diskCacheMaxEntries]. Best-effort; never throws.
+  static Future<void> _writeDiskCache(String key, RoadRoute route) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      Map<String, dynamic> blob = {};
+      final raw = prefs.getString(_diskCacheKey);
+      if (raw != null) {
+        final Object? decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) blob = decoded;
+      }
+      // Evict oldest first (Map iterates in insertion / JSON key order), but
+      // only to make room for a genuinely new key.
+      while (blob.length >= _diskCacheMaxEntries && !blob.containsKey(key)) {
+        blob.remove(blob.keys.first);
+      }
+      blob[key] = {
+        'savedAt': DateTime.now().toIso8601String(),
+        'route': _routeToJson(route),
+      };
+      await prefs.setString(_diskCacheKey, jsonEncode(blob));
+    } catch (e) {
+      debugPrint('[route] disk cache write failed: $e');
+    }
+  }
+
+  static Map<String, dynamic> _routeToJson(RoadRoute route) => {
+        'source': route.source,
+        'points': [
+          for (final p in route.points) [p.latitude, p.longitude],
+        ],
+        'steps': [
+          for (final s in route.steps)
+            {
+              'instruction': s.instruction,
+              'maneuver': s.maneuver,
+              'distance': s.distance,
+              'roadName': s.roadName,
+              'location': [s.location.latitude, s.location.longitude],
+            },
+        ],
+      };
+
+  /// Rebuilds a [RoadRoute] from [_routeToJson] output. Step-faithful
+  /// (instruction / maneuver / distance / road / location), so a disk hit is
+  /// usable for turn-by-turn navigation, not just the drawn line. Any
+  /// malformed shape returns null and is treated as a cache miss.
+  static RoadRoute? _routeFromJson(Object? raw) {
+    try {
+      if (raw is! Map<String, dynamic>) return null;
+      final pointsRaw = raw['points'];
+      if (pointsRaw is! List) return null;
+      final points = <LatLng>[];
+      for (final p in pointsRaw) {
+        if (p is List && p.length >= 2) {
+          points.add(LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()));
+        }
+      }
+      if (points.length < 2) return null;
+
+      final steps = <RouteStep>[];
+      final stepsRaw = raw['steps'];
+      if (stepsRaw is List) {
+        for (final s in stepsRaw) {
+          if (s is! Map<String, dynamic>) continue;
+          final loc = s['location'];
+          if (loc is! List || loc.length < 2) continue;
+          steps.add(
+            RouteStep(
+              instruction: s['instruction'] as String? ?? '',
+              maneuver: s['maneuver'] as String? ?? 'continue',
+              distance: (s['distance'] as num?)?.toDouble() ?? 0,
+              roadName: s['roadName'] as String? ?? '',
+              location: LatLng(
+                (loc[0] as num).toDouble(),
+                (loc[1] as num).toDouble(),
+              ),
+            ),
+          );
+        }
+      }
+      return RoadRoute(
+        points: points,
+        steps: steps,
+        source: raw['source'] as String? ?? 'OSRM',
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<RoadRoute?> _fetchOsrm(List<LatLng> waypoints) async {
