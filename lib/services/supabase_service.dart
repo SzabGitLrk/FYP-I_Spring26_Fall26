@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/university.dart';
 import '../models/route_model.dart';
@@ -372,6 +373,51 @@ class SupabaseService {
       await _client.auth.signOut();
     } catch (e) {
       rethrow;
+    }
+  }
+
+  /// Historical cruise speed for [routeId]: the average `speed` (km/h) of
+  /// this route's buses while genuinely moving, from the most recent fixes.
+  ///
+  /// Calibrates ETA instead of a fixed 20 km/h floor - a route whose buses
+  /// really average 30 km/h gets tighter ETAs than one through congested
+  /// streets. Returns null when there is not enough moving-sample history
+  /// yet (a fresh route), so callers keep the fixed floor: calibration only
+  /// ever improves on the heuristic, never makes it worse. The average is
+  /// clamped to a sane urban band so one bad batch cannot mint a 1-minute
+  /// ETA.
+  Future<double?> getRouteCruiseSpeedKmh(int routeId) async {
+    try {
+      final busList = await getBusesForRoute(routeId);
+      if (busList.isEmpty) return null;
+      final busIds = busList.map((b) => b.id).toList();
+
+      final response = await _client
+          .from('bus_locations')
+          .select('speed')
+          .inFilter('bus_id', busIds)
+          .order('timestamp', ascending: false)
+          .limit(200);
+
+      var sum = 0.0;
+      var count = 0;
+      for (final row in (response as List)) {
+        final speed = (row['speed'] as num?)?.toDouble() ?? 0;
+        // Moving samples only: a bus idling at a terminal would drag the
+        // "cruise" speed down to near zero and inflate every ETA.
+        if (speed > 5) {
+          sum += speed;
+          count++;
+        }
+      }
+      // Too few moving samples is noise, not a calibration.
+      if (count < 5) return null;
+      final average = sum / count;
+      return average.clamp(15.0, 45.0).toDouble();
+    } catch (e) {
+      // Calibration is a bonus; never let it break the map.
+      debugPrint('[map] cruise-speed lookup failed: $e');
+      return null;
     }
   }
 

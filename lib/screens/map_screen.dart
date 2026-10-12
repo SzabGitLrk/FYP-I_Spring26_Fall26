@@ -154,6 +154,11 @@ class _MapScreenState extends State<MapScreen> {
   DateTime _lastFollowMove = DateTime.fromMillisecondsSinceEpoch(0);
   String _etaInfo = '';
 
+  /// Calibrated cruise speed (km/h) for this route, from its own historical
+  /// moving fixes. null until loaded (or unavailable on a fresh route) -
+  /// [_etaMinutes] then falls back to the fixed 20 km/h floor.
+  double? _routeCruiseKmh;
+
   // ---- In-app turn-by-turn navigation ----
   /// Guidance is active: banner shown, camera follows the user, off-route
   /// detection and arrival are armed.
@@ -1035,6 +1040,12 @@ class _MapScreenState extends State<MapScreen> {
       // freshness checks age against (see _freshnessNow).
       _absorbFixHorizon(locations);
 
+      // Calibrated cruise speed for ETA maths - best-effort, and null on a
+      // fresh route keeps the fixed 20 km/h floor (see _etaMinutes).
+      _routeCruiseKmh = await _service
+          .getRouteCruiseSpeedKmh(widget.route.id)
+          .then<double?>((v) => v, onError: (_) => null);
+
       // Re-read what is actually stored for this user instead of forcing every
       // toggle back to false on refresh: the old code left the subscriptions
       // alive on the server while the UI claimed they were off, so arrival
@@ -1425,7 +1436,11 @@ class _MapScreenState extends State<MapScreen> {
   int _etaMinutes(BusLocation bus, PickupPoint point) {
     final straightKm = bus.distanceTo(point.latitude, point.longitude);
     if (straightKm <= 0) return 0;
-    final speedKmh = math.max(bus.speed, 20.0);
+    // Cruise speed: the bus's own live speed, else the route's calibrated
+    // historical average, else the fixed 20 km/h urban floor - a bus waiting
+    // at a red light must not inflate an 800 m ETA to 45 minutes. Ceiled:
+    // "0 min" stays reserved for a bus actually at the stop.
+    final speedKmh = math.max(bus.speed, _routeCruiseKmh ?? 20.0);
     return ((straightKm * 1.3 / speedKmh) * 60).ceil();
   }
 
