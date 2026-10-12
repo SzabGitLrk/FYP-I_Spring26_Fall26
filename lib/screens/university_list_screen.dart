@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:university_point_locator/models/university.dart';
+import 'package:university_point_locator/models/route_model.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
+import 'package:university_point_locator/services/my_stop_store.dart';
+import 'package:university_point_locator/screens/map_screen.dart';
 import 'package:university_point_locator/screens/routes_list_screen.dart'; // ← Add this import
 
 class UniversityListScreen extends StatefulWidget {
@@ -16,10 +19,120 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// The student's saved "my stop" (null = none yet). Rendered as a
+  /// quick-access card so the daily open skips university -> route -> stop.
+  MyStop? _myStop;
+
   @override
   void initState() {
     super.initState();
     _loadUniversities();
+    _loadMyStop();
+  }
+
+  Future<void> _loadMyStop() async {
+    final stop = await MyStopStore.instance.load();
+    if (!mounted) return;
+    setState(() => _myStop = stop);
+  }
+
+  /// Jumps straight to the map for the saved stop's route, focused on it.
+  Future<void> _openMyStop() async {
+    final my = _myStop;
+    if (my == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final stops = await _service.getPickupPointsForRoute(my.routeId);
+      if (!mounted) return;
+      final route = RouteModel(
+        id: my.routeId,
+        universityId: my.universityId,
+        routeName: my.routeName,
+        createdAt: DateTime.now(),
+      );
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => MapScreen(
+            route: route,
+            pickupPoints: stops,
+            initialFocusStopId: my.stopId,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[universities] open my-stop failed: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not open your stop. Check your connection.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _clearMyStop() async {
+    await MyStopStore.instance.clear();
+    if (!mounted) return;
+    setState(() => _myStop = null);
+  }
+
+  Widget _buildMyStopCard() {
+    final my = _myStop!;
+    return Card(
+      color: Colors.amber.shade50,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: Colors.amber,
+              child: Icon(Icons.star, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your stop',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    my.stopName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    my.routeName,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Remove saved stop',
+              onPressed: _clearMyStop,
+            ),
+            const SizedBox(width: 4),
+            ElevatedButton(
+              onPressed: _openMyStop,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Open'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadUniversities() async {
@@ -287,9 +400,13 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
         // dragging there.
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        itemCount: _universities.length,
+        itemCount: _universities.length + (_myStop != null ? 1 : 0),
         itemBuilder: (context, index) {
-          final university = _universities[index];
+          final hasHeader = _myStop != null;
+          if (hasHeader && index == 0) {
+            return _buildMyStopCard();
+          }
+          final university = _universities[hasHeader ? index - 1 : index];
           return Card(
             elevation: 4,
             margin: const EdgeInsets.only(bottom: 12),

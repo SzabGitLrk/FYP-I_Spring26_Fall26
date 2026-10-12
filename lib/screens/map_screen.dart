@@ -15,6 +15,7 @@ import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/services/route_service.dart';
 import 'package:university_point_locator/services/offline_cache.dart';
+import 'package:university_point_locator/services/my_stop_store.dart';
 import 'package:university_point_locator/navigation/route_follower.dart';
 import 'package:university_point_locator/navigation/route_step.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,7 +25,16 @@ class MapScreen extends StatefulWidget {
   final RouteModel route;
   final List<PickupPoint> pickupPoints;
 
-  const MapScreen({super.key, required this.route, required this.pickupPoints});
+  /// When set, the map opens centred on this stop (the student's saved "my
+  /// stop") instead of framing the whole route.
+  final int? initialFocusStopId;
+
+  const MapScreen({
+    super.key,
+    required this.route,
+    required this.pickupPoints,
+    this.initialFocusStopId,
+  });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -1739,6 +1749,61 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  /// Saves [point] as the student's regular "my stop" and arms its
+  /// bus-approaching alert (reusing the existing [stop_notifications]
+  /// pipeline), so the app can open straight to this route next time and
+  /// notify while the map is open. Fires once per alert window, exactly like
+  /// a manually-toggled "Notify Me".
+  Future<void> _setMyStop(PickupPoint point) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await MyStopStore.instance.save(
+      MyStop.fromPickup(
+        universityId: widget.route.universityId,
+        routeId: widget.route.id,
+        routeName: widget.route.routeName,
+        stop: point,
+      ),
+    );
+    if (!saved) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not save your stop. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Arm the approach alert too - but only if the OS will actually deliver
+    // it (same gate as the Notify Me button).
+    try {
+      if (await NotificationService().ensurePermission()) {
+        await _service.subscribeToStopNotifications(
+          point.id,
+          routeId: widget.route.id,
+        );
+        if (mounted) {
+          setState(() => _notificationsEnabled[point.id] = true);
+        }
+      } else {
+        debugPrint(
+          '[map] notification permission denied - my-stop alert not armed',
+        );
+      }
+    } catch (e) {
+      debugPrint('[map] my-stop alert subscribe failed: $e');
+    }
+
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('⭐ ${point.pointName} set as your stop'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   void _showStopDetails(PickupPoint point) {
     debugPrint(
       '[stop] details: ${point.pointName} '
@@ -2002,6 +2067,21 @@ class _MapScreenState extends State<MapScreen> {
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 50),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Remember this as the student's regular stop: next open
+                    // jumps straight here and the approach alert is armed.
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _setMyStop(point);
+                      },
+                      icon: const Icon(Icons.star_border),
+                      label: const Text('Set as my stop'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2347,8 +2427,21 @@ class _MapScreenState extends State<MapScreen> {
                         // Frame THIS route's own stop bounds instead of a
                         // fixed zoom-13 view: each route opens showing its
                         // whole path (nothing cropped at the edge) and looks
-                        // distinct from the others at first glance.
-                        _zoomToFitAllStops();
+                        // distinct from the others at first glance. A saved
+                        // "my stop" overrides that to open on the stop the
+                        // student actually waits at.
+                        final focusId = widget.initialFocusStopId;
+                        PickupPoint? focus;
+                        if (focusId != null) {
+                          focus = widget.pickupPoints
+                              .where((p) => p.id == focusId)
+                              .firstOrNull;
+                        }
+                        if (focus != null) {
+                          _centerOnStop(focus);
+                        } else {
+                          _zoomToFitAllStops();
+                        }
                       }
                     },
                     onPositionChanged: (camera, hasGesture) {
