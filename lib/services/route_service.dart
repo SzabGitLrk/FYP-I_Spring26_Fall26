@@ -117,6 +117,36 @@ class RouteService {
     return route;
   }
 
+  /// Meters from [point] to the nearest drivable road, via OSRM's `/nearest`
+  /// snap.
+  ///
+  /// Used by the admin stop editor to catch a stop dropped in a field or on
+  /// the wrong side of the city (the "Qamber" bug) before it can be saved.
+  /// Returns null when the router is unreachable or the answer is unusable -
+  /// the editor then shows "check unavailable" rather than a false reading.
+  Future<double?> nearestRoadDistanceMeters(LatLng point) async {
+    try {
+      final uri = Uri.parse(
+        'https://router.project-osrm.org/nearest/v1/driving/'
+        '${point.longitude},${point.latitude}?number=1',
+      );
+      final response = await _get(uri).timeout(_osrmTimeout);
+      if (response.statusCode != 200) return null;
+      final Object? decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final waypoints = decoded['waypoints'];
+      if (waypoints is! List || waypoints.isEmpty) return null;
+      final first = waypoints.first;
+      if (first is! Map<String, dynamic>) return null;
+      final distance = first['distance'];
+      if (distance is! num) return null;
+      return distance.toDouble();
+    } catch (e) {
+      debugPrint('[route] nearest-road lookup failed: $e');
+      return null;
+    }
+  }
+
   /// Normalized cache key for [waypoints]: coordinates on a ~1 m grid (5
   /// decimals), so identical stop lists hit while live GPS positions (which
   /// change every fix) do not - plus the request options, which are fixed

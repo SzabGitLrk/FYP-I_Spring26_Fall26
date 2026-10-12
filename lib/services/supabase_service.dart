@@ -375,6 +375,75 @@ class SupabaseService {
     }
   }
 
+  /// Creates or updates a route stop and returns the stored row.
+  ///
+  /// Powers the admin stop editor (drop-a-pin on the map). [id] null creates
+  /// a row, non-null updates that one. [orderIndex] is the 1-based visit
+  /// position. Writes need an admin RLS policy on `pickup_points` (see
+  /// `supabase_admin_stops.sql`); a non-admin session fails loudly via the
+  /// returned row being empty.
+  Future<PickupPoint> upsertPickupPoint({
+    required int routeId,
+    int? id,
+    required String pointName,
+    required double latitude,
+    required double longitude,
+    String? address,
+    String? landmark,
+    required int orderIndex,
+    int? estimatedTimeFromPrevious,
+  }) async {
+    final row = <String, dynamic>{
+      'route_id': routeId,
+      'point_name': pointName,
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+      'landmark': landmark,
+      'order_index': orderIndex,
+      'estimated_time_from_previous': estimatedTimeFromPrevious,
+    };
+    try {
+      final Map<String, dynamic> saved;
+      if (id == null) {
+        saved = await _client
+            .from('pickup_points')
+            .insert(row)
+            .select()
+            .single();
+      } else {
+        saved = await _client
+            .from('pickup_points')
+            .update(row)
+            .eq('id', id)
+            .select()
+            .single();
+      }
+      return PickupPoint.fromJson(saved);
+    } catch (e) {
+      // A zero-row update (RLS filtered it out, or the stop is gone) makes
+      // `.single()` throw - honest failure instead of a false "saved".
+      throw Exception('Failed to save stop: $e');
+    }
+  }
+
+  /// Deletes a stop by id. Row-verified: a zero-row delete (already gone, or
+  /// RLS filtered it) throws instead of silently reporting success.
+  Future<void> deletePickupPoint(int id) async {
+    try {
+      final deleted = await _client
+          .from('pickup_points')
+          .delete()
+          .eq('id', id)
+          .select('id');
+      if (deleted.isEmpty) {
+        throw StateError('delete stop affected no rows');
+      }
+    } catch (e) {
+      throw Exception('Failed to delete stop: $e');
+    }
+  }
+
   Future<void> sendSOSAlert({
     required String userId,
     required String userName,

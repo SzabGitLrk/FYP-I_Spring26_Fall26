@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:university_point_locator/screens/admin/stop_editor_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -569,6 +570,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+
+              // Stop editor entry point. Editing stop coordinates is how a
+              // route is really maintained; without this the only way was
+              // raw SQL, which is exactly how a stop ended up on the wrong
+              // side of the city. The editor drops a pin on a map with a
+              // live nearest-road check, so that mistake is now visible.
+              Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.purple.shade50,
+                    child: const Icon(Icons.add_location_alt, color: Colors.purple),
+                  ),
+                  title: const Text(
+                    'Manage Route Stops',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    'Add or move pickup points on a map with a live '
+                    'off-road check',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StopEditorScreen(),
+                      ),
+                    );
+                  },
+                ),
               ),
               const SizedBox(height: 24),
 
