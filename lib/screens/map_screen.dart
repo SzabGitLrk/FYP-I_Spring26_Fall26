@@ -20,6 +20,7 @@ import 'package:university_point_locator/navigation/route_follower.dart';
 import 'package:university_point_locator/navigation/route_step.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:share_plus/share_plus.dart';
 
 class MapScreen extends StatefulWidget {
   final RouteModel route;
@@ -993,19 +994,24 @@ class _MapScreenState extends State<MapScreen> {
         // conventional "you are here" treatment. Read-only, so no
         // GestureDetector: tapping it must not swallow taps meant for a stop
         // or bus underneath.
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.blue.withValues(alpha: 0.18),
-          ),
-          child: Center(
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue,
-                border: Border.all(color: Colors.white, width: 3),
+        // Screen-reader label: without it this dot is a silent decorative
+        // box to TalkBack.
+        child: Semantics(
+          label: 'Your location',
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.blue.withValues(alpha: 0.18),
+            ),
+            child: Center(
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.blue,
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
               ),
             ),
           ),
@@ -2143,6 +2149,30 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  /// Opens the native share sheet with this bus's live location as a Google
+  /// Maps link, so a student can send "Bus 12 is near the next stop" to a
+  /// friend on WhatsApp / SMS / whatever they use.
+  Future<void> _shareBusLocation(Bus bus, BusLocation location) async {
+    final link =
+        'https://www.google.com/maps?q=${location.latitude},${location.longitude}';
+    final text =
+        'Bus ${bus.busNumber} on ${widget.route.routeName} is near '
+        '${_getNextStopName(location.nextStopIndex)}: $link';
+    try {
+      await Share.share(text);
+    } catch (e) {
+      debugPrint('[map] share failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the share sheet'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showBusDetails(Bus bus, BusLocation location) {
     showDialog(
       context: context,
@@ -2195,6 +2225,14 @@ class _MapScreenState extends State<MapScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Close'),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _shareBusLocation(bus, location);
+              },
+              icon: const Icon(Icons.share),
+              label: const Text('Share'),
             ),
             TextButton.icon(
               onPressed: () {
@@ -2678,6 +2716,9 @@ class _MapScreenState extends State<MapScreen> {
                       heroTag: 'recenterOnMe',
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.blue,
+                      // Icon-only FAB: the tooltip doubles as its
+                      // accessibility label.
+                      tooltip: 'Center on my location',
                       onPressed: () {
                         if (!_mapReady) return;
                         final pos = _myPosition!;

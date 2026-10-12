@@ -48,6 +48,10 @@ dependencies:
   # useful map ("last position 3 min ago") instead of a blank screen.
   shared_preferences: ^2.3.0
 
+  # Native share sheet: "share this bus's live location" to WhatsApp/SMS/etc
+  # as a Google Maps link.
+  share_plus: ^10.0.0
+
 # ✅ DEV DEPENDENCIES SECTION
 dev_dependencies:
   flutter_test:
