@@ -43,6 +43,11 @@ dependencies:
   url_launcher: ^6.0.0
   flutter_tts: ^4.2.5
 
+  # Key-value persistence for the offline cache (last bus fixes + stop list
+  # + a student's saved "my stop"). Lets a dead data connection still show a
+  # useful map ("last position 3 min ago") instead of a blank screen.
+  shared_preferences: ^2.3.0
+
 # ✅ DEV DEPENDENCIES SECTION
 dev_dependencies:
   flutter_test:

@@ -37,6 +37,18 @@ class BusLocation {
     );
   }
 
+  /// Row -> JSON, for the offline cache ([OfflineCache]). Mirrors [fromJson].
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'bus_id': busId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'speed': speed,
+        'heading': heading,
+        'next_stop_index': nextStopIndex,
+        'timestamp': timestamp.toIso8601String(),
+      };
+
   // Calculate distance to a point (in km using Haversine formula)
   double distanceTo(double lat, double lng) {
     const R = 6371; // Earth's radius in km

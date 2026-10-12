@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:university_point_locator/models/route_model.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/models/pickup_point.dart';
 import 'package:university_point_locator/screens/map_screen.dart';
+import 'package:university_point_locator/services/offline_cache.dart';
 
 class PickupPointsScreen extends StatefulWidget {
   final RouteModel route;
@@ -44,10 +47,39 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
         _pickupPoints = points;
         _isLoading = false;
       });
+      // Refresh the offline copy (best-effort): a dead connection next time
+      // still shows the stops and can open the map.
+      unawaited(
+        OfflineCache.instance.saveStopSnapshot(widget.route.id, points),
+      );
     } catch (e) {
       if (!mounted) return;
       // Friendly copy for the screen; raw exception stays in the log.
       debugPrint('[stops] load failed: $e');
+      // Fall back to the last cached stop list: the map (and navigation)
+      // still works offline from these, so a blip is not a dead end.
+      final cached = await OfflineCache.instance.loadStopSnapshot(
+        widget.route.id,
+      );
+      if (!mounted) return;
+      if (cached != null && cached.points.isNotEmpty) {
+        setState(() {
+          _pickupPoints = cached.points;
+          _isLoading = false;
+          _error = null;
+        });
+        debugPrint(
+          '[stops] offline: showing ${cached.points.length} cached stop(s) '
+          'from ${cached.savedAt}',
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Offline - showing saved stops'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
       setState(() {
         _error =
             'Could not load stops. Check your connection and try again.';

@@ -40,6 +40,20 @@ class PickupPoint {
     );
   }
 
+  /// Row -> JSON, for the offline cache ([OfflineCache]). Mirrors [fromJson].
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'route_id': routeId,
+        'point_name': pointName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+        'landmark': landmark,
+        'order_index': orderIndex,
+        'estimated_time_from_previous': estimatedTimeFromPrevious,
+        'created_at': createdAt.toIso8601String(),
+      };
+
   // For debugging
   @override
   String toString() {

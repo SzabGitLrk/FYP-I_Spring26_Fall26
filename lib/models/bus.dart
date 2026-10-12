@@ -35,6 +35,18 @@ class Bus {
     );
   }
 
+  /// Row -> JSON, for the offline cache ([OfflineCache]). Mirrors [fromJson].
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'route_id': routeId,
+        'bus_number': busNumber,
+        'driver_name': driverName,
+        'driver_phone': driverPhone,
+        'capacity': capacity,
+        'status': status,
+        'created_at': createdAt.toIso8601String(),
+      };
+
   @override
   String toString() => 'Bus(id: $id, number: $busNumber)';
 }

@@ -14,6 +14,7 @@ import 'package:university_point_locator/models/bus_location.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/services/route_service.dart';
+import 'package:university_point_locator/services/offline_cache.dart';
 import 'package:university_point_locator/navigation/route_follower.dart';
 import 'package:university_point_locator/navigation/route_step.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -126,6 +127,15 @@ class _MapScreenState extends State<MapScreen> {
 
   bool _isLoading = true;
   String? _error;
+  /// When set, the map is showing the last cached bus fixes (data connection
+  /// is down) and this holds the snapshot's write time - rendered as an
+  /// "offline, last updated X ago" banner so stale data is never mistaken
+  /// for live.
+  DateTime? _offlineSnapshotAt;
+  /// True while rendering cached (offline) data. Suppresses the staleness
+  /// aging - which is built to HIDE old rows - so last-known positions stay
+  /// on screen; cleared the moment a live tick or a successful poll lands.
+  bool _offlineMode = false;
   bool _followBus = true;
   /// Bus the camera is pinned to once following starts, so alternating
   /// reports from two buses cannot teleport the camera between them.
@@ -1033,6 +1043,9 @@ class _MapScreenState extends State<MapScreen> {
         // A successful reload must clear a previous failure, otherwise the
         // retry button could never bring the map back.
         _error = null;
+        // ...and any offline state: we are back on live data.
+        _offlineMode = false;
+        _offlineSnapshotAt = null;
 
         if (activeStopIds != null) {
           for (final point in widget.pickupPoints) {
@@ -1040,6 +1053,11 @@ class _MapScreenState extends State<MapScreen> {
           }
         }
       });
+
+      // Refresh the offline snapshot (best-effort): the next dead-connection
+      // open shows these positions instead of a blank map.
+      unawaited(OfflineCache.instance.saveBusListSnapshot(widget.route.id, buses));
+      unawaited(OfflineCache.instance.saveBusSnapshot(widget.route.id, locations));
 
       // Start (or restart) the live feed only now that `_buses` is known, so
       // events can be narrowed to this route's buses from the first tick.
@@ -1052,6 +1070,40 @@ class _MapScreenState extends State<MapScreen> {
       // Raw PostgREST/SQL text never goes on screen (it leaks schema);
       // the retry button still brings the map back once.
       debugPrint('[map] bus data load failed: $e');
+      // Fall back to the last cached bus list + positions: a dead data
+      // connection still shows WHERE buses were (labelled offline) instead
+      // of a blank error. The 30 s poll keeps trying and auto-recovers.
+      final cachedBuses = await OfflineCache.instance.loadBusListSnapshot(
+        widget.route.id,
+      );
+      final cachedLocations = await OfflineCache.instance.loadBusSnapshot(
+        widget.route.id,
+      );
+      if (!mounted) return;
+      if (cachedBuses != null &&
+          cachedBuses.buses.isNotEmpty &&
+          cachedLocations != null &&
+          cachedLocations.locations.isNotEmpty) {
+        setState(() {
+          _buses = cachedBuses.buses;
+          _busLocations = cachedLocations.locations;
+          _offlineMode = true;
+          _offlineSnapshotAt = cachedLocations.savedAt;
+          _busRevision.value++;
+          _isLoading = false;
+          _error = null;
+        });
+        // Live feed may already be running from a prior successful load;
+        // restart it against the cached bus list so recovery is automatic.
+        _subscribeToBusLocations();
+        _updateBusMarkers();
+        _updateETAInfo();
+        debugPrint(
+          '[map] offline: showing ${cachedLocations.locations.length} cached '
+          'bus fix(es) from ${cachedLocations.savedAt}',
+        );
+        return;
+      }
       setState(() {
         _error =
             'Could not load live bus data. Check your connection and try again.';
@@ -1084,6 +1136,9 @@ class _MapScreenState extends State<MapScreen> {
           // _collapseBusRows; the raw stream is an append history.
           _busLocations = _collapseBusRows(locations);
           _busRevision.value++;
+          // Live data is flowing again: leave offline (cached) mode.
+          _offlineMode = false;
+          _offlineSnapshotAt = null;
         });
         _updateBusMarkers();
         _updateETAInfo();
@@ -1369,6 +1424,10 @@ class _MapScreenState extends State<MapScreen> {
   /// position - and its "4 min" ETA - on the map forever.
   void _ageOutStaleBuses() {
     if (!mounted || _busLocations.isEmpty) return;
+    // Offline (cached) positions are deliberately shown past their normal
+    // freshness window - the banner carries the staleness - so never age
+    // them out. Cleared the instant live data returns.
+    if (_offlineMode) return;
     final now = _freshnessNow();
     final fresh = _busLocations
         .where((loc) => now.difference(loc.timestamp) < _staleAfter)
@@ -1410,6 +1469,9 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _busLocations = collapsed;
         _busRevision.value++;
+        // A successful poll means connectivity is back: leave offline mode.
+        _offlineMode = false;
+        _offlineSnapshotAt = null;
       });
       _updateBusMarkers();
       _updateETAInfo();
@@ -1477,6 +1539,18 @@ class _MapScreenState extends State<MapScreen> {
       return 'Unknown';
     }
     return widget.pickupPoints[nextStopIndex - 1].pointName;
+  }
+
+  /// Compact "time ago" for the offline banner: "just now", "3 min ago",
+  /// "2 h ago". Uses the device clock - the snapshot's save time is stamped
+  /// on-device, so the two agree by construction.
+  String _formatAge(DateTime savedAt) {
+    final elapsed = DateTime.now().difference(savedAt);
+    if (elapsed.inMinutes < 1) return 'just now';
+    if (elapsed.inMinutes < 60) return '${elapsed.inMinutes} min ago';
+    final hours = elapsed.inHours;
+    if (hours < 24) return '$hours h ago';
+    return '${elapsed.inDays} d ago';
   }
 
   void _checkNotifications() {
@@ -2323,9 +2397,53 @@ class _MapScreenState extends State<MapScreen> {
                     child: _buildNavigationBanner(),
                   ),
 
-                // Bus count indicator (drops below the banner while guiding)
+                // Offline banner: an honest "stale, not live" label whenever
+                // the map is rendering cached bus fixes instead of the feed.
+                if (_offlineMode && _offlineSnapshotAt != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Material(
+                      color: Colors.orange.shade800,
+                      child: SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.cloud_off,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Offline - showing last position '
+                                  '${_formatAge(_offlineSnapshotAt!)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Bus count indicator (drops below the banner while guiding,
+                // or below the offline strip when showing cached fixes)
                 Positioned(
-                  top: (_navigating || _navRouting) ? 96 : 16,
+                  top: (_navigating || _navRouting)
+                      ? 96
+                      : (_offlineMode ? 40 : 16),
                   right: 16,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
