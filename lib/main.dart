@@ -7,6 +7,7 @@ import 'package:university_point_locator/services/notification_service.dart';
 import 'package:university_point_locator/screens/student/profile_screen.dart';
 import 'package:university_point_locator/screens/driver/trip_history.dart';
 import 'package:university_point_locator/config/app_config.dart';
+import 'package:university_point_locator/utils/app_theme.dart';
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -127,26 +128,7 @@ class MyApp extends StatelessWidget {
       title: 'University Point Locator - Larkana',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey, // For notifications
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(elevation: 4, centerTitle: true),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 45),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
       home: canStart ? const RoleRouter() : const _StartupFailedScreen(),
       routes: {
         '/profile': (context) => const ProfileScreen(),
