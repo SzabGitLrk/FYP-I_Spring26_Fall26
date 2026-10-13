@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:university_point_locator/screens/admin/stop_editor_screen.dart';
 
@@ -22,6 +24,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _busIssues = [];
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _buses = [];
+  /// Routes, for the "Add Bus" route dropdown. Loaded once (they change
+  /// rarely) so the admin can assign a new bus to a real route.
+  List<Map<String, dynamic>> _routes = [];
 
   /// True while the first parallel load is in flight. Without this gate the
   /// dashboard rendered 0/0/0/0 and "No active SOS alerts" as facts while
@@ -42,6 +47,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _refreshAll(initial: true);
+    // Routes feed the "Add Bus" dropdown and change rarely, so they load
+    // once here rather than on every pull-to-refresh.
+    _loadRoutes();
     _subscribeToSOS();
     _subscribeToBusIssues();
   }
@@ -455,6 +463,203 @@ class _AdminDashboardState extends State<AdminDashboard> {
         false;
   }
 
+  /// Routes for the "Add Bus" dropdown. Fails quietly (the dialog simply
+  /// shows an empty dropdown the admin can retry via pull-to-refresh).
+  Future<void> _loadRoutes() async {
+    try {
+      final routes = await supabase
+          .from('routes')
+          .select('id, route_name')
+          .order('route_name', ascending: true);
+      if (mounted) {
+        setState(() => _routes = List<Map<String, dynamic>>.from(routes));
+      }
+    } catch (e) {
+      debugPrint('[admin] load routes failed: $e');
+    }
+  }
+
+  /// Opens a small in-app map centred on an SOS / bus-issue location so the
+  /// admin sees WHERE the report came from instead of raw coordinates they
+  /// would have to plot by hand during an emergency.
+  void _showLocationOnMap(String title, double lat, double lng) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: LatLng(lat, lng),
+                initialZoom: 16,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.university_point_locator',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(lat, lng),
+                      width: 44,
+                      height: 44,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 44,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// True when [raw] can be read as a coordinate pair. Guards the map action
+  /// so a malformed lat/lng from the backend cannot throw in the builder.
+  static bool _hasCoords(dynamic lat, dynamic lng) =>
+      lat is num && lng is num;
+
+  /// "Add Bus" dialog: bus number + route + status, then inserts the row.
+  Future<void> _showAddBusDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final busController = TextEditingController();
+    int? selectedRouteId;
+    String status = 'active';
+
+    final added = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              title: const Text('Add Bus'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: busController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Bus number',
+                        hintText: 'e.g. LHS-1234',
+                        prefixIcon: Icon(Icons.directions_bus),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Enter a bus number'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedRouteId,
+                      decoration: const InputDecoration(
+                        labelText: 'Route',
+                        prefixIcon: Icon(Icons.route),
+                      ),
+                      items: _routes
+                          .map(
+                            (r) => DropdownMenuItem<int>(
+                              value: r['id'] as int,
+                              child: Text('${r['route_name']}'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => selectedRouteId = v),
+                      validator: (v) => v == null ? 'Select a route' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: status,
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        prefixIcon: Icon(Icons.toggle_on),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'active', child: Text('Active')),
+                        DropdownMenuItem(
+                            value: 'inactive', child: Text('Inactive')),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => status = v ?? 'active'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (formKey.currentState?.validate() ?? false) {
+                      Navigator.pop(dialogContext, true);
+                    }
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+
+    if (added) {
+      await _addBus(busController.text.trim(), selectedRouteId, status);
+    }
+    busController.dispose();
+  }
+
+  Future<void> _addBus(String busNumber, int? routeId, String status) async {
+    if (busNumber.isEmpty || routeId == null) return;
+    try {
+      // `.select('id')` returns the created row: a write that produced
+      // nothing (RLS, constraint) must not show a green "Bus added".
+      final inserted = await supabase
+          .from('buses')
+          .insert({
+            'bus_number': busNumber,
+            'route_id': routeId,
+            'status': status,
+          })
+          .select('id');
+      if (inserted.isEmpty) {
+        throw StateError('add bus returned no row');
+      }
+      await _refreshAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bus added'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] add bus failed: $e');
+      _showError(
+        'Could not add the bus. It may already exist, or a required field '
+        'is missing - refresh and try again.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -660,6 +865,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const SizedBox(height: 24),
               ],
 
+              // Approved Drivers. Previously the admin could only see PENDING
+              // drivers; approved ones were counted but invisible and could
+              // not be managed. This lists them with a Revoke action so the
+              // admin can fully control who can drive.
+              if (_drivers.any((d) => d['is_approved'] == true)) ...[
+                const Text(
+                  'Approved Drivers',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ..._drivers
+                    .where((d) => d['is_approved'] == true)
+                    .map(
+                      (driver) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(
+                            Icons.person,
+                            color: Colors.green,
+                          ),
+                          title: Text(driver['name'] ?? 'Driver'),
+                          subtitle: Text(driver['email'] ?? ''),
+                          trailing: TextButton.icon(
+                            onPressed: () => _rejectDriver(driver['id']),
+                            icon: const Icon(Icons.block, color: Colors.red),
+                            label: const Text(
+                              'Revoke',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                const SizedBox(height: 24),
+              ],
+
               // SOS Alerts Section
               const Text(
                 'Active SOS Alerts',
@@ -675,29 +916,48 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 )
               else
                 ..._sosAlerts.map(
-                  (alert) => Card(
-                    color: Colors.red.shade50,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.sos,
-                        color: Colors.red,
-                        size: 32,
-                      ),
-                      title: Text(alert['user_name'] ?? 'Unknown User'),
-                      subtitle: Text(
-                        '📍 ${alert['latitude']}, ${alert['longitude']}\n'
-                        '🕐 ${_formatDateTime(alert['created_at'])}',
-                      ),
-                      trailing: ElevatedButton(
-                        onPressed: () => _resolveSOS(alert['id']),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                  (alert) {
+                    final lat = alert['latitude'];
+                    final lng = alert['longitude'];
+                    final canMap = _hasCoords(lat, lng);
+                    return Card(
+                      color: Colors.red.shade50,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.sos,
+                          color: Colors.red,
+                          size: 32,
                         ),
-                        child: const Text('Resolve'),
+                        title: Text(alert['user_name'] ?? 'Unknown User'),
+                        subtitle: Text(
+                          '${canMap ? '📍 $lat, $lng' : '📍 Location unavailable'}\n'
+                          '🕐 ${_formatDateTime(alert['created_at'])}'
+                          '${canMap ? '\nTap to view on map' : ''}',
+                        ),
+                        // 3-line layout only when the map hint is shown.
+                        isThreeLine: canMap,
+                        // Tap the card to plot the SOS location on a map so
+                        // the admin can see exactly where the help call came
+                        // from (and navigate there) instead of reading raw
+                        // coordinates.
+                        onTap: canMap
+                            ? () => _showLocationOnMap(
+                                  'SOS from ${alert['user_name'] ?? 'Unknown'}',
+                                  (lat as num).toDouble(),
+                                  (lng as num).toDouble(),
+                                )
+                            : null,
+                        trailing: ElevatedButton(
+                          onPressed: () => _resolveSOS(alert['id']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Text('Resolve'),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
 
               // Bus Issue Reports (Fuel Empty / Bus Fault), reported from
@@ -722,6 +982,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     final busLabel = rawBus is String && rawBus.isNotEmpty
                         ? 'Bus $rawBus'
                         : 'Bus not selected';
+                    final lat = issue['latitude'];
+                    final lng = issue['longitude'];
+                    final canMap = _hasCoords(lat, lng);
                     return Card(
                       color: Colors.orange.shade50,
                       margin: const EdgeInsets.only(bottom: 8),
@@ -736,10 +999,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ),
                         subtitle: Text(
                           '\uD83D\uDC64 ${issue['driver_name'] ?? 'Unknown driver'}\n'
-                          '\uD83D\uDCCD ${issue['latitude']}, ${issue['longitude']}\n'
+                          '${canMap ? '\uD83D\uDCCD $lat, $lng' : '\uD83D\uDCCD Location unavailable'}\n'
                           '\uD83D\uDD50 ${_formatDateTime(issue['created_at'])}',
                         ),
                         isThreeLine: true,
+                        // Tap to plot the breakdown / fuel-stop location.
+                        onTap: canMap
+                            ? () => _showLocationOnMap(
+                                  '${isFuel ? 'Fuel Empty' : 'Bus Fault'} - $busLabel',
+                                  (lat as num).toDouble(),
+                                  (lng as num).toDouble(),
+                                )
+                            : null,
                         trailing: ElevatedButton(
                           onPressed: () => _resolveBusIssue(issue['id']),
                           style: ElevatedButton.styleFrom(
@@ -762,9 +1033,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     style: TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  TextButton(
-                    onPressed: _refreshAll,
-                    child: const Text('Refresh'),
+                  // Add Bus: pairs with the delete action so the admin can
+                  // manage the fleet from the UI (previously only deletion
+                  // was possible). Pull-to-refresh covers reloading.
+                  ElevatedButton.icon(
+                    onPressed: _showAddBusDialog,
+                    style: ElevatedButton.styleFrom(
+                      // Override the theme's full-width minimum so the button
+                      // fits this Row instead of stretching across it.
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Bus'),
                   ),
                 ],
               ),
