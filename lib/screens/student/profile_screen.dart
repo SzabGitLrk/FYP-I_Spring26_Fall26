@@ -258,6 +258,203 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Opens a dialog to edit the display name, then persists it.
+  Future<void> _showEditProfileDialog() async {
+    final controller = TextEditingController(text: _displayName ?? '');
+    final formKey = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit name'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            validator: (v) {
+              final t = v?.trim() ?? '';
+              if (t.isEmpty) return 'Please enter a name';
+              if (t.length > 60) return 'Name is too long';
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true) {
+      await _updateDisplayName(controller.text.trim());
+    }
+    controller.dispose();
+  }
+
+  /// Persists a new display name to auth metadata (the source the profile
+  /// reads on load) and best-effort syncs it to the `profiles` row.
+  Future<void> _updateDisplayName(String newName) async {
+    if (newName.isEmpty || newName == _displayName) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(data: {'name': newName}),
+      );
+      // Best-effort: keep profiles.name in sync so the admin view and any
+      // role-aware read agree with the header. Fails harmlessly if the
+      // column/permission is absent.
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        try {
+          await Supabase.instance.client
+              .from('profiles')
+              .update({'name': newName})
+              .eq('id', user.id);
+        } catch (e) {
+          debugPrint('[profile] profiles.name sync skipped: $e');
+        }
+      }
+      if (!mounted) return;
+      setState(() => _displayName = newName);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Name updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on AuthException catch (e) {
+      debugPrint('[profile] name update failed: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.message.isEmpty ? 'Could not update name' : e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[profile] name update failed: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not update name. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Opens a dialog to set a new password (with confirmation), then applies it.
+  Future<void> _showChangePasswordDialog() async {
+    final controller = TextEditingController();
+    final confirmController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change password'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: controller,
+                obscureText: true,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'New password',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+                validator: (v) =>
+                    (v ?? '').length < 6 ? 'At least 6 characters' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: confirmController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                  prefixIcon: Icon(Icons.lock_reset_outlined),
+                ),
+                validator: (v) =>
+                    v != controller.text ? 'Passwords do not match' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true) {
+      await _changePassword(controller.text);
+    }
+    controller.dispose();
+    confirmController.dispose();
+  }
+
+  Future<void> _changePassword(String newPassword) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Password changed successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on AuthException catch (e) {
+      debugPrint('[profile] password change failed: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content:
+              Text(e.message.isEmpty ? 'Could not change password' : e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[profile] password change failed: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not change password. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _toggleNotification(int index) async {
     // Everything the callback needs is captured BEFORE the first await: the
     // list can be reloaded/removed while a request is in flight, and
@@ -457,12 +654,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onSelected: (value) async {
               if (value == 'logout') {
                 _showLogoutDialog();
+              } else if (value == 'edit') {
+                _showEditProfileDialog();
+              } else if (value == 'password') {
+                _showChangePasswordDialog();
               }
-              // 'Edit Profile' was removed: a no-op entry (its handler was
-              // just "// Navigate to edit profile"). Reintroduce it only
-              // together with a real edit screen.
             },
             itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Edit profile'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'password',
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Change password'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'logout',
                 child: Row(
@@ -543,20 +761,26 @@ backgroundColor: primaryColor.withValues(alpha: 0.2),
                                     Positioned(
                                       bottom: 0,
                                       right: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: primaryColor,
-                                            width: 2,
+                                      child: GestureDetector(
+                                        onTap: _showEditProfileDialog,
+                                        child: Tooltip(
+                                          message: 'Edit name',
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: primaryColor,
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons.edit,
+                                              size: 16,
+                                              color: primaryColor,
+                                            ),
                                           ),
-                                        ),
-                                        child: Icon(
-                                          Icons.edit,
-                                          size: 16,
-                                          color: primaryColor,
                                         ),
                                       ),
                                     ),
@@ -675,6 +899,46 @@ color: primaryColor.withValues(alpha: 0.3),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Account settings: the concrete "adjust my profile"
+                    // actions, kept discoverable (not just in the header
+                    // overflow) so students can actually manage their account.
+                    const Text(
+                      'Account',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(
+                              Icons.edit_outlined,
+                              color: Colors.blue,
+                            ),
+                            title: const Text('Edit name'),
+                            subtitle: Text(_displayName ?? ''),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _showEditProfileDialog,
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(
+                              Icons.lock_outline,
+                              color: Colors.blue,
+                            ),
+                            title: const Text('Change password'),
+                            subtitle: const Text('Update your login password'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _showChangePasswordDialog,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 24),
 
