@@ -2399,13 +2399,27 @@ class _MapScreenState extends State<MapScreen> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          // Zoom to fit all stops
-          IconButton(
-            icon: const Icon(Icons.zoom_out_map),
-            onPressed: _zoomToFitAllStops,
-            tooltip: 'Show all stops',
+          // Emergency SOS - pinned in the app bar so it is always visible
+          // and never buried under the map controls at the bottom of the
+          // screen (the old bottom-corner FAB was easy to miss in a hurry).
+          TextButton.icon(
+            onPressed: _triggerSOS,
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.sos, size: 18),
+            label: const Text(
+              'SOS',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
           ),
-          // Follow bus toggle
+          const SizedBox(width: 2),
+          // Follow bus toggle (kept visible: used often while tracking)
           IconButton(
             icon: Icon(_followBus ? Icons.gps_fixed : Icons.gps_not_fixed),
             onPressed: () {
@@ -2415,17 +2429,41 @@ class _MapScreenState extends State<MapScreen> {
             },
             tooltip: _followBus ? 'Following bus' : 'Not following',
           ),
-          // Refresh button
+          // Refresh button (kept visible)
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadBusData,
             tooltip: 'Refresh',
           ),
-          // Show stops list
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: _showStopsList,
-            tooltip: 'Show all stops',
+          // Less-frequent map actions folded into one overflow menu so the
+          // bar stays uncluttered (and the title keeps room) on narrow phones.
+          PopupMenuButton<String>(
+            tooltip: 'More options',
+            onSelected: (value) {
+              if (value == 'fit') {
+                _zoomToFitAllStops();
+              } else if (value == 'stops') {
+                _showStopsList();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'fit',
+                child: ListTile(
+                  leading: Icon(Icons.zoom_out_map),
+                  title: Text('Show all stops'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'stops',
+                child: ListTile(
+                  leading: Icon(Icons.list),
+                  title: Text('Stops list'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2629,15 +2667,15 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 ),
 
-                // ETA info card. `right: 132` keeps it clear of the SOS FAB
-                // painted above it (later Stack children win), and the text
+                // ETA info card. The SOS button now lives in the app bar, so
+                // this card can span the full width (left/right 16). The text
                 // is capped at two lines so a long stop name cannot grow the
                 // card over the legend at bottom:100.
                 if (_etaInfo.isNotEmpty)
                   Positioned(
                     bottom: 20,
                     left: 16,
-                    right: 132,
+                    right: 16,
                     child: Card(
                       elevation: 4,
                       shape: RoundedRectangleBorder(
@@ -2688,19 +2726,6 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                   ),
-
-                // SOS FAB
-                Positioned(
-                  bottom: 20,
-                  right: 16,
-                  child: FloatingActionButton.extended(
-                    onPressed: _triggerSOS,
-                    icon: const Icon(Icons.sos, size: 24),
-                    label: const Text('SOS'),
-                    backgroundColor: Colors.red,
-                    elevation: 6,
-                  ),
-                ),
 
                 // Re-centre on the blue dot. Without this the dot can sit
                 // outside the viewport - the map opens framed on the first
