@@ -21,14 +21,42 @@ void main() async {
 
   var initialized = false;
   try {
+    // Own the session-storage instance instead of letting supabase_flutter
+    // build the default one. The key replicates the package's default
+    // ("sb-<project-host>-auth-token") exactly, so users already signed in
+    // keep their persisted sessions. Owning it is what lets the probe below
+    // VERIFY and REPAIR the auth storage when a previous attempt failed.
+    final sessionStorage = SharedPreferencesLocalStorage(
+      persistSessionKey:
+          'sb-${Uri.parse(AppConfig.supabaseUrl).host.split('.').first}'
+          '-auth-token',
+    );
     // Initialize Supabase with PKCE for better security
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       anonKey: AppConfig.supabaseAnonKey,
-      authOptions: const FlutterAuthClientOptions(
+      authOptions: FlutterAuthClientOptions(
         authFlowType: AuthFlowType.pkce,
+        localStorage: sessionStorage,
       ),
     );
+    // Verify the session storage the auth client actually captured. The
+    // package marks itself initialized BEFORE awaiting the auth-storage
+    // setup, so a failure there is invisible to a retry: "Try again" just
+    // early-returns "already initialized" and the app renders over a client
+    // whose `late` prefs field was never assigned - every later sign-in or
+    // token refresh then dies as a confusing LateInitializationError.
+    // hasAccessToken() reads exactly that field (throws only in that
+    // half-built state), and re-running initialize() on our own instance
+    // assigns the field - genuinely repairing the client instead of lying
+    // that startup succeeded.
+    try {
+      await sessionStorage.hasAccessToken();
+    } catch (e) {
+      debugPrint('⚠️ Session storage not ready ($e) - repairing...');
+      await sessionStorage.initialize();
+      await sessionStorage.hasAccessToken(); // verify before trusting it
+    }
     initialized = true;
     debugPrint('✅ Supabase initialized!');
   } catch (e) {

@@ -68,6 +68,30 @@ class OfflineCache {
   static String _busListKey(int routeId) => 'offline_buslist_$routeId';
   static String _stopKey(int routeId) => 'offline_stops_$routeId';
 
+  /// True when a non-empty snapshot is already stored for [key].
+  ///
+  /// An empty result is a legitimate response (the route has no location rows
+  /// yet), but writing it over a good snapshot would make the next offline
+  /// window find `[]` and reject it - a blank map where the honest "offline,
+  /// 3 min ago" view should have rendered. So empty incoming lists never
+  /// clobber existing data.
+  Future<bool> _hasNonEmpty(String key) async {
+    try {
+      final prefs = await _ensure();
+      final raw = prefs.getString(key);
+      if (raw == null) return false;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return false;
+      for (final field in ['locations', 'buses', 'points']) {
+        final rows = decoded[field];
+        if (rows is List && rows.isNotEmpty) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Persists the freshest [locations] for [routeId], replacing any previous
   /// snapshot. Callers pass the already-filtered, newest-per-bus list.
   Future<void> saveBusSnapshot(
@@ -75,6 +99,7 @@ class OfflineCache {
     List<BusLocation> locations,
   ) async {
     try {
+      if (locations.isEmpty && await _hasNonEmpty(_busKey(routeId))) return;
       final prefs = await _ensure();
       await prefs.setString(
         _busKey(routeId),
@@ -125,6 +150,7 @@ class OfflineCache {
   /// markers and auto-recover on the next poll.
   Future<void> saveBusListSnapshot(int routeId, List<Bus> buses) async {
     try {
+      if (buses.isEmpty && await _hasNonEmpty(_busListKey(routeId))) return;
       final prefs = await _ensure();
       await prefs.setString(
         _busListKey(routeId),
@@ -174,6 +200,7 @@ class OfflineCache {
     List<PickupPoint> points,
   ) async {
     try {
+      if (points.isEmpty && await _hasNonEmpty(_stopKey(routeId))) return;
       final prefs = await _ensure();
       await prefs.setString(
         _stopKey(routeId),

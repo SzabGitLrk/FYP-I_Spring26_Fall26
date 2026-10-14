@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/pickup_point.dart';
 
@@ -67,6 +68,10 @@ class MyStop {
 ///
 /// Deliberately local-only: it is a convenience pointer, not account data, so
 /// it survives app restarts and works offline without a network round-trip.
+/// The key is scoped to the signed-in user id: without that, student A's saved
+/// stop would show up on the home card of student B who signs in later on the
+/// same phone, and B could navigate straight to A's route. Unauthenticated
+/// callers see/store nothing (the store is only reachable when signed in).
 /// All operations swallow errors - a full or corrupted entry just means "no
 /// saved stop", never a crash.
 class MyStopStore {
@@ -74,17 +79,31 @@ class MyStopStore {
 
   static final MyStopStore instance = MyStopStore._();
 
-  static const String _key = 'my_stop_v1';
+  static const String _keyPrefix = 'my_stop_v1_';
 
   SharedPreferences? _prefs;
 
   Future<SharedPreferences> _ensure() async =>
       _prefs ??= await SharedPreferences.getInstance();
 
+  /// Per-user key, or null when nobody is signed in.
+  String? _key() {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      return uid == null ? null : '$_keyPrefix$uid';
+    } catch (e) {
+      // Supabase not initialized (e.g. unit tests) - treat as signed out.
+      debugPrint('[mystop] auth lookup failed: $e');
+      return null;
+    }
+  }
+
   Future<bool> save(MyStop stop) async {
     try {
+      final key = _key();
+      if (key == null) return false;
       final prefs = await _ensure();
-      return await prefs.setString(_key, jsonEncode(stop.toJson()));
+      return await prefs.setString(key, jsonEncode(stop.toJson()));
     } catch (e) {
       debugPrint('[mystop] save failed: $e');
       return false;
@@ -93,8 +112,10 @@ class MyStopStore {
 
   Future<MyStop?> load() async {
     try {
+      final key = _key();
+      if (key == null) return null;
       final prefs = await _ensure();
-      final raw = prefs.getString(_key);
+      final raw = prefs.getString(key);
       if (raw == null) return null;
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
@@ -107,8 +128,10 @@ class MyStopStore {
 
   Future<void> clear() async {
     try {
+      final key = _key();
+      if (key == null) return;
       final prefs = await _ensure();
-      await prefs.remove(_key);
+      await prefs.remove(key);
     } catch (e) {
       debugPrint('[mystop] clear failed: $e');
     }

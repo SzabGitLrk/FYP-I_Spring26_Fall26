@@ -51,7 +51,7 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
         routeName: my.routeName,
         createdAt: DateTime.now(),
       );
-      navigator.push(
+      await navigator.push(
         MaterialPageRoute(
           builder: (_) => MapScreen(
             route: route,
@@ -60,6 +60,10 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
           ),
         ),
       );
+      // Back from the map: the student may have picked a different stop
+      // there, so refresh the quick-access card instead of showing the old
+      // one (or nothing, the first time they pick one).
+      if (mounted) _loadMyStop();
     } catch (e) {
       debugPrint('[universities] open my-stop failed: $e');
       if (!mounted) return;
@@ -414,15 +418,19 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: InkWell(
-              onTap: () {
+              onTap: () async {
                 // ✅ NAVIGATION CODE - THIS IS WHAT WAS MISSING!
-                Navigator.push(
-                  context,
+                final navigator = Navigator.of(context);
+                await navigator.push(
                   MaterialPageRoute(
                     builder: (context) =>
                         RoutesListScreen(university: university),
                   ),
                 );
+                // Returning from map_screen can mean a newly saved "my
+                // stop" (or a changed one); reload so the header card is
+                // never stale.
+                if (mounted) _loadMyStop();
               },
               borderRadius: BorderRadius.circular(12),
               child: Padding(

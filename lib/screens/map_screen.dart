@@ -601,6 +601,9 @@ class _MapScreenState extends State<MapScreen> {
 
     final route = await RouteService().fetchRoute(
       _navWaypoints(LatLng(pos.latitude, pos.longitude)),
+      // GPS-keyed: unique per fix. Never persist - it would evict the fixed
+      // route geometries from the 16-entry disk cache (see fetchRoute).
+      persistToDisk: false,
     );
     if (!mounted || session != _navSession) return;
     if (route == null) {
@@ -718,6 +721,8 @@ class _MapScreenState extends State<MapScreen> {
 
     final route = await RouteService().fetchRoute(
       _navWaypoints(LatLng(pos.latitude, pos.longitude)),
+      // Same as _startNavigation: GPS-keyed, session-only cache.
+      persistToDisk: false,
     );
     // Measure the debounce from when the ATTEMPT ENDED, not when it started:
     // OSRM+Valhalla can burn ~14 s in timeouts, which - timed from the start
@@ -761,7 +766,14 @@ class _MapScreenState extends State<MapScreen> {
     // The full-route line takes over again after guidance.
     if (wasNavigating) {
       _setupRoutePolyline();
-      // Back to the walking-distance filter now that nobody is guiding.
+    }
+    // Back to the walking-distance filter now that nobody is guiding.
+    // Cancellation must cover the ROUTING window too: the close button is
+    // shown while "Calculating route…"/"Rerouting…" (when _navigating is
+    // still false), and _startNavigation had already switched the stream to
+    // distanceFilter: 0 - exiting there used to leave every raw GPS fix
+    // (~1 Hz) rebuilding the marker layers for the rest of the session.
+    if (wasNavigating || _positionFilter == 0) {
       _startMyLocationStream(distanceFilter: 10);
     }
   }
@@ -1383,28 +1395,31 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   /// Fresh rows only (younger than [_staleAfter]).
-  List<BusLocation> _freshBuses() {
-    final now = _freshnessNow();
-    return _busLocations
-        .where((loc) => now.difference(loc.timestamp) < _staleAfter)
-        .toList();
-  }
+  ///
+  /// Offline (cached) rows are deliberately kept past the live window - the
+  /// banner carries the staleness, exactly as in [_ageOutStaleBuses] - so
+  /// the ETA card counts them instead of claiming "Waiting for live bus
+  /// positions..." over a map whose pill and markers show buses.
+  bool _isStale(DateTime time) =>
+      !_offlineMode && _freshnessNow().difference(time) >= _staleAfter;
+
+  List<BusLocation> _freshBuses() =>
+      _busLocations.where((loc) => !_isStale(loc.timestamp)).toList();
 
   /// The bus closest to [point] that is actually still serving it.
   ///
-  /// Excludes rows older than [_staleAfter] (history, not live data) and
-  /// buses whose next stop is already beyond [point] - a bus that left must
-  /// not keep reporting a shrinking "arrives in 1 min" for a stop it will
-  /// never reach again. [BusLocation.nextStopIndex] is 1-based; 0 = every
-  /// stop on the route has been served.
+  /// Excludes stale rows (history, not live data) and buses whose next stop
+  /// is already beyond [point] - a bus that left must not keep reporting a
+  /// shrinking "arrives in 1 min" for a stop it will never reach again.
+  /// [BusLocation.nextStopIndex] is 1-based; 0 = every stop on the route has
+  /// been served.
   BusLocation? _closestServingBus(PickupPoint point) {
     final stopIndex = widget.pickupPoints.indexOf(point);
     if (stopIndex < 0) return null;
-    final now = _freshnessNow();
     BusLocation? best;
     var bestDistance = double.infinity;
     for (final loc in _busLocations) {
-      if (now.difference(loc.timestamp) >= _staleAfter) continue;
+      if (_isStale(loc.timestamp)) continue;
       if (loc.nextStopIndex == 0 || loc.nextStopIndex > stopIndex + 1) {
         continue;
       }
@@ -1420,11 +1435,10 @@ class _MapScreenState extends State<MapScreen> {
   /// Freshest bus near [point] regardless of direction - drives the
   /// distance fallback when no serving bus exists.
   BusLocation? _closestFreshBus(PickupPoint point) {
-    final now = _freshnessNow();
     BusLocation? best;
     var bestDistance = double.infinity;
     for (final loc in _busLocations) {
-      if (now.difference(loc.timestamp) >= _staleAfter) continue;
+      if (_isStale(loc.timestamp)) continue;
       final distance = loc.distanceTo(point.latitude, point.longitude);
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -1932,16 +1946,23 @@ class _MapScreenState extends State<MapScreen> {
                                   color: Colors.blue,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  eta == null
-                                      ? 'The last bus has already passed this stop'
-                                      : eta == 0
-                                      ? 'Bus is at this stop now'
-                                      : 'Bus arrives in $eta minutes',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
+                                // Flexible: the "already passed" copy at
+                                // fontSize 18 exceeds the sheet's content
+                                // width on small phones inside a centered
+                                // Row (RenderFlex overflow).
+                                Flexible(
+                                  child: Text(
+                                    eta == null
+                                        ? 'The last bus has already passed this stop'
+                                        : eta == 0
+                                        ? 'Bus is at this stop now'
+                                        : 'Bus arrives in $eta minutes',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2263,7 +2284,10 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   String _timeAgo(DateTime time) {
-    final diff = DateTime.now().difference(time);
+    // Aged against the server-stamped clock, same as every freshness check
+    // (_freshnessNow): a device minutes off used to label a stale fix "Just
+    // now" (or a fresh one "12 min ago") in the bus-details dialog.
+    final diff = _freshnessNow().difference(time);
     if (diff.inSeconds < 30) return 'Just now';
     if (diff.inMinutes < 1) return '${diff.inSeconds} seconds ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
@@ -2362,6 +2386,14 @@ class _MapScreenState extends State<MapScreen> {
         .map((p) => p.longitude)
         .reduce((a, b) => a > b ? a : b);
 
+    // The <2 guard above misses two (or more) stops SAVED AT THE SAME
+    // COORDINATE: bounds are then zero-area too, and CameraFit.bounds would
+    // divide by zero all the same. Center with a fixed zoom there.
+    if (minLat == maxLat && minLng == maxLng) {
+      _mapController.move(LatLng(minLat, minLng), 16);
+      return;
+    }
+
     // Google's newLatLngBounds(bounds, 50) -> CameraFit with 50px padding.
     _mapController.fitCamera(
       CameraFit.bounds(
@@ -2383,15 +2415,27 @@ class _MapScreenState extends State<MapScreen> {
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Single-line + ellipsis: the SOS pill and three icon actions now
+            // leave ~100-140 dp for the title on narrow phones, where a long
+            // route name used to wrap to 2-3 lines and blow the 56 dp
+            // toolbar height. Ellipsis keeps it inside its bounded width.
             Text(
               widget.route.routeName,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             Text(
               '${_buses.length} ${_buses.length == 1 ? 'bus' : 'buses'} • '
               '${widget.pickupPoints.length} '
               '${widget.pickupPoints.length == 1 ? 'stop' : 'stops'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12),
             ),
           ],
@@ -2575,7 +2619,8 @@ class _MapScreenState extends State<MapScreen> {
                 // Turn-by-turn guidance card
                 if (_navigating || _navRouting)
                   Positioned(
-                    top: 12,
+                    // Clear of the offline strip when both are showing.
+                    top: _offlineMode ? 36 : 12,
                     left: 16,
                     right: 16,
                     child: _buildNavigationBanner(),
@@ -2625,8 +2670,13 @@ class _MapScreenState extends State<MapScreen> {
                 // Bus count indicator (drops below the banner while guiding,
                 // or below the offline strip when showing cached fixes)
                 Positioned(
+                  // The guidance banner is ~120 dp tall (a column of two
+                  // 48 dp icon buttons), so the old 96 put the pill straight
+                  // over its lower half - covering the "End navigation"
+                  // button on every navigating screen. Sit 4 dp under the
+                  // banner's real bottom edge instead.
                   top: (_navigating || _navRouting)
-                      ? 96
+                      ? ((_offlineMode ? 36 : 12) + 124)
                       : (_offlineMode ? 40 : 16),
                   right: 16,
                   child: Container(
@@ -2675,7 +2725,10 @@ class _MapScreenState extends State<MapScreen> {
                   Positioned(
                     bottom: 20,
                     left: 16,
-                    right: 16,
+                    // Clear of the re-centre FAB (bottom 88..136, right 16):
+                    // full-width here let a 2-line ETA card slide under the
+                    // FAB, which then covered the text tail.
+                    right: _myPosition != null ? 80 : 16,
                     child: Card(
                       elevation: 4,
                       shape: RoundedRectangleBorder(
@@ -2757,9 +2810,11 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ),
 
-                // Legend
+                // Legend. 140 (not 100): a 2-line ETA card's top edge reaches
+                // ~120 from the bottom, so the old position was grazed by the
+                // card whenever the stop name wrapped.
                 Positioned(
-                  bottom: 100,
+                  bottom: 140,
                   left: 16,
                   child: Container(
                     padding: const EdgeInsets.all(8),

@@ -36,7 +36,6 @@ void main() {
     });
 
     test('fills schema-null columns instead of taking the list down', () {
-      final before = DateTime.now();
       final loc = BusLocation.fromJson({
         'id': 1,
         'bus_id': null,
@@ -47,15 +46,19 @@ void main() {
         'next_stop_index': null,
         'timestamp': null,
       });
-      final after = DateTime.now();
 
       expect(loc.busId, 0);
       expect(loc.speed, 0);
       expect(loc.heading, 0);
       expect(loc.nextStopIndex, 0);
-      // Missing timestamp falls back to "now" (within the call window).
-      expect(!loc.timestamp.isBefore(before), isTrue);
-      expect(!loc.timestamp.isAfter(after), isTrue);
+      // A NULL timestamp must NEVER fall back to "now": the freshness
+      // pipeline ages rows against server stamps to defeat ghost buses, and
+      // a fabricated fresh stamp would keep a dead bus on the map forever.
+      // Epoch 0 = maximally stale, the honest default.
+      expect(
+        loc.timestamp,
+        DateTime.fromMillisecondsSinceEpoch(0),
+      );
     });
 
     test('fails loudly when a required column is missing', () {

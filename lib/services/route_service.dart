@@ -105,7 +105,17 @@ class RouteService {
         : client.get(uri, headers: headers);
   }
 
-  Future<RoadRoute?> fetchRoute(List<LatLng> waypoints) async {
+  /// Fetches road geometry between [waypoints].
+  ///
+  /// Pass `persistToDisk: false` for routes whose first waypoint is a live
+  /// GPS fix (navigation): those mint a unique cache key per fix/reroute, and
+  /// writing each one to the disk cache would evict the fixed full-route
+  /// geometries - the only entries with real reuse across sessions. They are
+  /// still served from the in-memory cache for the session.
+  Future<RoadRoute?> fetchRoute(
+    List<LatLng> waypoints, {
+    bool persistToDisk = true,
+  }) async {
     if (waypoints.length < 2) return null;
 
     // Identical geometry (map open / nav start / nav end / reroute over the
@@ -137,7 +147,7 @@ class RouteService {
     if (route != null && cacheKey != null) {
       _writeCache(cacheKey, route);
       // Persist for next session (best-effort; never blocks the return).
-      unawaited(_writeDiskCache(cacheKey, route));
+      if (persistToDisk) _enqueueDiskCacheWrite(cacheKey, route);
     }
     return route;
   }
@@ -197,6 +207,11 @@ class RouteService {
       _cache.remove(key);
       return null;
     }
+    // Touch: move to the newest slot so the FIFO eviction below drops
+    // genuinely unused keys - a burst of GPS-keyed navigation fetches must
+    // not evict the fixed full-route entries this cache exists to keep.
+    _cache.remove(key);
+    _cache[key] = entry;
     return entry.route;
   }
 
@@ -224,15 +239,33 @@ class RouteService {
           DateTime.now().difference(savedAt) > _diskCacheTtl) {
         return null;
       }
-      return _routeFromJson(entry['route']);
+      final route = _routeFromJson(entry['route']);
+      // Touch on read: refresh this entry's recency timestamp so the
+      // least-recently-used eviction picks a genuinely unused key.
+      if (route != null) _enqueueDiskCacheWrite(key, route);
+      return route;
     } catch (e) {
       debugPrint('[route] disk cache read failed: $e');
       return null;
     }
   }
 
-  /// Writes [route] under [key] to the on-disk cache, evicting the oldest
-  /// entries beyond [_diskCacheMaxEntries]. Best-effort; never throws.
+  /// Serialized write chain: [_writeDiskCache] is a whole-blob
+  /// read-modify-write, so two concurrent fetches (map open + nav start)
+  /// would otherwise race and one entry would be silently dropped.
+  static Future<void> _diskWriteChain = Future<void>.value();
+
+  static void _enqueueDiskCacheWrite(String key, RoadRoute route) {
+    _diskWriteChain = _diskWriteChain
+        .then((_) => _writeDiskCache(key, route))
+        .then((_) {}, onError: (Object e) {
+          debugPrint('[route] queued disk write failed: $e');
+        });
+  }
+
+  /// Writes [route] under [key] to the on-disk cache, evicting the
+  /// least-recently-used entries beyond [_diskCacheMaxEntries]. Best-effort;
+  /// never throws.
   static Future<void> _writeDiskCache(String key, RoadRoute route) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -242,10 +275,26 @@ class RouteService {
         final Object? decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) blob = decoded;
       }
-      // Evict oldest first (Map iterates in insertion / JSON key order), but
-      // only to make room for a genuinely new key.
+      // Evict the LEAST-recently-used entry (oldest savedAt, which reads
+      // refresh), only to make room for a genuinely new key - plain insertion
+      // order would let a burst of one-use navigation keys evict the fixed
+      // routes the disk cache exists to keep.
       while (blob.length >= _diskCacheMaxEntries && !blob.containsKey(key)) {
-        blob.remove(blob.keys.first);
+        String? oldestKey;
+        var oldestAt = DateTime.fromMillisecondsSinceEpoch(0);
+        for (final k in blob.keys) {
+          final stored = blob[k];
+          final at = stored is Map<String, dynamic>
+              ? (DateTime.tryParse(stored['savedAt'] as String? ?? '') ??
+                    DateTime.fromMillisecondsSinceEpoch(0))
+              : DateTime.fromMillisecondsSinceEpoch(0);
+          if (oldestKey == null || at.isBefore(oldestAt)) {
+            oldestKey = k;
+            oldestAt = at;
+          }
+        }
+        if (oldestKey == null) break; // nothing evictable
+        blob.remove(oldestKey);
       }
       blob[key] = {
         'savedAt': DateTime.now().toIso8601String(),

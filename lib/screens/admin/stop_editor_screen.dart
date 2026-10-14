@@ -89,6 +89,11 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
     setState(() {
       _selected = option;
       _loadingStops = true;
+      // Drop the PREVIOUS route's stops immediately: the "Add stop" FAB
+      // computes its order_index from `_stops`, and during the load it would
+      // otherwise derive the index from another route's max - silently
+      // corrupting the new stop's visit order.
+      _stops = [];
       _error = null;
     });
     try {
@@ -192,7 +197,10 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
       ),
-      floatingActionButton: _selected == null
+      // Gated on loading too: while the route's stops are still loading, the
+      // true max order_index is unknown and a new stop could get a duplicated
+      // index.
+      floatingActionButton: (_selected == null || _loadingStops)
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _edit(),
@@ -356,6 +364,10 @@ class _StopPointEditorState extends State<StopPointEditor> {
   static const LatLng _larkanaCenter = LatLng(27.5580, 68.2120);
 
   final MapController _mapController = MapController();
+
+  /// Identifies the FlutterMap's own render box, so marker drags can convert
+  /// the gesture's screen-global position into map-local coordinates.
+  final GlobalKey _mapKey = GlobalKey();
   late LatLng _picked;
   late final TextEditingController _nameController;
   late final TextEditingController _landmarkController;
@@ -500,6 +512,7 @@ class _StopPointEditorState extends State<StopPointEditor> {
         children: [
           Expanded(
             child: FlutterMap(
+              key: _mapKey,
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: _picked,
@@ -527,8 +540,21 @@ class _StopPointEditorState extends State<StopPointEditor> {
                       // road check re-runs (debounced) as it moves.
                       child: GestureDetector(
                         onPanUpdate: (details) {
+                          // camera.screenOffsetToLatLng wants an offset
+                          // RELATIVE TO THE MAP WIDGET, but pan details give
+                          // screen-global pixels. Feeding globalPosition
+                          // straight in put the pin ~status-bar + AppBar
+                          // height (~180-200 m at zoom 16) south-east of the
+                          // finger - the exact wrong-pin this editor exists
+                          // to prevent. Convert through the map's box first.
+                          final box =
+                              _mapKey.currentContext?.findRenderObject()
+                                  as RenderBox?;
+                          if (box == null || !box.attached) return;
                           final latlng = _mapController.camera
-                              .screenOffsetToLatLng(details.globalPosition);
+                              .screenOffsetToLatLng(
+                                box.globalToLocal(details.globalPosition),
+                              );
                           _movePicked(latlng);
                         },
                         child: const Icon(

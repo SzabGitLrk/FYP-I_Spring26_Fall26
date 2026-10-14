@@ -58,16 +58,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: password),
       );
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Password updated - sign in with your new password'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      // The recovery session ends here on purpose: the next screen is the
-      // login form, and the new password is the one just set. The snackbar
-      // survives the swap - it was captured from the root messenger.
-      await Supabase.instance.client.auth.signOut();
     } catch (e) {
       // Raw exception text stays in the log; the user gets actionable copy.
       debugPrint('[reset] password update failed: $e');
@@ -78,6 +68,35 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             'retry.',
           ),
           backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    // Past this point the password REALLY changed and the recovery link is
+    // consumed - nothing may be reported as failure after this, or the user
+    // would follow "open the reset link again" into a dead link.
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Password updated - sign in with your new password'),
+        backgroundColor: Colors.green,
+      ),
+    );
+    // Best-effort sign-out: the recovery session ends here on purpose (the
+    // next screen is the login form, and the new password is the one just
+    // set; the snackbar survives the swap - it came from the root messenger).
+    // A failed sign-out (offline is the classic case) used to share the
+    // update's try/catch and red-flag a change that had already succeeded.
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('[reset] sign out after reset failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password changed, but we could not sign you out - close and '
+            'reopen the app.',
+          ),
+          backgroundColor: Colors.orange,
         ),
       );
     } finally {

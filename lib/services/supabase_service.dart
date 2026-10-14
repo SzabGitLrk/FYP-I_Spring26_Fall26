@@ -267,6 +267,31 @@ class SupabaseService {
   ///
   /// [routeId] is optional: when supplied it is stored/filtered on, when
   /// omitted the write leaves `route_id` untouched (the column is nullable)
+  /// Serializes stop-notification writes for the same (user, stop, route).
+  ///
+  /// `stop_notifications` has no UNIQUE (user_id, stop_id) constraint, so two
+  /// concurrent writes (double-tap, map + profile toggling at once) can both
+  /// observe "no row exists" and both insert - stacking duplicates. Chaining
+  /// them in-process closes that window; [unsubscribeFromStopNotifications]
+  /// shares the key so an on/off race also serializes.
+  static final Map<String, Future<void>> _notifWriteChains = {};
+
+  Future<T> _serializedNotifWrite<T>(
+    String key,
+    Future<T> Function() action,
+  ) {
+    final previous = _notifWriteChains[key] ?? Future<void>.value();
+    final run = previous.then((_) => action());
+    final tail = run.then((_) {}, onError: (_) {});
+    _notifWriteChains[key] = tail;
+    return run.whenComplete(() {
+      // Drop the entry once this run is the tail, so the map stays bounded.
+      if (identical(_notifWriteChains[key], tail)) {
+        _notifWriteChains.remove(key);
+      }
+    });
+  }
+
   /// so existing call sites keep their exact behavior.
   Future<void> subscribeToStopNotifications(
     int stopId, {
@@ -286,29 +311,54 @@ class SupabaseService {
       // violation; without it, every cycle stacks another duplicate row.
       // This order needs only the INSERT and UPDATE policies the feature
       // already proves exist (subscribing and unsubscribing both work).
-      final update = <String, dynamic>{
-        'is_active': true,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      };
-      if (routeId != null) update['route_id'] = routeId;
-
-      final existing = await _client
-          .from('stop_notifications')
-          .update(update)
-          .eq('user_id', uid)
-          .eq('stop_id', stopId)
-          .select('id');
-
-      if (existing.isEmpty) {
-        final insert = <String, dynamic>{
-          'user_id': uid,
-          'stop_id': stopId,
+      await _serializedNotifWrite('$uid:$stopId:${routeId ?? -1}', () async {
+        final update = <String, dynamic>{
           'is_active': true,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         };
-        if (routeId != null) insert['route_id'] = routeId;
-        await _client.from('stop_notifications').insert(insert);
-      }
+        if (routeId != null) update['route_id'] = routeId;
+
+        final existing = await _client
+            .from('stop_notifications')
+            .update(update)
+            .eq('user_id', uid)
+            .eq('stop_id', stopId)
+            .select('id');
+
+        if (existing.isEmpty) {
+          final insert = <String, dynamic>{
+            'user_id': uid,
+            'stop_id': stopId,
+            'is_active': true,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          if (routeId != null) insert['route_id'] = routeId;
+          try {
+            await _client.from('stop_notifications').insert(insert);
+          } catch (e) {
+            // A UNIQUE (user_id, stop_id) row can land between our update and
+            // this insert (second device, or a future constrained schema).
+            // The desired end state - one active row - is then already true,
+            // so flip it on instead of surfacing an error over a toggle that
+            // actually succeeded.
+            final retry = <String, dynamic>{
+              'is_active': true,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            };
+            if (routeId != null) retry['route_id'] = routeId;
+            final recovered = await _client
+                .from('stop_notifications')
+                .update(retry)
+                .eq('user_id', uid)
+                .eq('stop_id', stopId)
+                .select('id');
+            if (recovered.isEmpty) {
+              // Not a conflict after all - surface the original failure.
+              rethrow;
+            }
+          }
+        }
+      });
     } catch (e) {
       throw Exception('Failed to subscribe: $e');
     }
@@ -325,16 +375,24 @@ class SupabaseService {
     final uid = _getUserId();
     if (uid == null) throw StateError('Not signed in');
     try {
-      final builder = _client
-          .from('stop_notifications')
-          .update({'is_active': false})
-          .eq('user_id', uid)
-          .eq('stop_id', stopId);
-      if (routeId != null) {
-        await builder.eq('route_id', routeId);
-      } else {
-        await builder;
-      }
+      await _serializedNotifWrite('$uid:$stopId:${routeId ?? -1}', () async {
+        final builder = _client
+            .from('stop_notifications')
+            .update({'is_active': false})
+            .eq('user_id', uid)
+            .eq('stop_id', stopId);
+        // PostgREST answers 204 for a zero-row write (RLS filter, expired
+        // session, row already gone) - verifying the affected ids keeps the
+        // service's contract that a "turned off" report means the server
+        // really changed, so the UI's "🔕 Notifications turned off" cannot
+        // lie while a row stays is_active = true.
+        final rows = routeId != null
+            ? await builder.eq('route_id', routeId).select('id')
+            : await builder.select('id');
+        if ((rows as List).isEmpty) {
+          throw StateError('no subscription row to turn off');
+        }
+      });
     } catch (e) {
       throw Exception('Failed to unsubscribe: $e');
     }
@@ -361,7 +419,8 @@ class SupabaseService {
           .inFilter('stop_id', stopIds);
 
       return (response as List)
-          .map((row) => (row['stop_id'] as num).toInt())
+          .map((row) => (row['stop_id'] as num?)?.toInt())
+          .whereType<int>()
           .toSet();
     } catch (e) {
       throw Exception('Failed to load notification preferences: $e');

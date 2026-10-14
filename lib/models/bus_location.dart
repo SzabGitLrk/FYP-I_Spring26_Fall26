@@ -33,7 +33,14 @@ class BusLocation {
       speed: (json['speed'] as num?)?.toDouble() ?? 0,
       heading: (json['heading'] as num?)?.toDouble() ?? 0,
       nextStopIndex: json['next_stop_index'] as int? ?? 0,
-      timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp'] as String) : DateTime.now(),
+      // `timestamp` is nullable in the schema. NEVER fall back to now(): the
+      // whole freshness pipeline ages rows against server stamps to defeat
+      // clock skew, and re-stamping an unknown-age row as "now" makes a dead
+      // bus look fresh forever (it would then keep rendering and firing
+      // arrival alerts). Epoch 0 = maximally stale, the honest default.
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'] as String)
+          : DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 

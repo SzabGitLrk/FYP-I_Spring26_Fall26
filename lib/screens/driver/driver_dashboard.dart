@@ -133,7 +133,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
     setState(() => _isLoading = true);
 
     try {
-      final driverName = user?.userMetadata?['name'] ?? '';
+      // user_metadata is editable in the Supabase dashboard, so 'name' can
+      // hold any JSON type; a non-String here used to throw a TypeError on
+      // the typed getBusesForDriver(driverName) below, which the catch then
+      // disguised as "check your connection". Coerce like profile_screen.
+      final rawName = user?.userMetadata?['name'];
+      final driverName = rawName is String ? rawName : '';
 
       // Load all routes
       final universities = await _service.getUniversities();
@@ -1359,7 +1364,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final userName = user?.userMetadata?['name'] ?? 'Driver';
+    // Same coercion as _loadDriverData: a non-String metadata value would
+    // crash `userName[0]` (and `userName.isNotEmpty`) below.
+    final rawName = user?.userMetadata?['name'];
+    final userName = rawName is String ? rawName : 'Driver';
     final userEmail = user?.email ?? '';
 
     return Scaffold(

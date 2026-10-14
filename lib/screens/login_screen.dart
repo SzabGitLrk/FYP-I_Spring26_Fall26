@@ -27,6 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Shared email-shape check. The forgot-password path used to skip it, so
+  /// a malformed address like `abc@` paid a network round trip for a
+  /// guaranteed server rejection instead of an instant local message.
+  static final RegExp _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
   /// Client-side checks before anything goes over the network.
   ///
   /// The fields are plain [TextField]s (no [Form]/[validator] anywhere), so
@@ -40,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     String? error;
     if (email.isEmpty) {
       error = 'Please enter your email';
-    } else if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+    } else if (!_emailRegex.hasMatch(email)) {
       error = 'Please enter a valid email address';
     } else if (password.isEmpty) {
       error = 'Please enter your password';
@@ -190,6 +195,18 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter your email first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (!_emailRegex.hasMatch(email)) {
+      // Same local check as sign-in: a malformed address can never receive
+      // the link, so say so before the round trip.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address'),
           backgroundColor: Colors.orange,
         ),
       );

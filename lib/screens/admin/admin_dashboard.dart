@@ -51,10 +51,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   void initState() {
     super.initState();
+    // Loads routes too: they feed the "Add Bus" dropdown, and a first-open
+    // that failed offline must be recoverable via pull-to-refresh (the
+    // comment on _loadRoutes promises exactly that).
     _refreshAll(initial: true);
-    // Routes feed the "Add Bus" dropdown and change rarely, so they load
-    // once here rather than on every pull-to-refresh.
-    _loadRoutes();
     _subscribeToSOS();
     _subscribeToBusIssues();
     _subscribeToProfiles();
@@ -128,6 +128,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _guard(_loadBusIssues),
       _guard(_loadDrivers),
       _guard(_loadBuses),
+      // Routes included: without this, one offline first-open left the
+      // "Add Bus" dropdown empty for the whole session - its own catch
+      // swallowed the failure and nothing (not even pull-to-refresh) ever
+      // retried it until an app restart.
+      _guard(_loadRoutes),
     ]);
     if (!mounted) return;
     setState(() {
