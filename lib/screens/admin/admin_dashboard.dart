@@ -42,6 +42,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
   /// so a new emergency never appeared until the admin restarted the app.
   RealtimeChannel? _sosChannel;
   RealtimeChannel? _issuesChannel;
+  /// Live feed for NEW driver sign-ups. Without it, a driver who registers
+  /// while this screen is open never appears here until a manual refresh, so
+  /// the admin thinks approval is broken. Subscribing to `profiles` makes a
+  /// pending driver show up the moment they sign up.
+  RealtimeChannel? _profilesChannel;
 
   @override
   void initState() {
@@ -52,6 +57,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _loadRoutes();
     _subscribeToSOS();
     _subscribeToBusIssues();
+    _subscribeToProfiles();
   }
 
   @override
@@ -60,6 +66,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (channel != null) supabase.removeChannel(channel);
     final issues = _issuesChannel;
     if (issues != null) supabase.removeChannel(issues);
+    final profiles = _profilesChannel;
+    if (profiles != null) supabase.removeChannel(profiles);
     super.dispose();
   }
 
@@ -75,6 +83,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
+  }
+
+  Future<void> _signOut() async {
+    // Captured before the await: both outlive this State, so they stay valid
+    // even if the widget is disposed mid-request. A failed sign-out (offline)
+    // used to escape as an unhandled async error with no on-screen feedback.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      debugPrint('[admin] sign out failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not sign out. Check your connection and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    navigator.pushReplacementNamed('/');
   }
 
   /// Reloads every section in parallel and surfaces any failure as an
@@ -208,6 +239,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
         .subscribe();
   }
 
+  /// Keeps the pending-approval list live: a driver who signs up while this
+  /// screen is open now appears immediately (with the stats) instead of only
+  /// after a manual pull-to-refresh - which is exactly why approval looked
+  /// "broken". Quiet on purpose like the other callbacks (outside
+  /// _refreshAll's Future.wait); the periodic refresh remains the fallback if
+  /// realtime is down.
+  void _subscribeToProfiles() {
+    _profilesChannel = supabase
+        .channel('admin-profiles-${identityHashCode(this)}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          callback: (_) {
+            Future.wait([
+              _loadDrivers().catchError(
+                (Object e) =>
+                    debugPrint('[admin] drivers live reload failed: $e'),
+              ),
+              _loadStats().catchError(
+                (Object e) =>
+                    debugPrint('[admin] stats live reload failed: $e'),
+              ),
+            ]);
+          },
+        )
+        .subscribe();
+  }
+
   Future<void> _loadDrivers() async {
     // Explicit ascending name order: supabase-dart's .order() defaults to
     // DESCENDING, which would list drivers Z->A.
@@ -216,6 +276,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
         .select()
         .eq('role', 'driver')
         .order('name', ascending: true);
+
+    // Diagnostics: if RLS blocks this admin from reading driver rows, the
+    // count is 0 and (when is_admin() errors) a banner also shows - together
+    // these pin down "approval is broken" to DB-side vs. a stale view.
+    final pending =
+        drivers.where((d) => d['is_approved'] != true).length;
+    debugPrint(
+      '[admin] loaded ${drivers.length} driver row(s), '
+      '$pending pending (RLS-visible to this admin)',
+    );
 
     if (mounted) {
       setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
@@ -664,36 +734,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Dashboard'),
+        title: const Text('Admin Console'),
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              // Capture before the await: both outlive this State, so they
-              // stay valid even if the widget is disposed mid-request.
-              final navigator = Navigator.of(context);
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await supabase.auth.signOut();
-              } catch (e) {
-                // Without this the failure escaped as an unhandled async
-                // error and the admin saw no feedback at all. Raw exception
-                // text goes to the log, never to the screen.
-                debugPrint('[admin] sign out failed: $e');
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Could not sign out. Check your connection and try again.',
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
+          // Account menu: shows WHO is signed in and offers Sign out. A bare
+          // logout icon gave no hint of which account held admin rights.
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.account_circle),
+            tooltip: 'Account',
+            onSelected: (value) async {
+              if (value == 'logout') {
+                await _signOut();
               }
-              navigator.pushReplacementNamed('/');
             },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Text(
+                  supabase.auth.currentUser?.email ?? 'Administrator',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Sign out'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -814,56 +890,96 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               const SizedBox(height: 24),
 
-              // Pending Approvals Section. Derived from `_drivers` - the same
-              // list the cards below render - because the old `_pendingDrivers`
-              // snapshot lived in _loadStats(), which approve/reject never
-              // refreshed: the header could sit above an empty section after
-              // the last approval (and `== false` ignored a NULL is_approved,
-              // while the list filter below counts it).
-              if (_drivers.any((d) => d['is_approved'] != true)) ...[
-                const Text(
-                  'Pending Driver Approvals',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                ..._drivers
-                    .where((d) => d['is_approved'] != true)
-                    .map(
-                      (driver) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(
-                            Icons.person,
-                            color: Colors.orange,
-                          ),
-                          title: Text(driver['name'] ?? 'Driver'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ElevatedButton(
-                                onPressed: () =>
-                                    _approveDriver(driver['id']),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                ),
-                                child: const Text('Approve'),
+              // Pending Driver Approvals. ALWAYS rendered - header + count +
+              // either the list or an empty state - so the admin always sees
+              // where new sign-ups land. The old version hid the entire
+              // section when empty, which looked like approval was broken.
+              // The live profiles subscription keeps it current.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Pending Driver Approvals',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${_drivers.where((d) => d['is_approved'] != true).length} waiting',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ..._drivers
+                  .where((d) => d['is_approved'] != true)
+                  .map(
+                    (driver) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.person,
+                          color: Colors.orange,
+                        ),
+                        title: Text(driver['name'] ?? 'Driver'),
+                        subtitle: Text(driver['email'] ?? ''),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () => _approveDriver(driver['id']),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                // Compact: override the theme's full-width
+                                // minimum so the buttons fit this Row.
+                                minimumSize: const Size(0, 40),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    _rejectDriver(driver['id']),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                child: const Text('Reject'),
+                              child: const Text('Approve'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => _rejectDriver(driver['id']),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(0, 40),
                               ),
-                            ],
-                          ),
+                              child: const Text('Reject'),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                const SizedBox(height: 24),
-              ],
+                  ),
+              if (!_drivers.any((d) => d['is_approved'] != true))
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.how_to_reg,
+                              size: 40, color: Colors.grey[400]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No drivers waiting for approval',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'New driver sign-ups appear here automatically.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[500]),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 24),
 
               // Approved Drivers. Previously the admin could only see PENDING
               // drivers; approved ones were counted but invisible and could
