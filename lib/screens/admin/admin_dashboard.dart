@@ -1791,11 +1791,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    // Tappable: opens the active-trip detail list (bus,
+                    // route, driver, start time, live GPS signal). The bare
+                    // count could not tell a rolling bus from an orphaned
+                    // trip left behind by a killed app.
                     child: _buildStatCard(
                       _plural(_activeTrips, 'Active Trip', 'Active Trips'),
                       _activeTrips,
                       Icons.route,
                       Colors.purple,
+                      onTap: _showActiveTripsSheet,
                     ),
                   ),
                 ],
@@ -2452,22 +2457,396 @@ class _AdminDashboardState extends State<AdminDashboard> {
   static String _plural(int count, String singular, String plural) =>
       count == 1 ? singular : plural;
 
-  Widget _buildStatCard(String title, int value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    int value,
+    IconData icon,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            value.toString(),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          Text(title, style: TextStyle(color: Colors.grey[600])),
+        ],
+      ),
+    );
     return Card(
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              value.toString(),
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            Text(title, style: TextStyle(color: Colors.grey[600])),
-          ],
+      // Clip so the ripple stays inside the rounded card corners.
+      clipBehavior: onTap == null ? Clip.none : Clip.antiAlias,
+      child: onTap == null
+          ? content
+          : InkWell(onTap: onTap, child: content),
+    );
+  }
+
+  /// Detail list behind the "Active Trips" stat card. The bare count told
+  /// the admin nothing: an orphaned trip (app killed mid-drive, End Trip
+  /// failed offline) sits at "active" forever and looks exactly like a bus
+  /// that is genuinely rolling right now.
+  Future<void> _showActiveTripsSheet() async {
+    // Refresh the headline count too - it only reloads on pull-to-refresh
+    // otherwise, so the card could disagree with the list below it.
+    // Fire-and-forget: the sheet loads its own fresh copy either way.
+    _guard(_loadStats);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => _ActiveTripsSheet(
+          scrollController: scrollController,
         ),
+      ),
+    );
+  }
+}
+
+/// One row of the admin "Active Trips" detail list.
+class _ActiveTripRow {
+  const _ActiveTripRow({
+    required this.busLabel,
+    required this.routeName,
+    required this.driverLabel,
+    required this.started,
+    required this.lastSignal,
+  });
+
+  final String busLabel;
+  final String routeName;
+  final String driverLabel;
+  final DateTime? started;
+
+  /// Newest bus_locations row for this bus, if any arrived at all.
+  final DateTime? lastSignal;
+}
+
+/// Detail list behind the Active Trips stat card: WHO is driving WHICH bus
+/// on WHICH route, when the trip started, and whether the bus is actually
+/// sending GPS - the distinction the bare count could not make.
+class _ActiveTripsSheet extends StatefulWidget {
+  const _ActiveTripsSheet({required this.scrollController});
+
+  final ScrollController scrollController;
+
+  @override
+  State<_ActiveTripsSheet> createState() => _ActiveTripsSheetState();
+}
+
+class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
+  final supabase = Supabase.instance.client;
+
+  List<_ActiveTripRow>? _trips;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      // Bus and route embed via their foreign keys on trips; start_time can
+      // be NULL (rows written before defaults settled) - rendered as
+      // "unknown" instead of being dropped.
+      final rows = await supabase
+          .from('trips')
+          .select(
+            'driver_id, bus_id, start_time, buses(bus_number), routes(route_name)',
+          )
+          .eq('status', 'active')
+          .order('start_time', ascending: true);
+      final trips = List<Map<String, dynamic>>.from(rows as List);
+
+      // Driver names in one batch: trips.driver_id carries no FK to
+      // profiles, so PostgREST cannot embed it. Best effort - a missing
+      // profile degrades to a short user id instead of failing the sheet.
+      final driverIds =
+          trips.map((t) => t['driver_id']).whereType<String>().toSet().toList();
+      final names = <String, String>{};
+      if (driverIds.isNotEmpty) {
+        try {
+          final profiles = await supabase
+              .from('profiles')
+              .select('id, name')
+              .inFilter('id', driverIds);
+          for (final p in profiles as List) {
+            final id = p['id'];
+            if (id is String) names[id] = '${p['name'] ?? ''}';
+          }
+        } catch (e) {
+          debugPrint('[admin] active-trip driver names failed: $e');
+        }
+      }
+
+      // Newest signal per bus: newest-first + capped, then reduced
+      // client-side - bus_locations keeps every historical row, so scanning
+      // it all would be wasteful for a handful of buses.
+      final busIds =
+          trips.map((t) => t['bus_id']).whereType<int>().toSet().toList();
+      final lastSignal = <int, DateTime>{};
+      if (busIds.isNotEmpty) {
+        try {
+          final locs = await supabase
+              .from('bus_locations')
+              .select('bus_id, timestamp')
+              .inFilter('bus_id', busIds)
+              .order('timestamp', ascending: false)
+              .limit(200);
+          for (final l in locs as List) {
+            final busId = l['bus_id'];
+            final ts = l['timestamp'];
+            if (busId is! int || ts is! String) continue;
+            final parsed = DateTime.tryParse(ts);
+            // First row per bus wins: the list is already newest-first.
+            if (parsed != null) lastSignal.putIfAbsent(busId, () => parsed);
+          }
+        } catch (e) {
+          debugPrint('[admin] active-trip signal lookup failed: $e');
+        }
+      }
+
+      final built = trips.map((t) {
+        final bus = t['buses'];
+        final route = t['routes'];
+        final driverId = t['driver_id'];
+        final busId = t['bus_id'];
+        final startedRaw = t['start_time'];
+        final name = driverId is String ? names[driverId] : null;
+        return _ActiveTripRow(
+          busLabel: bus is Map && bus['bus_number'] != null
+              ? 'Bus ${bus['bus_number']}'
+              : 'Bus (deleted)',
+          routeName: route is Map && route['route_name'] != null
+              ? '${route['route_name']}'
+              : 'Route (deleted)',
+          driverLabel: (name != null && name.trim().isNotEmpty)
+              ? name.trim()
+              : driverId is String && driverId.length >= 8
+                  ? 'Driver (${driverId.substring(0, 8)})'
+                  : 'Unknown driver',
+          started: startedRaw is String ? DateTime.tryParse(startedRaw) : null,
+          lastSignal: busId is int ? lastSignal[busId] : null,
+        );
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _trips = built;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('[admin] active trips load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not load active trips. Check your connection.';
+      });
+    }
+  }
+
+  static String _fmtClock(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:'
+      '${t.minute.toString().padLeft(2, '0')}';
+
+  String _fmtStarted(DateTime? started, DateTime now) {
+    if (started == null) return 'Start time unknown';
+    final clock = _fmtClock(started);
+    final sameDay = started.year == now.year &&
+        started.month == now.month &&
+        started.day == now.day;
+    final elapsed = now.difference(started);
+    final String ago;
+    if (elapsed.inMinutes < 1) {
+      ago = 'just now';
+    } else if (elapsed.inMinutes < 60) {
+      ago = '${elapsed.inMinutes} min ago';
+    } else if (elapsed.inHours < 24) {
+      ago = '${elapsed.inHours}h ${elapsed.inMinutes.remainder(60)}m ago';
+    } else {
+      ago = '${elapsed.inDays}d ago';
+    }
+    final dayLabel =
+        '${started.day.toString().padLeft(2, '0')}.${started.month.toString().padLeft(2, '0')}';
+    return sameDay ? 'Started $clock • $ago' : 'Started $dayLabel $clock • $ago';
+  }
+
+  Widget _signalBadge(DateTime? lastSignal, DateTime now) {
+    if (lastSignal == null) {
+      return Text(
+        'No GPS signal yet',
+        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+      );
+    }
+    final age = now.difference(lastSignal);
+    final Color color;
+    final String label;
+    if (age.inMinutes < 3) {
+      color = Colors.green;
+      label = age.inSeconds < 60 ? '● Live' : '● Live • ${age.inSeconds}s ago';
+    } else if (age.inMinutes < 15) {
+      color = Colors.orange;
+      label = '● Last signal ${age.inMinutes} min ago';
+    } else {
+      color = Colors.red;
+      label = age.inMinutes < 60
+          ? '● Last signal ${age.inMinutes} min ago'
+          : '● Last signal ${age.inHours}h ${age.inMinutes.remainder(60)}m ago';
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.circle, size: 8, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: color, fontSize: 12)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _trips == null || _loading
+                      ? 'Active trips'
+                      : 'Active trips (${_trips!.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off,
+                                size: 48, color: Colors.orange.shade700),
+                            const SizedBox(height: 12),
+                            Text(_error!, textAlign: TextAlign.center),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: _load,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                // Bounded override: the theme's
+                                // full-width minimum wraps this button.
+                                minimumSize: const Size(0, 40),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : (_trips == null || _trips!.isEmpty)
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.directions_bus_filled,
+                                    size: 48, color: Colors.grey[400]),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'No active trips right now',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'A trip appears here the moment a driver '
+                                  'taps Start Trip.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            controller: widget.scrollController,
+                            itemCount: _trips!.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final trip = _trips![index];
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.purple.shade50,
+                                  child: const Icon(
+                                    Icons.directions_bus,
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                                title: Text(
+                                  '${trip.busLabel} • ${trip.routeName}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(trip.driverLabel),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _fmtStarted(trip.started, now),
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    _signalBadge(trip.lastSignal, now),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+          ),
+        ],
       ),
     );
   }
