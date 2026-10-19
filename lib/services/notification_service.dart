@@ -10,12 +10,42 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
-  Function(Map<String, dynamic>)? onNotificationOpened;
+  Function(Map<String, dynamic>)? _onNotificationOpened;
+
+  /// A tap that COLD-STARTED the app fires its one-shot post-frame dispatch
+  /// before map_screen (which mounts several frames later) has registered -
+  /// the payload used to be dropped into the void. Buffered here and replayed
+  /// to the FIRST registrant instead.
+  Map<String, dynamic>? _pendingLaunchPayload;
+
+  Function(Map<String, dynamic>)? get onNotificationOpened =>
+      _onNotificationOpened;
+
+  set onNotificationOpened(Function(Map<String, dynamic>)? callback) {
+    _onNotificationOpened = callback;
+    final pending = _pendingLaunchPayload;
+    if (callback != null && pending != null) {
+      _pendingLaunchPayload = null;
+      // Next frame: screens assign the callback during build/initState and
+      // set up their own navigation in post-frame callbacks.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Only if still registered - the screen may have been disposed.
+        if (identical(_onNotificationOpened, callback)) {
+          callback(pending);
+        }
+      });
+    }
+  }
 
   /// True only after [initialize] succeeded on a platform that can actually
   /// deliver notifications. [ensurePermission] consults this so a toggle never
   /// claims an alert is armed on web/desktop or when init failed.
   bool _initialized = false;
+
+  /// Memoized init run: [ensurePermission] may race main.dart's post-frame
+  /// [initialize] call, and running the body twice would double-request
+  /// permissions and could dispatch a cold-start payload twice.
+  Future<void>? _initFuture;
 
   /// True on platforms that ship a real notifications implementation here
   /// (Android / iOS / macOS / Linux). Web is excluded (main.dart skips init),
@@ -29,17 +59,38 @@ class NotificationService {
           defaultTargetPlatform == TargetPlatform.linux);
 
   void _dispatchPayload(String? payload) {
-    if (payload == null || onNotificationOpened == null) return;
+    if (payload == null) return;
     try {
       final data = Map<String, dynamic>.from(jsonDecode(payload));
-      onNotificationOpened!(data);
+      final handler = onNotificationOpened;
+      if (handler == null) {
+        // Nobody listening yet (cold start before the map mounted, or the
+        // screen was disposed): keep the LAST tap for the next registrant
+        // instead of dropping it.
+        _pendingLaunchPayload = data;
+        return;
+      }
+      handler(data);
     } catch (e) {
       // Never silently drop a tap: at least leave a trace to debug by.
       debugPrint('[notif] bad payload: $e');
     }
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    final inFlight = _initFuture;
+    if (inFlight != null) return inFlight;
+    final run = _initialize();
+    _initFuture = run;
+    return run.catchError((Object e) {
+      // A failed init may be transient (plugin channel not up yet): clear the
+      // memo so the next probe can retry instead of inheriting the failure.
+      if (identical(_initFuture, run)) _initFuture = null;
+      throw e;
+    });
+  }
+
+  Future<void> _initialize() async {
     if (!_supportedPlatform) return;
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -108,7 +159,20 @@ class NotificationService {
   Future<bool> ensurePermission() async {
     // No plugin implementation exists on web / Windows here, and init is a
     // no-op there - returning true would arm an alert that can never fire.
-    if (!_supportedPlatform || !_initialized) return false;
+    if (!_supportedPlatform) return false;
+    if (!_initialized) {
+      // Init runs in a post-frame callback at startup: a permission check
+      // racing it used to report false (and the map showed a false
+      // "Notifications are blocked" snackbar) while the OS prompt was still
+      // on screen. Give the shared init run a bounded chance to finish.
+      try {
+        await initialize().timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[notif] permission probe before init finished: $e');
+        return false;
+      }
+      if (!_initialized) return false;
+    }
     try {
       // resolvePlatformSpecificImplementation matches on the target platform,
       // so a null here simply means "not this OS" - no dart:io import needed.

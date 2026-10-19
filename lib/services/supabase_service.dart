@@ -337,7 +337,11 @@ class SupabaseService {
       // violation; without it, every cycle stacks another duplicate row.
       // This order needs only the INSERT and UPDATE policies the feature
       // already proves exist (subscribing and unsubscribing both work).
-      await _serializedNotifWrite('$uid:$stopId:${routeId ?? -1}', () async {
+      // Key is (user, stop) ONLY: unsubscribe is routinely called without a
+      // routeId, and a key that silently differed there meant the two
+      // operations never actually excluded each other - the exact race this
+      // chain exists to close.
+      await _serializedNotifWrite('$uid:$stopId', () async {
         final update = <String, dynamic>{
           'is_active': true,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -401,7 +405,10 @@ class SupabaseService {
     final uid = _getUserId();
     if (uid == null) throw StateError('Not signed in');
     try {
-      await _serializedNotifWrite('$uid:$stopId:${routeId ?? -1}', () async {
+      // Same (user, stop) key as subscribe - see the note there: a key that
+      // silently differed by the optional routeId never excluded the other
+      // operation, so on/off double-taps could interleave.
+      await _serializedNotifWrite('$uid:$stopId', () async {
         final builder = _client
             .from('stop_notifications')
             .update({'is_active': false})

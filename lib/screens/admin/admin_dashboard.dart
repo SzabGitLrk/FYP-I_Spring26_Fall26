@@ -272,6 +272,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 (Object e) =>
                     debugPrint('[admin] drivers live reload failed: $e'),
               ),
+              // Students included: the stat card updated live while the
+              // roster stayed frozen, so the dashboard could show
+              // "42 enrolled" over "No student accounts yet".
+              _loadStudents().catchError(
+                (Object e) =>
+                    debugPrint('[admin] students live reload failed: $e'),
+              ),
               _loadStats().catchError(
                 (Object e) =>
                     debugPrint('[admin] stats live reload failed: $e'),
@@ -682,13 +689,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final oldName = '${profile['name'] ?? ''}';
       if (isDriver && oldName.isNotEmpty && oldName != newName) {
         try {
-          final assigned = _assignedBusFor(oldName);
-          if (assigned != null) {
-            await supabase
-                .from('buses')
-                .update({'driver_name': newName})
-                .eq('id', assigned['id']);
-          }
+          // By NAME, not via _assignedBusFor: EVERY row carrying the old
+          // name must follow the rename, or a duplicate leaves an orphaned
+          // assignment that still reads as "no bus is assigned".
+          await supabase
+              .from('buses')
+              .update({'driver_name': newName})
+              .eq('driver_name', oldName);
         } catch (e) {
           debugPrint('[admin] assignment follow-rename failed: $e');
         }
@@ -798,7 +805,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   /// Edit dialog for an existing bus (number, route, status) - the other
   /// half of fleet management next to Add / Delete.
   Future<void> _editBusDialog(Map<String, dynamic> bus) async {
-    if (_routes.isEmpty) {
+    // Snapshot: a refresh while the dialog is open must not rebuild the
+    // dropdowns from a changing list (see _assignRouteDialog).
+    final routes = List<Map<String, dynamic>>.from(_routes);
+    if (routes.isEmpty) {
       _showError(
         'No routes loaded yet. Pull to refresh, then add a route first.',
       );
@@ -810,10 +820,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     // passing its stale id as initialValue would assert in the dropdown.
     final currentRouteId = bus['route_id'];
     int? routeId = currentRouteId is int &&
-            _routes.any((r) => r['id'] == currentRouteId)
+            routes.any((r) => r['id'] == currentRouteId)
         ? currentRouteId
         : null;
-    String status = '${bus['status'] ?? 'active'}';
+    // Anything outside the two dropdown items ('maintenance', hand edits,
+    // different casing) must degrade to 'active' - a foreign value as
+    // initialValue asserts in the dropdown and renders it blank.
+    String status = bus['status'] == 'inactive' ? 'inactive' : 'active';
 
     final saved = await showDialog<bool>(
           context: context,
@@ -839,7 +852,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       labelText: 'Route',
                       prefixIcon: Icon(Icons.route),
                     ),
-                    items: _routes
+                    items: routes
                         .map(
                           (r) => DropdownMenuItem<int>(
                             value: r['id'] as int,
@@ -950,9 +963,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final routes = bus['routes'];
     final routeName = routes is Map ? routes['route_name'] : null;
     final busNo = bus['bus_number'] ?? bus['id'] ?? '?';
+    // An INACTIVE bus reads as "assigned" here but as "no bus is
+    // assigned" on the driver's dashboard (it filters status = active) -
+    // label it instead of re-creating that exact confusion.
+    final inactive = bus['status'] == 'active' ? '' : ' (inactive)';
     return routeName == null
-        ? 'Assigned: Bus $busNo'
-        : 'Assigned: Bus $busNo • $routeName';
+        ? 'Assigned: Bus $busNo$inactive'
+        : 'Assigned: Bus $busNo • $routeName$inactive';
   }
 
   /// Writes [driverName] onto bus [busId], clearing it from every other bus
@@ -1004,7 +1021,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _showError('This driver has no name to assign against.');
       return;
     }
-    if (_routes.isEmpty) {
+    // Snapshot: a refresh/realtime setState while the dialog is open must
+    // not rebuild its dropdowns from a changing list (the stored value
+    // would stop matching an item -> assert in debug, blank in release).
+    final routes = List<Map<String, dynamic>>.from(_routes);
+    final buses = List<Map<String, dynamic>>.from(_buses);
+    if (routes.isEmpty) {
       _showError(
         'No routes loaded yet. Pull to refresh - a driver is assigned to a '
         'bus, and every bus sits on a route.',
@@ -1019,14 +1041,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
     int? selectedRouteId;
     int? selectedBusId;
     final currentRouteId = current?['route_id'];
-    if (currentRouteId is int && _routes.any((r) => r['id'] == currentRouteId)) {
+    if (currentRouteId is int && routes.any((r) => r['id'] == currentRouteId)) {
       selectedRouteId = currentRouteId;
       final currentBusId = current?['id'];
       if (currentBusId is int && current?['status'] == 'active') {
         selectedBusId = currentBusId;
       }
-    } else if (_routes.first['id'] is int) {
-      selectedRouteId = _routes.first['id'] as int;
+    } else if (routes.first['id'] is int) {
+      selectedRouteId = routes.first['id'] as int;
     }
 
     final action = await showDialog<Object?>(
@@ -1034,7 +1056,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final routeBuses = _buses
+            final routeBuses = buses
                 .where((b) =>
                     b['route_id'] == selectedRouteId &&
                     b['status'] == 'active' &&
@@ -1058,7 +1080,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       labelText: 'Route',
                       prefixIcon: Icon(Icons.route),
                     ),
-                    items: _routes
+                    items: routes
                         .where((r) => r['id'] is int)
                         .map(
                           (r) => DropdownMenuItem<int>(
@@ -1185,18 +1207,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   /// Universities for the route dialog's dropdown (id + name only).
-  /// Fails quietly like [_loadRoutes].
+  /// Throws on purpose: every caller is [_guard]-wrapped or catches
+  /// locally, so a swallowed failure here would render an empty dropdown
+  /// on a clean-looking dashboard with no Retry.
   Future<void> _loadUniversities() async {
-    try {
-      final unis = await supabase
-          .from('universities')
-          .select('id, name')
-          .order('name', ascending: true);
-      if (mounted) {
-        setState(() => _universities = List<Map<String, dynamic>>.from(unis));
-      }
-    } catch (e) {
-      debugPrint('[admin] load universities failed: $e');
+    final unis = await supabase
+        .from('universities')
+        .select('id, name')
+        .order('name', ascending: true);
+    if (mounted) {
+      setState(() => _universities = List<Map<String, dynamic>>.from(unis));
     }
   }
 
@@ -1206,29 +1226,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _showRouteDialog({Map<String, dynamic>? route}) async {
     final isEdit = route != null;
     final formKey = GlobalKey<FormState>();
+    // Snapshot: a refresh/realtime setState while the dialog is open must
+    // not rebuild its dropdowns from a changing list (the stored value
+    // would stop matching an item -> assert in debug, blank in release).
+    final universities = List<Map<String, dynamic>>.from(_universities);
     final nameController =
         TextEditingController(text: '${route?['route_name'] ?? ''}');
     final descController =
         TextEditingController(text: '${route?['description'] ?? ''}');
-    // A route whose university row was deleted degrades to "None" -
-    // a stale id as initialValue would assert in the dropdown.
-    final currentUniId = route?['university_id'];
-    int? universityId =
-        currentUniId is int && _universities.any((u) => u['id'] == currentUniId)
-            ? currentUniId
-            : null;
 
-    if (_universities.isEmpty) {
+    if (universities.isEmpty) {
       // First-open path: the dialog may be opened before a full refresh
       // has ever succeeded - try once so the dropdown is not mysteriously
       // empty. Failures stay quiet (the None option still works).
-      await _loadUniversities();
+      try {
+        await _loadUniversities();
+      } catch (e) {
+        debugPrint('[admin] universities load for route dialog failed: $e');
+      }
       if (!mounted) {
         nameController.dispose();
         descController.dispose();
         return;
       }
+      universities.addAll(_universities);
     }
+
+    // Prefill AFTER the lazy load above: computing it earlier (while the
+    // list was still empty) showed "None" for a route that DID have a
+    // university, and saving then silently wiped the link.
+    // A route whose university row was deleted degrades to "None" -
+    // a stale id as initialValue would assert in the dropdown.
+    final currentUniId = route?['university_id'];
+    int? universityId =
+        currentUniId is int && universities.any((u) => u['id'] == currentUniId)
+            ? currentUniId
+            : null;
 
     final saved = await showDialog<bool>(
           context: context,
@@ -1264,7 +1297,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           value: null,
                           child: Text('None'),
                         ),
-                        ..._universities.map(
+                        ...universities.map(
                           (u) => DropdownMenuItem<int?>(
                             value: u['id'] as int,
                             child: Text('${u['name']}'),
@@ -1359,14 +1392,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<bool> _confirmDeleteRoute(Map<String, dynamic> route) async {
+    // buses.route_id is ON DELETE CASCADE in the original schema: without
+    // the supabase_admin_powers.sql FK change, deleting a route DELETES
+    // its buses. The old text promised they would merely be "unassigned" -
+    // exactly the quiet data loss this confirm exists to prevent.
+    final busCount = _buses.where((b) => b['route_id'] == route['id']).length;
+    final busWarning = busCount == 0
+        ? ''
+        : ' It also has $busCount ${busCount == 1 ? 'bus' : 'buses'} on it, '
+            'which are deleted with it unless supabase_admin_powers.sql has '
+            'been run (that script keeps them, unassigned).';
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete Route'),
             content: Text(
               'Delete ${route['route_name'] ?? 'this route'}? Its pickup '
-              'points are deleted with it, and buses lose their route '
-              'assignment.',
+              'points are deleted with it.$busWarning',
             ),
             actions: [
               TextButton(
@@ -1401,10 +1443,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (deleted.isEmpty) {
         throw StateError('delete route affected no rows');
       }
-      // Buses pointed here lose their route link (FK SET NULL), so their
-      // cards must re-render too.
+      // Buses CASCADE with the route (see supabase_admin_powers.sql's FK
+      // change to keep them), so the bus list AND the stat cards must
+      // re-render too - the fleet count used to go stale here.
       await _guard(_loadRoutes);
       await _guard(_loadBuses);
+      await _guard(_loadStats);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1422,22 +1466,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  /// Routes for the "Add Bus" dropdown and the Routes list. Fails quietly
-  /// (dialogs simply show an empty dropdown the admin can retry via
-  /// pull-to-refresh).
+  /// Routes for the "Add Bus" dialog, the Assign dialog and the Routes
+  /// list. Throws on purpose: every caller is [_guard]-wrapped (or catches
+  /// locally), so _refreshAll's error banner + Retry actually fire when
+  /// this fails - the old internal catch reported "success" and rendered
+  /// "No routes yet" on an error-free dashboard.
   Future<void> _loadRoutes() async {
-    try {
-      final routes = await supabase
-          .from('routes')
-          // University NAME joined so the Routes list is readable; the
-          // dropdowns only read id/route_name, so extra keys are harmless.
-          .select('id, route_name, description, university_id, universities(name)')
-          .order('route_name', ascending: true);
-      if (mounted) {
-        setState(() => _routes = List<Map<String, dynamic>>.from(routes));
-      }
-    } catch (e) {
-      debugPrint('[admin] load routes failed: $e');
+    final routes = await supabase
+        .from('routes')
+        // University NAME joined so the Routes list is readable; the
+        // dropdowns only read id/route_name, so extra keys are harmless.
+        .select('id, route_name, description, university_id, universities(name)')
+        .order('route_name', ascending: true);
+    if (mounted) {
+      setState(() => _routes = List<Map<String, dynamic>>.from(routes));
     }
   }
 
@@ -1499,6 +1541,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   /// "Add Bus" dialog: bus number + route + status, then inserts the row.
   Future<void> _showAddBusDialog() async {
+    if (_routes.isEmpty) {
+      _showError(
+        'No routes loaded yet. Pull to refresh, then add a route first.',
+      );
+      return;
+    }
+    // Snapshot: a refresh while the dialog is open must not rebuild the
+    // dropdown from a changing list (see _assignRouteDialog).
+    final routes = List<Map<String, dynamic>>.from(_routes);
     final formKey = GlobalKey<FormState>();
     final busController = TextEditingController();
     int? selectedRouteId;
@@ -1533,7 +1584,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         labelText: 'Route',
                         prefixIcon: Icon(Icons.route),
                       ),
-                      items: _routes
+                      items: routes
                           .map(
                             (r) => DropdownMenuItem<int>(
                               value: r['id'] as int,
@@ -1830,8 +1881,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
                                 // Compact: override the theme's full-width
-                                // minimum so the buttons fit this Row.
+                                // minimum so the buttons fit this Row without
+                                // squeezing the name to ~50 dp.
                                 minimumSize: const Size(0, 40),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
                               ),
                               child: const Text('Approve'),
                             ),
@@ -1842,6 +1896,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                                 minimumSize: const Size(0, 40),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
                               ),
                               child: const Text('Reject'),
                             ),
@@ -1932,7 +1988,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 // buttons had).
                                 PopupMenuButton<String>(
                                   tooltip: 'More actions',
-                                  onSelected: (value) {
+                                  onSelected: (value) async {
                                     switch (value) {
                                       case 'edit':
                                         _editProfileDialog(
@@ -1940,8 +1996,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       case 'revoke':
                                         _unapproveDriver(driver);
                                       case 'delete':
-                                        _deleteAccount(driver,
-                                            roleNoun: 'Driver');
+                                        // Confirm first: one accidental tap
+                                        // must not permanently remove an
+                                        // account (the Reject path has the
+                                        // same guard).
+                                        final confirmed =
+                                            await _confirmDeleteAccount(
+                                                driver, roleNoun: 'Driver');
+                                        if (confirmed) {
+                                          await _deleteAccount(driver,
+                                              roleNoun: 'Driver');
+                                        }
                                     }
                                   },
                                   itemBuilder: (context) => [
@@ -2191,10 +2256,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               icon: const Icon(Icons.delete,
                                   color: Colors.red),
                               tooltip: 'Remove student',
-                              onPressed: () => _deleteAccount(
-                                student,
-                                roleNoun: 'Student',
-                              ),
+                              onPressed: () async {
+                                // Confirm first: one accidental tap must not
+                                // permanently remove an account.
+                                final confirmed = await _confirmDeleteAccount(
+                                  student,
+                                  roleNoun: 'Student',
+                                );
+                                if (confirmed) {
+                                  await _deleteAccount(
+                                    student,
+                                    roleNoun: 'Student',
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),

@@ -280,6 +280,10 @@ class _MapScreenState extends State<MapScreen> {
               Navigator.pop(context);
               Geolocator.openAppSettings();
             },
+            style: ElevatedButton.styleFrom(
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
+            ),
             child: const Text('Open settings'),
           ),
         ],
@@ -307,13 +311,29 @@ class _MapScreenState extends State<MapScreen> {
     );
 
     unawaited(_myPositionSubscription?.cancel());
-    _myPositionSubscription =
-        Geolocator.getPositionStream(locationSettings: settings).listen(
-          _handlePosition,
-          // Permission revoked mid-session, or GPS unavailable. The dot just
-          // disappears; nothing else on the screen is affected.
-          onError: (_) {},
-        );
+    late final StreamSubscription<Position> sub;
+    sub = Geolocator.getPositionStream(locationSettings: settings).listen(
+      _handlePosition,
+      // Permission revoked mid-session, or GPS unavailable. The dot just
+      // disappears; nothing else on the screen is affected.
+      //
+      // BOTH callbacks clear the reference (identity-guarded so a newer
+      // stream is never nulled by an old one's death): the guard at the top
+      // refuses to resubscribe while it sees a non-null subscription, so a
+      // closed-but-stale one left navigation stuck at "Preparing
+      // guidance..." forever after a single stream error.
+      onError: (_) {
+        if (identical(_myPositionSubscription, sub)) {
+          _myPositionSubscription = null;
+        }
+      },
+      onDone: () {
+        if (identical(_myPositionSubscription, sub)) {
+          _myPositionSubscription = null;
+        }
+      },
+    );
+    _myPositionSubscription = sub;
   }
 
   /// Single pipeline for every GPS fix: the blue dot first, then - while
@@ -1074,9 +1094,15 @@ class _MapScreenState extends State<MapScreen> {
           : null;
 
       if (!mounted) return;
+      // Route filter + TTL applied HERE too (this path used to assign the
+      // raw list): the poll and stream paths both collapse, and skipping it
+      // showed >5-minute-old rows as live and inflated the "N active"
+      // counter for up to 30 s after a load/refresh. `_buses` is set first
+      // because _collapseBusRows filters by it.
+      _buses = buses;
+      final collapsed = _collapseBusRows(locations);
       setState(() {
-        _buses = buses;
-        _busLocations = locations;
+        _busLocations = collapsed;
         _busRevision.value++;
         _isLoading = false;
         // A successful reload must clear a previous failure, otherwise the
@@ -1101,6 +1127,11 @@ class _MapScreenState extends State<MapScreen> {
       // Start (or restart) the live feed only now that `_buses` is known, so
       // events can be narrowed to this route's buses from the first tick.
       _subscribeToBusLocations();
+      // Seed immediately: the stream's initial replay window (latest 500
+      // rows PROJECT-wide) can be crowded out by other routes' inserts,
+      // leaving this map blank until the next 30 s poll. The poll is
+      // self-guarding and skips its setState when nothing changed.
+      unawaited(_pollBusLocations());
 
       _updateBusMarkers();
       _updateETAInfo();
@@ -1682,6 +1713,8 @@ class _MapScreenState extends State<MapScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
             ),
             child: const Text('SEND SOS'),
           ),

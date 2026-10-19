@@ -130,6 +130,11 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
+                // The theme's Size(double.infinity, 48) minimum makes this
+                // button demand INFINITE width as a direct Row child: debug
+                // asserts "BoxConstraints forces an infinite width" and
+                // release collapses the row. Bounded minimum required.
+                minimumSize: const Size(0, 40),
               ),
               child: const Text('Open'),
             ),
@@ -288,6 +293,9 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
+                // Override the theme's full-width minimum: inside the
+                // actions row infinity clamps to the whole dialog width.
+                minimumSize: const Size(0, 40),
               ),
               child: const Text('Logout'),
             ),

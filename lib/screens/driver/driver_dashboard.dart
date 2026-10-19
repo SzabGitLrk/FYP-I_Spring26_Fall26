@@ -1015,6 +1015,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
             ),
             child: const Text('SEND SOS'),
           ),
@@ -1155,6 +1157,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
             ),
             child: const Text('SEND REPORT'),
           ),
@@ -1363,6 +1367,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
+                // Override the theme's full-width minimum (actions row).
+                minimumSize: const Size(0, 40),
               ),
               child: const Text('Logout'),
             ),

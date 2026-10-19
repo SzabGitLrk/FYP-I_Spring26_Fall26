@@ -85,7 +85,14 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
     }
   }
 
+  /// Guards against out-of-order responses: switching routes while the
+  /// previous load is in flight used to let the slower response overwrite
+  /// the newer route's stop list - the admin then deleted stops while the
+  /// screen showed a DIFFERENT route's stops.
+  int _selectSeq = 0;
+
   Future<void> _select(_RouteOption option) async {
+    final seq = ++_selectSeq;
     setState(() {
       _selected = option;
       _loadingStops = true;
@@ -98,13 +105,13 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
     });
     try {
       final stops = await _service.getPickupPointsForRoute(option.route.id);
-      if (!mounted) return;
+      if (!mounted || seq != _selectSeq) return;
       setState(() {
         _stops = stops;
         _loadingStops = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _selectSeq) return;
       debugPrint('[stops-admin] stop load failed: $e');
       setState(() {
         _error = 'Could not load stops for this route.';
@@ -155,6 +162,9 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
+                  // Override the theme's full-width minimum: inside the
+                  // actions row infinity clamps to the whole dialog width.
+                  minimumSize: const Size(0, 40),
                 ),
                 child: const Text('Delete'),
               ),
@@ -200,7 +210,10 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
       // Gated on loading too: while the route's stops are still loading, the
       // true max order_index is unknown and a new stop could get a duplicated
       // index.
-      floatingActionButton: (_selected == null || _loadingStops)
+      // Gated on the error state too: after a failed stop load `_stops` is
+      // empty but rows still exist server-side, so _nextOrderIndex would
+      // restart at 1 and write a DUPLICATE order_index.
+      floatingActionButton: (_selected == null || _loadingStops || _error != null)
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _edit(),
@@ -415,10 +428,14 @@ class _StopPointEditorState extends State<StopPointEditor> {
 
   Future<void> _checkRoad() async {
     setState(() => _checkingRoad = true);
+    // Captured before the await: a slow answer for an EARLIER pin must not
+    // overwrite the readout for the pin the admin is looking at now (the
+    // debounce cancels timers, not in-flight HTTP).
+    final forPoint = _picked;
     final distance = await widget.routeService.nearestRoadDistanceMeters(
-      _picked,
+      forPoint,
     );
-    if (!mounted) return;
+    if (!mounted || forPoint != _picked) return;
     setState(() {
       _roadDistance = distance;
       _checkingRoad = false;

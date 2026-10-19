@@ -475,6 +475,11 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
               },
               icon: const Icon(Icons.map),
               label: const Text('View on Map'),
+              style: ElevatedButton.styleFrom(
+                // Override the theme's full-width minimum: inside the
+                // actions row infinity clamps to the whole dialog width.
+                minimumSize: const Size(0, 40),
+              ),
             ),
           ],
         );

@@ -52,3 +52,13 @@ CREATE POLICY "Routes delete" ON public.routes
 --   1. Insert a test route, then delete it from the dashboard.
 --   2. Rejecting a pending driver should REMOVE the row (and lock that
 --      email out of the app until it signs up again).
+
+-- ---------- routes: keep the buses when a route is deleted ----------
+-- buses.route_id is ON DELETE CASCADE in supabase_final.sql, so deleting
+-- a route from the dashboard silently DELETED every bus on it. Switch to
+-- SET NULL: the vehicles stay in the fleet as "Unassigned" and can be
+-- re-pointed at another route. (pickup_points keep their CASCADE - a
+-- route's stops genuinely belong to it.)
+ALTER TABLE public.buses DROP CONSTRAINT IF EXISTS buses_route_id_fkey;
+ALTER TABLE public.buses ADD CONSTRAINT buses_route_id_fkey
+  FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE SET NULL;

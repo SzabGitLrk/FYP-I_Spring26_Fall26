@@ -249,6 +249,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
+                // Override the theme's full-width minimum (actions row).
+                minimumSize: const Size(0, 40),
               ),
               child: const Text('Logout'),
             ),
@@ -295,6 +297,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Navigator.pop(dialogContext, true);
               }
             },
+            style: ElevatedButton.styleFrom(
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -408,6 +414,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Navigator.pop(dialogContext, true);
               }
             },
+            style: ElevatedButton.styleFrom(
+              // Override the theme's full-width minimum (actions row).
+              minimumSize: const Size(0, 40),
+            ),
             child: const Text('Update'),
           ),
         ],
