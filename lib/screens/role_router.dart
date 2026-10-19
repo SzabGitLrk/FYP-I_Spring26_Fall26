@@ -13,7 +13,7 @@ class RoleRouter extends StatefulWidget {
   State<RoleRouter> createState() => _RoleRouterState();
 }
 
-class _RoleRouterState extends State<RoleRouter> {
+class _RoleRouterState extends State<RoleRouter> with WidgetsBindingObserver {
   /// Role as recorded in the `profiles` table. `null` means "not loaded yet".
   ///
   /// SECURITY: the role is read ONLY from the database. It is never taken from
@@ -35,6 +35,73 @@ class _RoleRouterState extends State<RoleRouter> {
   /// silently resolves to `student` either.
   bool _resolveFailed = false;
 
+  /// Latched password-recovery intent. `passwordRecovery` fires ONCE, and
+  /// the next emission (an `initialSession` replay, or a routine
+  /// `tokenRefresh`) used to replace it in the StreamBuilder's
+  /// latest-event slot - unmounting the reset screen mid-flow and dropping
+  /// the user onto a dashboard before they had chosen a new password.
+  /// Cleared only when the recovery session itself ends (sign-out).
+  bool _showResetScreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _revalidateOnResume();
+  }
+
+  /// Re-checks role + approval when the app returns to the foreground.
+  ///
+  /// Roles used to be resolved ONCE per session: an admin's "Revoke
+  /// approval" or "Remove driver" left a revoked driver in a fully working
+  /// dashboard (GPS sharing included) until the app was force-stopped.
+  /// Failures are deliberately IGNORED - an offline resume must not evict a
+  /// session that currently works; the next resume retries.
+  Future<void> _revalidateOnResume() async {
+    final userId = _resolvedForUserId;
+    if (userId == null || _resolvedRole == null) return;
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('role, is_approved')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!mounted || _resolvedForUserId != userId) return;
+      if (profile == null) {
+        // Profile row deleted (admin "Remove driver" / "Reject"): clear the
+        // latch so the normal re-resolve path runs - it recreates the row
+        // with SAFE defaults (student, unapproved), never the stale role.
+        _reResolve();
+        return;
+      }
+      final role = profile['role'] as String? ?? 'student';
+      final approved = profile['is_approved'] == true;
+      if (role != _resolvedRole || approved != _isApproved) {
+        debugPrint(
+          '[role_router] account changed server-side '
+          '(role: $_resolvedRole -> $role, approved: $_isApproved -> '
+          '$approved) - re-routing',
+        );
+        setState(() {
+          _resolvedRole = role;
+          _isApproved = approved;
+        });
+      }
+    } catch (e) {
+      debugPrint('[role_router] resume revalidation skipped: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
@@ -49,9 +116,11 @@ class _RoleRouterState extends State<RoleRouter> {
         // Password-recovery deep link (PKCE): the session exists but the
         // user has not chosen a new password yet - route to the reset
         // screen instead of a dashboard. Covers warm links and cold starts
-        // alike: gotrue emits passwordRecovery for both.
+        // alike: gotrue emits passwordRecovery for both. Latched (see
+        // _showResetScreen): the NEXT auth event must not kick the user
+        // off the reset screen mid-flow.
         if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
-          return const ResetPasswordScreen();
+          _showResetScreen = true;
         }
 
         final session = Supabase.instance.client.auth.currentSession;
@@ -64,6 +133,9 @@ class _RoleRouterState extends State<RoleRouter> {
           _resolvedRole = null;
           _isApproved = false;
           _resolveFailed = false;
+          // A recovery session only ends by completing the reset (sign-out),
+          // so a null session also ends the recovery intent.
+          _showResetScreen = false;
           return const LoginScreen();
         }
 
@@ -73,8 +145,13 @@ class _RoleRouterState extends State<RoleRouter> {
           _resolvedRole = null;
           _isApproved = false;
           _resolveFailed = false;
+          _showResetScreen = false;
           return const LoginScreen();
         }
+
+        // Sticky recovery intent: holds the reset screen regardless of what
+        // other auth events fired in between (tokenRefresh etc.).
+        if (_showResetScreen) return const ResetPasswordScreen();
 
         // Kick off (or restart) the DB lookup when the identity changes.
         if (_resolvedForUserId != user.id) {

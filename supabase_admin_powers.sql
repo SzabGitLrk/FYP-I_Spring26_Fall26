@@ -53,6 +53,23 @@ CREATE POLICY "Routes delete" ON public.routes
 --   2. Rejecting a pending driver should REMOVE the row (and lock that
 --      email out of the app until it signs up again).
 
+-- ---------- harden is_admin() ----------
+-- SECURITY DEFINER + a floating search_path: the `profiles` reference in
+-- the body resolves via the SESSION's search_path, so a path hijack
+-- (pg_temp first, or an attacker-created schema listed before public)
+-- could point it at a fake table that matches everyone - defeating the
+-- single function every RLS policy below relies on. Pinning
+-- search_path = '' forces schema-qualified resolution only.
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean
+LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+$$;
+
 -- ---------- routes: keep the buses when a route is deleted ----------
 -- buses.route_id is ON DELETE CASCADE in supabase_final.sql, so deleting
 -- a route from the dashboard silently DELETED every bus on it. Switch to

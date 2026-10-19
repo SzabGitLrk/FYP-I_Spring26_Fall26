@@ -1104,6 +1104,11 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _busLocations = collapsed;
         _busRevision.value++;
+        // A successful load is proof the feed path works again: reopen the
+        // stream-restart budget. Previously only the stream listener reset
+        // it, so three past failures stayed burned in for the whole session
+        // and the auto-restart silently stopped firing.
+        _busFeedRestarts = 0;
         _isLoading = false;
         // A successful reload must clear a previous failure, otherwise the
         // retry button could never bring the map back.

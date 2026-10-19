@@ -140,13 +140,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final rawName = user?.userMetadata?['name'];
       final driverName = rawName is String ? rawName : '';
 
-      // Load all routes
+      // Load all routes. Parallel on purpose: one round trip per university
+      // IN SERIES made the first paint (and every Retry) wait N times
+      // longer than the queries themselves.
       final universities = await _service.getUniversities();
-      List<RouteModel> allRoutes = [];
-      for (var uni in universities) {
-        final routes = await _service.getRoutesForUniversity(uni.id);
-        allRoutes.addAll(routes);
-      }
+      final routeLists = await Future.wait(
+        universities.map((uni) => _service.getRoutesForUniversity(uni.id)),
+      );
+      final allRoutes = routeLists.expand((routes) => routes).toList();
 
       // Load buses assigned to this driver by driver_name. The canonical
       // profiles.name is matched TOO (best effort): an admin assigns by the
