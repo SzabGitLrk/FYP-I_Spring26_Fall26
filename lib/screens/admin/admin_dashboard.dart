@@ -1073,6 +1073,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           onPressed: () => _resolveSOS(alert['id']),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
+                            // The theme's full-width minimumSize
+                            // (double.infinity) squeezes trailing buttons
+                            // into the leftover slot, wrapping "Resolve"
+                            // into a vertical column of letters.
+                            // Size(0, ...) restores its intrinsic width -
+                            // same override as the Approve/Reject buttons.
+                            minimumSize: const Size(0, 40),
                           ),
                           child: const Text('Resolve'),
                         ),
@@ -1136,6 +1143,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           onPressed: () => _resolveBusIssue(issue['id']),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
+                            // See the SOS card: the theme's full-width
+                            // minimumSize wrapped "Resolve" vertically in
+                            // the trailing slot.
+                            minimumSize: const Size(0, 40),
                           ),
                           child: const Text('Resolve'),
                         ),
