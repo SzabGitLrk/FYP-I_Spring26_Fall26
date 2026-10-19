@@ -135,7 +135,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     try {
       // user_metadata is editable in the Supabase dashboard, so 'name' can
       // hold any JSON type; a non-String here used to throw a TypeError on
-      // the typed getBusesForDriver(driverName) below, which the catch then
+      // the typed getBusesForDriver call below, which the catch then
       // disguised as "check your connection". Coerce like profile_screen.
       final rawName = user?.userMetadata?['name'];
       final driverName = rawName is String ? rawName : '';
@@ -148,8 +148,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
         allRoutes.addAll(routes);
       }
 
-      // Load buses assigned to this driver by driver_name
-      List<Bus> driverBuses = await _service.getBusesForDriver(driverName);
+      // Load buses assigned to this driver by driver_name. The canonical
+      // profiles.name is matched TOO (best effort): an admin assigns by the
+      // profile name, and the two names can drift - matching either keeps a
+      // real assignment from reading as "no bus is assigned to your name".
+      final profileName = await _service.getMyProfileName();
+      List<Bus> driverBuses = await _service.getBusesForDriver(
+        [driverName, ?profileName],
+      );
 
       // No buses matched the driver's name: keep the pool of active buses so
       // the driver can still be ASKED which bus they are driving (see the
@@ -186,9 +192,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
       }
 
+      // An assigned driver only gets the routes their bus(s) actually
+      // operate - starting on some other route ended in "No active bus is
+      // on this route" even though their bus WAS assigned. Unassigned
+      // drivers keep the full list (they pick manually anyway), and an
+      // emptied filter (bus's route deleted) falls back to all routes.
+      final assignedRoutes = _noAssignedBus
+          ? allRoutes
+          : allRoutes
+              .where((r) => _availableBuses.any((b) => b.routeId == r.id))
+              .toList();
+
       if (!mounted) return;
       setState(() {
-        _assignedRoutes = allRoutes;
+        _assignedRoutes = assignedRoutes.isEmpty ? allRoutes : assignedRoutes;
         // A successful retry must clear the stale error, otherwise one
         // failed load left the dashboard on the error branch forever.
         _error = null;

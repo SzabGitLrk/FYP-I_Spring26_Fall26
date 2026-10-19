@@ -78,18 +78,44 @@ class SupabaseService {
     }
   }
 
-  Future<List<Bus>> getBusesForDriver(String driverName) async {
+  /// Active buses assigned to ANY of [driverNames].
+  ///
+  /// The driver passes both name sources - the signup `user_metadata` name
+  /// and the canonical `profiles.name`. An admin assigns by profiles.name,
+  /// so a driver whose metadata drifted (a dashboard edit, a rename synced
+  /// to only one side) would otherwise read as "no bus is assigned to your
+  /// name" even though the row exists.
+  Future<List<Bus>> getBusesForDriver(List<String> driverNames) async {
+    final names = driverNames.where((n) => n.isNotEmpty).toSet().toList();
+    if (names.isEmpty) return [];
     try {
       final response = await _client
           .from('buses')
           .select()
-          .eq('driver_name', driverName)
+          .inFilter('driver_name', names)
           .eq('status', 'active')
           .order('bus_number', ascending: true);
 
       return (response as List).map((item) => Bus.fromJson(item)).toList();
     } catch (e) {
       throw Exception('Failed to load buses for driver: $e');
+    }
+  }
+
+  /// The signed-in user's `profiles.name` - best effort, `null` on any
+  /// failure (offline, profile row not created yet). It is only ever an
+  /// EXTRA bus-assignment match key, so it must never fail the load.
+  Future<String?> getMyProfileName() async {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) return null;
+    try {
+      final row =
+          await _client.from('profiles').select('name').eq('id', uid).maybeSingle();
+      final name = row?['name'];
+      return name is String && name.isNotEmpty ? name : null;
+    } catch (e) {
+      debugPrint('[driver] profile-name fallback failed: $e');
+      return null;
     }
   }
 

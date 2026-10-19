@@ -24,6 +24,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _busIssues = [];
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _buses = [];
+  /// Student accounts - a read-only roster. The dashboard could show
+  /// drivers, buses and alerts but had no view at all of the students who
+  /// actually make up the user base.
+  List<Map<String, dynamic>> _students = [];
   /// Routes, for the "Add Bus" route dropdown. Loaded once (they change
   /// rarely) so the admin can assign a new bus to a real route.
   List<Map<String, dynamic>> _routes = [];
@@ -127,6 +131,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _guard(_loadSOSAlerts),
       _guard(_loadBusIssues),
       _guard(_loadDrivers),
+      _guard(_loadStudents),
       _guard(_loadBuses),
       // Routes included: without this, one offline first-open left the
       // "Add Bus" dropdown empty for the whole session - its own catch
@@ -294,6 +299,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     if (mounted) {
       setState(() => _drivers = List<Map<String, dynamic>>.from(drivers));
+    }
+  }
+
+  /// All student accounts (read-only roster), alphabetically like the
+  /// driver list. The dashboard previously showed drivers, buses and alerts
+  /// but had no view at all of the students who actually use the app.
+  /// Same is_admin() RLS path as [_loadDrivers].
+  Future<void> _loadStudents() async {
+    final students = await supabase
+        .from('profiles')
+        .select('id, name, email, created_at')
+        .eq('role', 'student')
+        // Explicit ascending: supabase-dart's .order() defaults to DESCENDING.
+        .order('name', ascending: true);
+
+    debugPrint(
+      '[admin] loaded ${students.length} student row(s) '
+      '(RLS-visible to this admin)',
+    );
+
+    if (mounted) {
+      setState(() => _students = List<Map<String, dynamic>>.from(students));
     }
   }
 
@@ -538,6 +565,260 @@ class _AdminDashboardState extends State<AdminDashboard> {
         false;
   }
 
+  /// The bus row (raw) currently assigned to [driverName], or null when the
+  /// driver holds no bus.
+  Map<String, dynamic>? _assignedBusFor(String driverName) {
+    for (final bus in _buses) {
+      if (bus['driver_name'] == driverName) return bus;
+    }
+    return null;
+  }
+
+  /// One-line assignment summary shown under a driver's email - the admin
+  /// sees at a glance who is on which bus/route without opening each bus.
+  String _assignmentLabel(dynamic driverName) {
+    if (driverName is! String || driverName.isEmpty) {
+      return 'Not assigned to a route';
+    }
+    final bus = _assignedBusFor(driverName);
+    if (bus == null) return 'Not assigned to a route';
+    final routes = bus['routes'];
+    final routeName = routes is Map ? routes['route_name'] : null;
+    final busNo = bus['bus_number'] ?? bus['id'] ?? '?';
+    return routeName == null
+        ? 'Assigned: Bus $busNo'
+        : 'Assigned: Bus $busNo • $routeName';
+  }
+
+  /// Writes [driverName] onto bus [busId], clearing it from every other bus
+  /// first - a driver drives ONE bus, and a stale second row would make the
+  /// driver's dashboard auto-pick whichever matched first.
+  ///
+  /// Needs admin UPDATE on `buses` (supabase_admin_buses.sql).
+  Future<void> _assignDriverToBus({
+    required String driverName,
+    required int busId,
+  }) async {
+    await supabase
+        .from('buses')
+        .update({'driver_name': null})
+        .eq('driver_name', driverName)
+        .neq('id', busId);
+    // `.select('id')` returns the rows actually affected: write RLS
+    // filtered to zero rows (SQL not run) or a deleted bus must never
+    // report a green "assigned" over a no-op.
+    final changed = await supabase
+        .from('buses')
+        .update({'driver_name': driverName})
+        .eq('id', busId)
+        .select('id');
+    if (changed.isEmpty) {
+      throw StateError('assign affected no rows');
+    }
+  }
+
+  /// Clears [driverName] from every bus. An empty result IS success here:
+  /// the desired end state is zero rows carrying this name.
+  Future<void> _unassignDriver(String driverName) async {
+    await supabase
+        .from('buses')
+        .update({'driver_name': null})
+        .eq('driver_name', driverName);
+  }
+
+  /// Route + bus picker for one driver. Pops with `null` (cancelled),
+  /// `'unassign'` (clear the driver from every bus) or the chosen `int`
+  /// bus id - the caller performs the write and refreshes.
+  ///
+  /// Only ACTIVE buses are offered: an assignment to a retired bus would
+  /// silently read as "no bus is assigned" on the driver's dashboard,
+  /// which filters on status = active.
+  Future<void> _assignRouteDialog(Map<String, dynamic> driver) async {
+    final driverName = driver['name'];
+    if (driverName is! String || driverName.isEmpty) {
+      _showError('This driver has no name to assign against.');
+      return;
+    }
+    if (_routes.isEmpty) {
+      _showError(
+        'No routes loaded yet. Pull to refresh - a driver is assigned to a '
+        'bus, and every bus sits on a route.',
+      );
+      return;
+    }
+
+    final current = _assignedBusFor(driverName);
+    // Pre-fill with the CURRENT assignment when it is still valid (its
+    // route exists and the bus is active) so re-saving is one tap; a
+    // deleted route or a retired bus degrades to "pick one".
+    int? selectedRouteId;
+    int? selectedBusId;
+    final currentRouteId = current?['route_id'];
+    if (currentRouteId is int && _routes.any((r) => r['id'] == currentRouteId)) {
+      selectedRouteId = currentRouteId;
+      final currentBusId = current?['id'];
+      if (currentBusId is int && current?['status'] == 'active') {
+        selectedBusId = currentBusId;
+      }
+    } else if (_routes.first['id'] is int) {
+      selectedRouteId = _routes.first['id'] as int;
+    }
+
+    final action = await showDialog<Object?>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final routeBuses = _buses
+                .where((b) =>
+                    b['route_id'] == selectedRouteId &&
+                    b['status'] == 'active' &&
+                    b['id'] is int)
+                .toList();
+            return AlertDialog(
+              title: Text('Assign - $driverName'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _assignmentLabel(driverName),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedRouteId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Route',
+                      prefixIcon: Icon(Icons.route),
+                    ),
+                    items: _routes
+                        .where((r) => r['id'] is int)
+                        .map(
+                          (r) => DropdownMenuItem<int>(
+                            value: r['id'] as int,
+                            child: Text(
+                              '${r['route_name'] ?? 'Route ${r['id']}'}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setDialogState(() {
+                      selectedRouteId = v;
+                      // Buses belong to one route: the previous pick is void.
+                      selectedBusId = null;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  // Keyed on the route so the field is REBUILT when the route
+                  // changes: initialValue only seeds a FormField once, so
+                  // without this the bus dropdown kept DISPLAYING the old
+                  // bus while the variable behind it was already null.
+                  DropdownButtonFormField<int>(
+                    key: ValueKey('assign-bus-$selectedRouteId'),
+                    initialValue: selectedBusId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Bus',
+                      prefixIcon: Icon(Icons.directions_bus),
+                    ),
+                    items: routeBuses
+                        .map(
+                          (b) => DropdownMenuItem<int>(
+                            value: b['id'] as int,
+                            child: Text(
+                              '${b['bus_number'] ?? 'Bus ${b['id']}'}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: routeBuses.isEmpty
+                        ? null
+                        : (v) => setDialogState(() => selectedBusId = v),
+                  ),
+                  if (routeBuses.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'No active bus on this route yet - add one with '
+                      '"Add Bus" first.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[900],
+                      ),
+                    ),
+                  ],
+                  if (current != null) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            Navigator.of(dialogContext).pop('unassign'),
+                        icon: const Icon(Icons.link_off, size: 18),
+                        label: const Text('Unassign from all buses'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedBusId == null
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(selectedBusId),
+                  style: ElevatedButton.styleFrom(
+                    // Override the theme's full-width minimum: inside the
+                    // actions row infinity clamps to the whole dialog width.
+                    minimumSize: const Size(0, 40),
+                  ),
+                  child: const Text('Assign'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (action == null || !mounted) return; // cancelled
+    try {
+      if (action == 'unassign') {
+        await _unassignDriver(driverName);
+      } else if (action is int) {
+        await _assignDriverToBus(driverName: driverName, busId: action);
+      } else {
+        return;
+      }
+      // Refresh buses so the driver rows (and the fleet list) show the new
+      // assignment immediately.
+      await _guard(_loadBuses);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'unassign'
+                  ? '$driverName unassigned from all buses'
+                  : '$driverName assigned to the selected bus',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] driver assignment failed: $e');
+      _showError(
+        'Could not save the assignment. Make sure supabase_admin_buses.sql '
+        'has been run (it grants admin write on buses) and the bus still '
+        'exists.',
+      );
+    }
+  }
+
   /// Routes for the "Add Bus" dropdown. Fails quietly (the dialog simply
   /// shows an empty dropdown the admin can retry via pull-to-refresh).
   Future<void> _loadRoutes() async {
@@ -687,6 +968,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Navigator.pop(dialogContext, true);
                     }
                   },
+                  style: ElevatedButton.styleFrom(
+                    // Override the theme's full-width minimum: inside the
+                    // actions row infinity clamps to the whole dialog width.
+                    minimumSize: const Size(0, 40),
+                  ),
                   child: const Text('Add'),
                 ),
               ],
@@ -999,25 +1285,57 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ..._drivers
                     .where((d) => d['is_approved'] == true)
                     .map(
-                      (driver) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(
-                            Icons.person,
-                            color: Colors.green,
-                          ),
-                          title: Text(driver['name'] ?? 'Driver'),
-                          subtitle: Text(driver['email'] ?? ''),
-                          trailing: TextButton.icon(
-                            onPressed: () => _rejectDriver(driver['id']),
-                            icon: const Icon(Icons.block, color: Colors.red),
-                            label: const Text(
-                              'Revoke',
-                              style: TextStyle(color: Colors.red),
+                      (driver) {
+                        final email = '${driver['email'] ?? ''}';
+                        final assignment = _assignmentLabel(driver['name']);
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: const Icon(
+                              Icons.person,
+                              color: Colors.green,
+                            ),
+                            title: Text(driver['name'] ?? 'Driver'),
+                            // Email + assignment: the admin sees at a glance
+                            // WHO drives which bus / route - this is also the
+                            // answer to the driver's "no bus is assigned"
+                            // complaint (the assignment was simply missing).
+                            subtitle: Text(
+                              email.isEmpty
+                                  ? assignment
+                                  : '$email\n$assignment',
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _assignRouteDialog(driver),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    // Compact: override the theme's full-width
+                                    // minimum so it fits beside Revoke.
+                                    minimumSize: const Size(0, 40),
+                                  ),
+                                  child: const Text('Assign'),
+                                ),
+                                const SizedBox(width: 4),
+                                TextButton.icon(
+                                  onPressed: () => _rejectDriver(driver['id']),
+                                  icon: const Icon(
+                                    Icons.block,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text(
+                                    'Revoke',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                 const SizedBox(height: 24),
               ],
@@ -1150,6 +1468,66 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           ),
                           child: const Text('Resolve'),
                         ),
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 24),
+
+              // Student roster. The dashboard showed drivers, buses and
+              // live alerts but never WHO the students using the app are.
+              // Read-only (name, email, joined), same is_admin() RLS path
+              // as the driver list. Placed below the live sections so an
+              // emergency always stays one short scroll away.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Student Accounts',
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${_students.length} enrolled',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_students.isEmpty)
+                Card(
+                  child: const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No student accounts yet')),
+                  ),
+                )
+              else
+                ..._students.map(
+                  (student) {
+                    final name = '${student['name'] ?? ''}'.trim();
+                    final email = '${student['email'] ?? ''}';
+                    final initials =
+                        name.isEmpty ? '?' : name[0].toUpperCase();
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blue.shade50,
+                          child: Text(
+                            initials,
+                            style: TextStyle(
+                              color: Colors.blue.shade800,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(name.isEmpty ? 'Student' : name),
+                        subtitle: Text(
+                          email.isEmpty
+                              ? 'Joined ${_formatDateTime(student['created_at'])}'
+                              : '$email\nJoined ${_formatDateTime(student['created_at'])}',
+                        ),
+                        trailing: const Icon(Icons.school, color: Colors.blue),
                       ),
                     );
                   },
