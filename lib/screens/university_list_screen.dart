@@ -144,17 +144,26 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
     );
   }
 
-  Future<void> _loadUniversities() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  /// [silent] is the pull-to-refresh path: it must NOT flip [_isLoading],
+  /// which swaps the whole list for a full-screen spinner - unmounting the
+  /// RefreshIndicator mid-gesture and flashing the screen. On a silent
+  /// failure the previous list stays put (the gesture's own indicator
+  /// already showed the attempt); only the initial load and Retry use the
+  /// full-screen loading/error branch.
+  Future<void> _loadUniversities({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final universities = await _service.getUniversities();
       if (!mounted) return;
       setState(() {
         _universities = universities;
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
@@ -162,6 +171,17 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
       // Raw exception text (PostgREST/SQL internals) is useless to students
       // and leaks table/column names on screen - keep it in the debug log.
       debugPrint('[universities] load failed: $e');
+      if (silent) {
+        // Keep the stale list on screen rather than evicting it behind a
+        // full-screen error the user did not ask for.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not refresh. Check your connection.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
       setState(() {
         _error =
             'Could not load universities. Check your connection and try again.';
@@ -404,7 +424,7 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadUniversities,
+      onRefresh: () => _loadUniversities(silent: true),
       color: Colors.blue,
       child: ListView.builder(
         // Pull-to-refresh must work when the list is shorter than the

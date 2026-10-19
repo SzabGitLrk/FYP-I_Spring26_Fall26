@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +13,19 @@ import 'package:university_point_locator/utils/app_theme.dart';
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// Reused across "Try again" retries. `Supabase.initialize` early-returns
+/// once its internal flag is set - which happens BEFORE the auth-storage
+/// setup completes - so a retry that built a NEW storage instance repaired
+/// an object the client never held, and every sign-in after that silently
+/// stopped persisting (the user was logged out on every launch while the
+/// log printed "✅ Supabase initialized!"). One instance, probed and
+/// repaired on every attempt.
+SharedPreferencesLocalStorage? _sessionStorage;
+
+/// Debug auth logger, subscribed once: re-running main() used to stack a
+/// second listener per retry (duplicated log lines).
+StreamSubscription<AuthState>? _authLogSubscription;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,20 +41,35 @@ void main() async {
     // ("sb-<project-host>-auth-token") exactly, so users already signed in
     // keep their persisted sessions. Owning it is what lets the probe below
     // VERIFY and REPAIR the auth storage when a previous attempt failed.
-    final sessionStorage = SharedPreferencesLocalStorage(
+    final sessionStorage = _sessionStorage ??= SharedPreferencesLocalStorage(
       persistSessionKey:
           'sb-${Uri.parse(AppConfig.supabaseUrl).host.split('.').first}'
           '-auth-token',
     );
-    // Initialize Supabase with PKCE for better security
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      anonKey: AppConfig.supabaseAnonKey,
-      authOptions: FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
-        localStorage: sessionStorage,
-      ),
-    );
+    // Skip initialize() when a previous attempt already got that far: it
+    // early-returns "already initialized" anyway, and its internal flag is
+    // set BEFORE the auth-storage setup runs - a storage failure there
+    // leaves a half-built client that initialize() will never finish. The
+    // probe below then repairs the SAME instance the client captured,
+    // which is the one that actually matters.
+    var alreadyInitialized = false;
+    try {
+      alreadyInitialized = Supabase.instance.isInitialized;
+    } catch (_) {
+      // Debug builds: the instance getter asserts when initialize() never
+      // completed - exactly the case the initialize() call below handles.
+    }
+    if (!alreadyInitialized) {
+      // Initialize Supabase with PKCE for better security
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        anonKey: AppConfig.supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          localStorage: sessionStorage,
+        ),
+      );
+    }
     // Verify the session storage the auth client actually captured. The
     // package marks itself initialized BEFORE awaiting the auth-storage
     // setup, so a failure there is invisible to a retry: "Try again" just
@@ -85,7 +115,8 @@ void main() async {
     });
 
     // Optional: Listen to auth changes for debugging
-    Supabase.instance.client.auth.onAuthStateChange.listen(
+    _authLogSubscription ??=
+        Supabase.instance.client.auth.onAuthStateChange.listen(
       (data) {
         final session = data.session;
         if (session != null) {

@@ -128,17 +128,41 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
 
+        // Email enumeration protection: with confirmations ON, a duplicate
+        // signup returns HTTP 200 with a fake user whose `identities` list
+        // is EMPTY - nothing was created and no email will ever arrive. The
+        // old unconditional "Registration successful! Please sign in."
+        // sent those users hunting for an email that never comes, with the
+        // password they just set for an account that already exists.
+        final bool duplicateAccount =
+            response.user != null && (response.user!.identities?.isEmpty ?? false);
+
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              response.session != null
-                  ? 'Registration successful!'
-                  : 'Registration successful! Please sign in.',
+        if (duplicateAccount) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This email is already registered. Try signing in, or use '
+                'Forgot Password.',
+              ),
+              backgroundColor: Colors.orange,
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                response.session != null
+                    ? 'Registration successful!'
+                    : 'Registration successful! Please sign in.',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        // Both outcomes land on the sign-in form: the existing account can
+        // only be entered there, and a real signup still has to confirm
+        // (or signs straight in when confirmation is off).
         setState(() => _isLogin = true);
       }
     } on AuthException catch (e) {

@@ -85,15 +85,24 @@ class SupabaseService {
   /// so a driver whose metadata drifted (a dashboard edit, a rename synced
   /// to only one side) would otherwise read as "no bus is assigned to your
   /// name" even though the row exists.
-  Future<List<Bus>> getBusesForDriver(List<String> driverNames) async {
+  ///
+  /// [activeOnly] lets the driver dashboard see INACTIVE rows too: the
+  /// "assigned but deactivated" state must be distinguishable from "not
+  /// assigned" (SQL filters status before the client ever sees the rows).
+  Future<List<Bus>> getBusesForDriver(
+    List<String> driverNames, {
+    bool activeOnly = true,
+  }) async {
     final names = driverNames.where((n) => n.isNotEmpty).toSet().toList();
     if (names.isEmpty) return [];
     try {
-      final response = await _client
+      final base = _client
           .from('buses')
           .select()
-          .inFilter('driver_name', names)
-          .eq('status', 'active')
+          .inFilter('driver_name', names);
+      final response = await (activeOnly
+              ? base.eq('status', 'active')
+              : base)
           .order('bus_number', ascending: true);
 
       return (response as List).map((item) => Bus.fromJson(item)).toList();

@@ -18,7 +18,16 @@ class DriverDashboard extends StatefulWidget {
 
 class _DriverDashboardState extends State<DriverDashboard> {
   final SupabaseService _service = SupabaseService();
-  final user = Supabase.instance.client.auth.currentUser;
+  /// Read on access, never cached: a cached snapshot kept showing the OLD
+  /// name in the Welcome card and the SOS payload after a Profile rename
+  /// (ProfileScreen deliberately removed this exact pattern).
+  User? get user => Supabase.instance.client.auth.currentUser;
+
+  /// `user_metadata` is dashboard-editable and can hold ANY JSON type; a
+  /// non-String here must never crash an SOS or an issue report mid-
+  /// emergency (the same coercion [_loadDriverData] already applies).
+  static String _coerceDriverName(Object? raw) =>
+      raw is String && raw.trim().isNotEmpty ? raw.trim() : 'Driver';
 
   List<RouteModel> _assignedRoutes = [];
   List<Bus> _availableBuses = [];
@@ -42,6 +51,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// True when no bus row carries this driver's name, so every bus shown is
   /// a pool the driver must pick from, not an assignment.
   bool _noAssignedBus = false;
+
+  /// True when a bus IS assigned to this driver but its status is not
+  /// "active" - "deactivated" must not read as "no bus is assigned" (the
+  /// driver would be told to ask for an assignment they already have).
+  bool _assignedBusInactive = false;
 
   /// Guards the await on the bus-picker dialog so a second tap on
   /// "Start Trip" cannot open a second picker on top of it.
@@ -153,21 +167,31 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // profiles.name is matched TOO (best effort): an admin assigns by the
       // profile name, and the two names can drift - matching either keeps a
       // real assignment from reading as "no bus is assigned to your name".
+      // Inactive rows included: "assigned but deactivated" must stay
+      // distinguishable from "not assigned" (see _assignedBusInactive).
       final profileName = await _service.getMyProfileName();
-      List<Bus> driverBuses = await _service.getBusesForDriver(
+      final assignedBuses = await _service.getBusesForDriver(
         [driverName, ?profileName],
+        activeOnly: false,
       );
+      _noAssignedBus = assignedBuses.isEmpty;
+      // An admin deactivating this driver's bus used to read exactly like
+      // "no bus is assigned" - the driver was told to ask for an assignment
+      // they already had. Flag it so the snackbar can say what happened.
+      _assignedBusInactive = assignedBuses.isNotEmpty &&
+          assignedBuses.every((b) => b.status != 'active');
+      final activeAssigned =
+          assignedBuses.where((b) => b.status == 'active').toList();
 
-      // No buses matched the driver's name: keep the pool of active buses so
-      // the driver can still be ASKED which bus they are driving (see the
+      // With no usable assigned bus, keep the pool of ACTIVE buses so the
+      // driver can still be ASKED which bus they are driving (see the
       // picker in _startTracking) - but never auto-assign one of them to a
       // trip: the bus table matches on a free-text name, and silently
       // picking `.first` here used to record the wrong bus_id and teleport
       // the students' marker onto another vehicle.
-      _noAssignedBus = driverBuses.isEmpty;
-      if (driverBuses.isEmpty) {
-        driverBuses = await _service.getAllActiveBuses();
-      }
+      final driverBuses = activeAssigned.isEmpty
+          ? await _service.getAllActiveBuses()
+          : activeAssigned;
 
       _availableBuses = driverBuses;
 
@@ -220,6 +244,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _showErrorSnackBar(
           'No bus is assigned to your name - you will be asked to pick the '
           'bus you are driving. Ask an administrator to assign you a bus.',
+        );
+      } else if (_assignedBusInactive) {
+        // The assignment EXISTS but was deactivated - "ask to be assigned"
+        // would send the driver in exactly the wrong direction.
+        _showErrorSnackBar(
+          'Your assigned bus is currently INACTIVE - an administrator must '
+          're-activate it. Until then you will be asked to pick the bus you '
+          'are driving.',
         );
       }
     } catch (e) {
@@ -484,9 +516,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Future<void> _startTracking() async {
     // Re-entrancy guard: a second tap while the awaits below are still
     // running used to install a second GPS listener, double every position
-    // insert and leave an orphaned "active" trip behind. [_isStartingTrip]
-    // additionally covers the await on the bus-picker dialog below.
+    // insert and leave an orphaned "active" trip behind. The flag now covers
+    // the WHOLE flow, not just the bus-picker dialog: between the tap and
+    // the picker sit the permission/service awaits, and both flags were
+    // false there - a double tap started TWO trips and the loser's row
+    // closed itself with 0 km, leaving a phantom entry in Trip History on
+    // every occurrence.
     if (_isTracking || _isStartingTrip) return;
+    _isStartingTrip = true;
+    try {
+      await _startTrackingFlow();
+    } finally {
+      _isStartingTrip = false;
+    }
+  }
+
+  Future<void> _startTrackingFlow() async {
     // Refuse the trip outright without location: a drive tracked from zero
     // GPS fixes shows students nothing (the FGS start would fail silently
     // too, and "Trip started successfully!" would be a lie). denied gets
@@ -546,13 +591,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (candidate != null) {
       bus = candidate;
     } else {
-      _isStartingTrip = true;
-      Bus? picked;
-      try {
-        picked = await _askDriverToPickBus(routeBuses);
-      } finally {
-        _isStartingTrip = false;
-      }
+      // _isStartingTrip is already held for the whole flow by the wrapper.
+      final picked = await _askDriverToPickBus(routeBuses);
       if (!mounted || picked == null) return; // dialog dismissed - no trip
       bus = picked;
       // Remembered for the rest of this session (validated per route above).
@@ -562,30 +602,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // Ownership token: bumped by every start/stop, so this coroutine can tell
     // after each await whether it still owns the tracking session.
     final session = ++_trackSession;
-
-    setState(() {
-      _isTracking = true;
-      _tripStartTime = DateTime.now();
-      _totalDistance = 0.0;
-      _pickupCount = 0;
-      _lastPosition = null;
-      // Drop the previous trip's last fix, otherwise the Live Tracking card
-      // shows the OLD trip's coordinates until the first new fix arrives.
-      _currentPosition = null;
-      // ...and the previous trip's stop progress.
-      _tripStops = [];
-      _countedStopIds.clear();
-      _skippedStopIds.clear();
-      // ...and the previous trip's bearing/send bookkeeping.
-      _lastGoodHeading = 0;
-      _lastLocationSentAt = null;
-      // ...and the motion clock: a fresh trip starts on the fast heartbeat
-      // cadence (null = "moving now"), stretching only once it parks.
-      _lastMotionAt = null;
-      // ...and the previous trip's id: a start whose queries fail must not
-      // leave End writing distance/time onto the old trip's row.
-      _currentTripId = null;
-    });
 
     int? tripId;
     try {
@@ -637,6 +653,34 @@ class _DriverDashboardState extends State<DriverDashboard> {
       }
       return;
     }
+    // Tracking state flips only NOW, once the trip row (or its honest
+    // failure) is known: End Trip is gated on _isTracking, so it can no
+    // longer be tapped while the INSERT is in flight - that race reported
+    // "Drive was not recorded" for a drive this coroutine then closed as a
+    // 0-km row anyway. Distance/duration bookkeeping starts here too.
+    setState(() {
+      _isTracking = true;
+      _tripStartTime = DateTime.now();
+      _totalDistance = 0.0;
+      _pickupCount = 0;
+      _lastPosition = null;
+      // Drop the previous trip's last fix, otherwise the Live Tracking card
+      // shows the OLD trip's coordinates until the first new fix arrives.
+      _currentPosition = null;
+      // ...and the previous trip's stop progress.
+      _tripStops = [];
+      _countedStopIds.clear();
+      _skippedStopIds.clear();
+      // ...and the previous trip's bearing/send bookkeeping.
+      _lastGoodHeading = 0;
+      _lastLocationSentAt = null;
+      // ...and the motion clock: a fresh trip starts on the fast heartbeat
+      // cadence (null = "moving now"), stretching only once it parks.
+      _lastMotionAt = null;
+      // ...and the previous trip's id: a start whose queries fail must not
+      // leave End writing distance/time onto the old trip's row.
+      _currentTripId = null;
+    });
     _currentTripId = tripId;
 
     // Stops for arrival detection and the "Next stop" readout. Best-effort:
@@ -835,15 +879,25 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // Invalidate any _startTracking still awaiting inside its queries: it
     // must not install a GPS listener (or resurrect this trip) afterwards.
     ++_trackSession;
+    // Ownership for the cleanup below: a NEW trip can start while endTrip is
+    // in flight (End at the terminus, immediate Start for the return run).
+    // That new session owns the GPS stream and the foreground service - the
+    // old cleanup must not cancel ITS subscription or kill ITS service, and
+    // must not null the field (and trip id) the new session installed.
+    final session = _trackSession;
+    final sub = _positionSubscription;
+    final tripId = _currentTripId;
+    final startedAt = _tripStartTime;
+    final distanceKm = _totalDistance;
     _locationHeartbeatTimer?.cancel();
     _locationHeartbeatTimer = null;
     // Synchronous flip (it used to happen AFTER the endTrip await): stops
     // the GPS listener/heartbeat immediately and hides the End Trip button.
     if (mounted) setState(() => _isTracking = false);
     var tripSaved = false;
-    if (_currentTripId != null) {
+    if (tripId != null) {
       try {
-        await _service.endTrip(_currentTripId!, _totalDistance);
+        await _service.endTrip(tripId, distanceKm);
         tripSaved = true;
       } catch (e) {
         // Silently swallowing this lost the trip's end time and distance
@@ -852,13 +906,26 @@ class _DriverDashboardState extends State<DriverDashboard> {
         debugPrint('[driver] end trip write failed: $e');
       }
     }
-    _positionSubscription?.cancel();
-    _positionSubscription = null;
-    // Only forget the id when the close actually succeeded: on failure it
-    // is kept so dispose()'s retry (fire-and-forget endTrip) can still
-    // close the row instead of leaving the trip "active" forever.
-    if (tripSaved) _currentTripId = null;
-    await _stopForegroundService();
+    if (session == _trackSession) {
+      // Still the owner: clear OUR stream/service.
+      _positionSubscription = null;
+      await sub?.cancel();
+      // Only forget the id when the close actually succeeded: on failure it
+      // is kept so dispose()'s retry (fire-and-forget endTrip) can still
+      // close the row instead of leaving the trip "active" forever.
+      if (tripSaved) _currentTripId = null;
+      await _stopForegroundService();
+    } else {
+      // A newer session took over during the awaits: it cancels the old
+      // listener defensively before installing its own - cancel our
+      // captured reference too (idempotent) and leave the field, the trip
+      // id and the running foreground service alone. The previous code
+      // cancelled the FIELD after the await, which was by then the NEW
+      // session's stream: the return run showed "Live Tracking Active" but
+      // sent students no positions, its FGS was torn down, and its stream
+      // was orphaned (never cancelled, even on dispose).
+      await sub?.cancel();
+    }
 
     if (!mounted) return;
     if (!tripSaved) {
@@ -869,10 +936,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
       return;
     }
-    if (_tripStartTime != null) {
-      final duration = DateTime.now().difference(_tripStartTime!);
+    if (startedAt != null) {
+      final duration = DateTime.now().difference(startedAt);
       _showSuccessSnackBar(
-        'Trip ended! Duration: ${duration.inMinutes} min, Distance: ${_totalDistance.toStringAsFixed(1)} km',
+        'Trip ended! Duration: ${duration.inMinutes} min, Distance: ${distanceKm.toStringAsFixed(1)} km',
       );
     }
   }
@@ -1075,7 +1142,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // sos_alerts has no message column: the bus number rides along in
     // user_name so the admin sees WHICH bus has the problem, not just a
     // person and a pin.
-    final name = account.userMetadata?['name'] ?? 'Driver';
+    // Coerced like _loadDriverData: a dashboard-edited metadata value of a
+    // non-String type made this throw a TypeError INSIDE the try, which the
+    // catch then reported as "check your connection" - during an SOS.
+    final name = _coerceDriverName(account.userMetadata?['name']);
     final busNumber = _selectedBus?.busNumber;
     final userName = (busNumber == null || busNumber.isEmpty)
         ? name
@@ -1218,7 +1288,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     try {
       await _service.reportBusIssue(
         userId: account.id,
-        driverName: account.userMetadata?['name'] ?? 'Driver',
+        driverName: _coerceDriverName(account.userMetadata?['name']),
         busId: bus?.id,
         busNumber: bus?.busNumber ?? '',
         issueType: issueType,

@@ -317,6 +317,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _updateDisplayName(String newName) async {
     if (newName.isEmpty || newName == _displayName) return;
     final messenger = ScaffoldMessenger.of(context);
+    final oldName = _displayName;
+    var assignmentUnlinked = false;
     try {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(data: {'name': newName}),
@@ -334,14 +336,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
         } catch (e) {
           debugPrint('[profile] profiles.name sync skipped: $e');
         }
+
+        // Bus assignments are keyed on the free-text buses.driver_name: a
+        // driver's self-rename used to silently UNLINK their assignment -
+        // the next dashboard load said "no bus is assigned" although the
+        // row existed. Follow the rename server-side when RLS permits it
+        // (the admin rename path does the same); when it refuses (buses
+        // writes are admin-only), tell the DRIVER to involve their admin
+        // instead of failing silently. Students own no bus rows, so the
+        // whole step is skipped for them.
+        String? role;
+        try {
+          final row = await Supabase.instance.client
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .maybeSingle();
+          role = row?['role'] as String?;
+        } catch (e) {
+          debugPrint('[profile] role lookup for rename skipped: $e');
+        }
+        if (role == 'driver' && oldName != null && oldName.isNotEmpty) {
+          try {
+            await Supabase.instance.client
+                .from('buses')
+                .update({'driver_name': newName})
+                .eq('driver_name', oldName);
+          } catch (e) {
+            debugPrint('[profile] bus follow-rename refused: $e');
+            assignmentUnlinked = true;
+          }
+        }
       }
       if (!mounted) return;
       setState(() => _displayName = newName);
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Name updated'),
-          backgroundColor: Colors.green,
-        ),
+        assignmentUnlinked
+            ? const SnackBar(
+                content: Text(
+                  'Name updated - but your bus assignment still points at '
+                  'your old name. Ask your administrator to re-save it.',
+                ),
+                backgroundColor: Colors.orange,
+              )
+            : const SnackBar(
+                content: Text('Name updated'),
+                backgroundColor: Colors.green,
+              ),
       );
     } on AuthException catch (e) {
       debugPrint('[profile] name update failed: $e');
