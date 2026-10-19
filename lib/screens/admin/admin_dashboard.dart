@@ -28,6 +28,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   /// drivers, buses and alerts but had no view at all of the students who
   /// actually make up the user base.
   List<Map<String, dynamic>> _students = [];
+  /// Universities for the route dialog's dropdown (id + name only).
+  List<Map<String, dynamic>> _universities = [];
   /// Routes, for the "Add Bus" route dropdown. Loaded once (they change
   /// rarely) so the admin can assign a new bus to a real route.
   List<Map<String, dynamic>> _routes = [];
@@ -133,6 +135,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _guard(_loadDrivers),
       _guard(_loadStudents),
       _guard(_loadBuses),
+      // Routes + universities: both feed the route add/edit dialog.
+      _guard(_loadUniversities),
       // Routes included: without this, one offline first-open left the
       // "Add Bus" dropdown empty for the whole session - its own catch
       // swallowed the failure and nothing (not even pull-to-refresh) ever
@@ -455,31 +459,254 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  Future<void> _rejectDriver(String driverId) async {
+  /// Rejecting a PENDING driver really has to REMOVE the account: an
+  /// unapproved row that just lingered in the list looked like the button
+  /// did nothing, and the person could keep re-appearing forever. The
+  /// profile row is deleted (locks that user id out of the app until it
+  /// signs up again); the raw auth email stays in Supabase Auth.
+  Future<void> _rejectDriver(Map<String, dynamic> driver) async {
+    final confirmed = await _confirmDeleteAccount(driver, roleNoun: 'Driver');
+    if (!confirmed) return;
+    await _deleteAccount(driver, roleNoun: 'Driver', success: 'Driver rejected and removed');
+  }
+
+  /// Reversible demotion: approval off, the driver moves back to the
+  /// pending list (where they can be re-approved). Unlike [_rejectDriver]
+  /// this keeps the account.
+  Future<void> _unapproveDriver(Map<String, dynamic> driver) async {
     try {
-      // See _approveDriver: verify the write actually affected a row.
       final updated = await supabase
           .from('profiles')
           .update({'is_approved': false})
-          .eq('id', driverId)
+          .eq('id', driver['id'])
           .select('id');
       if (updated.isEmpty) {
-        throw StateError('reject driver affected no rows');
+        throw StateError('revoke driver affected no rows');
       }
       await _refreshAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Driver rejected'),
+            content: Text('Driver approval revoked - back to pending'),
             backgroundColor: Colors.orange,
           ),
         );
       }
     } catch (e) {
-      debugPrint('[admin] reject driver failed: $e');
+      debugPrint('[admin] revoke driver failed: $e');
       _showError(
-        'Could not reject the driver. Refresh and try again - '
+        'Could not revoke the driver. Refresh and try again - '
         'the record may have already changed.',
+      );
+    }
+  }
+
+  Future<bool> _confirmDeleteAccount(
+    Map<String, dynamic> profile, {
+    required String roleNoun,
+  }) async {
+    final name = '${profile['name'] ?? ''}'.trim();
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Remove $roleNoun'),
+            content: Text(
+              name.isEmpty
+                  ? 'Remove this ${roleNoun.toLowerCase()} from the app? '
+                      'Their account is deleted and they can sign up again '
+                      'later.'
+                  : 'Remove $name from the app? Their account is deleted '
+                      'and they can sign up again later.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  // Override the theme's full-width minimum: inside the
+                  // actions row infinity clamps to the whole dialog width.
+                  minimumSize: const Size(0, 40),
+                ),
+                child: const Text('Remove'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  /// Deletes a driver/student profile row (row-verified) and clears any
+  /// bus assignment the name held, so a FUTURE account with the same name
+  /// cannot inherit their bus.
+  Future<void> _deleteAccount(
+    Map<String, dynamic> profile, {
+    required String roleNoun,
+    String? success,
+  }) async {
+    try {
+      // `.select('id')` + emptiness check: a zero-row delete (missing
+      // policy - supabase_admin_powers.sql - or a stale id) must never
+      // show a green "removed" over a row that is still there.
+      final deleted = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', profile['id'])
+          .select('id');
+      if (deleted.isEmpty) {
+        throw StateError('delete profile affected no rows');
+      }
+      final name = '${profile['name'] ?? ''}';
+      if (roleNoun == 'Driver' && name.isNotEmpty) {
+        // Best effort: assignment cleanup must not fail the removal - the
+        // buses UPDATE also needs supabase_admin_buses.sql.
+        try {
+          await supabase
+              .from('buses')
+              .update({'driver_name': null})
+              .eq('driver_name', name);
+        } catch (e) {
+          debugPrint('[admin] assignment cleanup after delete failed: $e');
+        }
+      }
+      await _refreshAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ?? '$roleNoun removed'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] delete ${roleNoun.toLowerCase()} failed: $e');
+      _showError(
+        'Could not remove the ${roleNoun.toLowerCase()}. Make sure '
+        'supabase_admin_powers.sql has been run (it grants admin DELETE '
+        'on profiles), then refresh and try again.',
+      );
+    }
+  }
+
+  /// Edit dialog for a driver or student profile (name + display email).
+  ///
+  /// A driver RENAME also follows their bus assignment: buses.driver_name
+  /// stores the old name, and a mismatch would silently orphan an active
+  /// assignment back into "no bus is assigned".
+  Future<void> _editProfileDialog(
+    Map<String, dynamic> profile, {
+    required bool isDriver,
+  }) async {
+    final nameController =
+        TextEditingController(text: '${profile['name'] ?? ''}');
+    final emailController =
+        TextEditingController(text: '${profile['email'] ?? ''}');
+
+    final saved = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('Edit ${isDriver ? 'driver' : 'student'}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (display)',
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'App profile only - the login email itself is managed in '
+                  'Supabase Auth.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameController.text.trim().isNotEmpty) {
+                    Navigator.pop(dialogContext, true);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  // Override the theme's full-width minimum (actions row).
+                  minimumSize: const Size(0, 40),
+                ),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    final newName = nameController.text.trim();
+    final newEmail = emailController.text.trim();
+    nameController.dispose();
+    emailController.dispose();
+    if (!saved || !mounted) return;
+
+    try {
+      // `.select('id')` + emptiness: a zero-row write (RLS, stale id) must
+      // not show a green "Profile updated".
+      final updated = await supabase
+          .from('profiles')
+          .update({'name': newName, 'email': newEmail})
+          .eq('id', profile['id'])
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('edit profile affected no rows');
+      }
+      // Follow the rename onto the bus - best effort (needs the buses
+      // write policy), and never fails the profile save itself.
+      final oldName = '${profile['name'] ?? ''}';
+      if (isDriver && oldName.isNotEmpty && oldName != newName) {
+        try {
+          final assigned = _assignedBusFor(oldName);
+          if (assigned != null) {
+            await supabase
+                .from('buses')
+                .update({'driver_name': newName})
+                .eq('id', assigned['id']);
+          }
+        } catch (e) {
+          debugPrint('[admin] assignment follow-rename failed: $e');
+        }
+      }
+      await _refreshAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] edit profile failed: $e');
+      _showError(
+        'Could not save the profile. Refresh and try again - the record '
+        'may have already changed.',
       );
     }
   }
@@ -556,6 +783,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
+                  // Override the theme's full-width minimum: inside the
+                  // actions row infinity clamps to the whole dialog width.
+                  minimumSize: const Size(0, 40),
                 ),
                 child: const Text('Delete'),
               ),
@@ -563,6 +793,141 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         ) ??
         false;
+  }
+
+  /// Edit dialog for an existing bus (number, route, status) - the other
+  /// half of fleet management next to Add / Delete.
+  Future<void> _editBusDialog(Map<String, dynamic> bus) async {
+    if (_routes.isEmpty) {
+      _showError(
+        'No routes loaded yet. Pull to refresh, then add a route first.',
+      );
+      return;
+    }
+    final busController =
+        TextEditingController(text: '${bus['bus_number'] ?? ''}');
+    // A bus whose route row was deleted must degrade to "pick one" -
+    // passing its stale id as initialValue would assert in the dropdown.
+    final currentRouteId = bus['route_id'];
+    int? routeId = currentRouteId is int &&
+            _routes.any((r) => r['id'] == currentRouteId)
+        ? currentRouteId
+        : null;
+    String status = '${bus['status'] ?? 'active'}';
+
+    final saved = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, setDialogState) => AlertDialog(
+              title: Text('Edit bus ${bus['bus_number'] ?? ''}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: busController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Bus number',
+                      prefixIcon: Icon(Icons.directions_bus),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: routeId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Route',
+                      prefixIcon: Icon(Icons.route),
+                    ),
+                    items: _routes
+                        .map(
+                          (r) => DropdownMenuItem<int>(
+                            value: r['id'] as int,
+                            child: Text('${r['route_name']}'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => routeId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: status,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      prefixIcon: Icon(Icons.toggle_on),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'active', child: Text('Active')),
+                      DropdownMenuItem(
+                          value: 'inactive', child: Text('Inactive')),
+                    ],
+                    onChanged: (v) => setDialogState(() => status = v ?? 'active'),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (busController.text.trim().isNotEmpty &&
+                        routeId != null) {
+                      Navigator.pop(dialogContext, true);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    // Override the theme's full-width minimum (actions row).
+                    minimumSize: const Size(0, 40),
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+
+    final newNumber = busController.text.trim();
+    final newRouteId = routeId;
+    final newStatus = status;
+    busController.dispose();
+    if (!saved || !mounted) return;
+
+    try {
+      // `.select('id')` + emptiness: a zero-row write (missing UPDATE
+      // policy - supabase_admin_buses.sql - or a deleted bus) must not
+      // show a green "Bus updated".
+      final updated = await supabase
+          .from('buses')
+          .update({
+            'bus_number': newNumber,
+            'route_id': newRouteId,
+            'status': newStatus,
+          })
+          .eq('id', bus['id'])
+          .select('id');
+      if (updated.isEmpty) {
+        throw StateError('edit bus affected no rows');
+      }
+      await _guard(_loadBuses);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bus updated'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] edit bus failed: $e');
+      _showError(
+        'Could not save the bus. Make sure supabase_admin_buses.sql has '
+        'been run (it grants admin write on buses), then try again.',
+      );
+    }
   }
 
   /// The bus row (raw) currently assigned to [driverName], or null when the
@@ -819,13 +1184,254 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  /// Routes for the "Add Bus" dropdown. Fails quietly (the dialog simply
-  /// shows an empty dropdown the admin can retry via pull-to-refresh).
+  /// Universities for the route dialog's dropdown (id + name only).
+  /// Fails quietly like [_loadRoutes].
+  Future<void> _loadUniversities() async {
+    try {
+      final unis = await supabase
+          .from('universities')
+          .select('id, name')
+          .order('name', ascending: true);
+      if (mounted) {
+        setState(() => _universities = List<Map<String, dynamic>>.from(unis));
+      }
+    } catch (e) {
+      debugPrint('[admin] load universities failed: $e');
+    }
+  }
+
+  /// Add / edit dialog for a route (name, optional university,
+  /// optional description). Editing pops nothing destructive; the write
+  /// itself is row-verified below.
+  Future<void> _showRouteDialog({Map<String, dynamic>? route}) async {
+    final isEdit = route != null;
+    final formKey = GlobalKey<FormState>();
+    final nameController =
+        TextEditingController(text: '${route?['route_name'] ?? ''}');
+    final descController =
+        TextEditingController(text: '${route?['description'] ?? ''}');
+    // A route whose university row was deleted degrades to "None" -
+    // a stale id as initialValue would assert in the dropdown.
+    final currentUniId = route?['university_id'];
+    int? universityId =
+        currentUniId is int && _universities.any((u) => u['id'] == currentUniId)
+            ? currentUniId
+            : null;
+
+    if (_universities.isEmpty) {
+      // First-open path: the dialog may be opened before a full refresh
+      // has ever succeeded - try once so the dropdown is not mysteriously
+      // empty. Failures stay quiet (the None option still works).
+      await _loadUniversities();
+      if (!mounted) {
+        nameController.dispose();
+        descController.dispose();
+        return;
+      }
+    }
+
+    final saved = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, setDialogState) => AlertDialog(
+              title: Text(isEdit ? 'Edit Route' : 'Add Route'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Route name',
+                        prefixIcon: Icon(Icons.route),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Enter a route name'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int?>(
+                      initialValue: universityId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'University (optional)',
+                        prefixIcon: Icon(Icons.school),
+                      ),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('None'),
+                        ),
+                        ..._universities.map(
+                          (u) => DropdownMenuItem<int?>(
+                            value: u['id'] as int,
+                            child: Text('${u['name']}'),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => universityId = v),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: descController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Description (optional)',
+                        prefixIcon: Icon(Icons.notes),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (formKey.currentState?.validate() ?? false) {
+                      Navigator.pop(dialogContext, true);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    // Override the theme's full-width minimum (actions row).
+                    minimumSize: const Size(0, 40),
+                  ),
+                  child: Text(isEdit ? 'Save' : 'Add'),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+
+    final newName = nameController.text.trim();
+    final newDesc = descController.text.trim();
+    nameController.dispose();
+    descController.dispose();
+    if (!saved || !mounted) return;
+
+    try {
+      final payload = <String, dynamic>{
+        'route_name': newName,
+        'description': newDesc.isEmpty ? null : newDesc,
+        'university_id': universityId,
+      };
+      if (isEdit) {
+        // `.select('id')` + emptiness: a zero-row write (missing policy -
+        // supabase_admin_powers.sql - or a deleted route) must not show a
+        // green "Route updated".
+        final updated = await supabase
+            .from('routes')
+            .update(payload)
+            .eq('id', route['id'])
+            .select('id');
+        if (updated.isEmpty) {
+          throw StateError('update route affected no rows');
+        }
+      } else {
+        final inserted =
+            await supabase.from('routes').insert(payload).select('id');
+        if (inserted.isEmpty) {
+          throw StateError('insert route affected no rows');
+        }
+      }
+      await _guard(_loadRoutes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isEdit ? 'Route updated' : 'Route added'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] save route failed: $e');
+      _showError(
+        'Could not save the route. Make sure supabase_admin_powers.sql '
+        'has been run (it grants admin write on routes), then try again.',
+      );
+    }
+  }
+
+  Future<bool> _confirmDeleteRoute(Map<String, dynamic> route) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Route'),
+            content: Text(
+              'Delete ${route['route_name'] ?? 'this route'}? Its pickup '
+              'points are deleted with it, and buses lose their route '
+              'assignment.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  // Override the theme's full-width minimum (actions row).
+                  minimumSize: const Size(0, 40),
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _deleteRoute(Map<String, dynamic> route) async {
+    try {
+      // Row-verified: a zero-row delete (missing DELETE policy -
+      // supabase_admin_powers.sql - or a stale id) must not report success.
+      final deleted = await supabase
+          .from('routes')
+          .delete()
+          .eq('id', route['id'])
+          .select('id');
+      if (deleted.isEmpty) {
+        throw StateError('delete route affected no rows');
+      }
+      // Buses pointed here lose their route link (FK SET NULL), so their
+      // cards must re-render too.
+      await _guard(_loadRoutes);
+      await _guard(_loadBuses);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Route deleted'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[admin] delete route failed: $e');
+      _showError(
+        'Could not delete the route. Make sure supabase_admin_powers.sql '
+        'has been run (it grants admin DELETE on routes), then try again.',
+      );
+    }
+  }
+
+  /// Routes for the "Add Bus" dropdown and the Routes list. Fails quietly
+  /// (dialogs simply show an empty dropdown the admin can retry via
+  /// pull-to-refresh).
   Future<void> _loadRoutes() async {
     try {
       final routes = await supabase
           .from('routes')
-          .select('id, route_name')
+          // University NAME joined so the Routes list is readable; the
+          // dropdowns only read id/route_name, so extra keys are harmless.
+          .select('id, route_name, description, university_id, universities(name)')
           .order('route_name', ascending: true);
       if (mounted) {
         setState(() => _routes = List<Map<String, dynamic>>.from(routes));
@@ -1231,7 +1837,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
-                              onPressed: () => _rejectDriver(driver['id']),
+                              onPressed: () => _rejectDriver(driver),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
@@ -1314,22 +1920,66 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     backgroundColor: Colors.blue,
                                     foregroundColor: Colors.white,
                                     // Compact: override the theme's full-width
-                                    // minimum so it fits beside Revoke.
+                                    // minimum so it fits beside the menu.
                                     minimumSize: const Size(0, 40),
                                   ),
                                   child: const Text('Assign'),
                                 ),
                                 const SizedBox(width: 4),
-                                TextButton.icon(
-                                  onPressed: () => _rejectDriver(driver['id']),
-                                  icon: const Icon(
-                                    Icons.block,
-                                    color: Colors.red,
-                                  ),
-                                  label: const Text(
-                                    'Revoke',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
+                                // Edit / Revoke / Remove live in a menu: four
+                                // trailing buttons would squeeze on a narrow
+                                // phone (the exact bug class the Resolve
+                                // buttons had).
+                                PopupMenuButton<String>(
+                                  tooltip: 'More actions',
+                                  onSelected: (value) {
+                                    switch (value) {
+                                      case 'edit':
+                                        _editProfileDialog(
+                                            driver, isDriver: true);
+                                      case 'revoke':
+                                        _unapproveDriver(driver);
+                                      case 'delete':
+                                        _deleteAccount(driver,
+                                            roleNoun: 'Driver');
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit, size: 20),
+                                          SizedBox(width: 10),
+                                          Text('Edit details'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'revoke',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.block,
+                                              size: 20, color: Colors.orange),
+                                          SizedBox(width: 10),
+                                          Text('Revoke approval'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete,
+                                              size: 20, color: Colors.red),
+                                          SizedBox(width: 10),
+                                          Text('Remove driver',
+                                              style:
+                                                  TextStyle(color: Colors.red)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1527,7 +2177,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               ? 'Joined ${_formatDateTime(student['created_at'])}'
                               : '$email\nJoined ${_formatDateTime(student['created_at'])}',
                         ),
-                        trailing: const Icon(Icons.school, color: Colors.blue),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit,
+                                  color: Colors.blueGrey),
+                              tooltip: 'Edit student',
+                              onPressed: () =>
+                                  _editProfileDialog(student, isDriver: false),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red),
+                              tooltip: 'Remove student',
+                              onPressed: () => _deleteAccount(
+                                student,
+                                roleNoun: 'Student',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -1585,19 +2255,115 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         '${_busRouteLabel(bus)} • ${bus['status'] ?? 'active'}\n'
                         'Added ${_formatDateTime(bus['created_at'])}',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () async {
-                          final confirmed =
-                              await _confirmDeleteBus(bus);
-                          if (confirmed) {
-                            _deleteBus(bus['id']);
-                          }
-                        },
-                        tooltip: 'Delete bus',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit,
+                                color: Colors.blueGrey),
+                            tooltip: 'Edit bus',
+                            onPressed: () => _editBusDialog(bus),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Delete bus',
+                            onPressed: () async {
+                              final confirmed =
+                                  await _confirmDeleteBus(bus);
+                              if (confirmed) {
+                                _deleteBus(bus['id']);
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
+                ),
+
+              const SizedBox(height: 24),
+
+              // Routes. Previously only editable via raw SQL (the app even
+              // ships supabase_route_fix.sql as a manual one-off fix); the
+              // admin can now add / edit / delete routes in-app. Writes
+              // need supabase_admin_powers.sql.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Routes',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _showRouteDialog(),
+                    style: ElevatedButton.styleFrom(
+                      // Override the theme's full-width minimum so the
+                      // button fits this Row.
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Route'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_routes.isEmpty)
+                Card(
+                  child: const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No routes yet')),
+                  ),
+                )
+              else
+                ..._routes.map(
+                  (route) {
+                    final uni = route['universities'];
+                    final uniName = uni is Map ? uni['name'] : null;
+                    final desc = '${route['description'] ?? ''}';
+                    final details = <String>[
+                      if (uniName != null && '$uniName'.isNotEmpty)
+                        '$uniName',
+                      if (desc.trim().isNotEmpty) desc.trim(),
+                    ];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading:
+                            const Icon(Icons.route, color: Colors.purple),
+                        title: Text(
+                          '${route['route_name'] ?? 'Unnamed route'}',
+                        ),
+                        subtitle: Text(
+                          details.isEmpty ? 'No details' : details.join(' • '),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit,
+                                  color: Colors.blueGrey),
+                              tooltip: 'Edit route',
+                              onPressed: () =>
+                                  _showRouteDialog(route: route),
+                            ),
+                            IconButton(
+                              icon:
+                                  const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'Delete route',
+                              onPressed: () async {
+                                final confirmed =
+                                    await _confirmDeleteRoute(route);
+                                if (confirmed) {
+                                  await _deleteRoute(route);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
