@@ -16,6 +16,7 @@
 --    * profiles  : DELETE        (reject/remove an account)
 --                  UPDATE already exists - nothing to do)
 --    * routes    : INSERT / UPDATE / DELETE
+--    * trips     : UPDATE        (close an orphaned active trip)
 --
 --  WHAT IT DOES NOT GRANT: bus writes still need
 --  supabase_admin_buses.sql (Add Bus, Edit Bus, driver assignment).
@@ -48,10 +49,28 @@ CREATE POLICY "Routes delete" ON public.routes
   FOR DELETE
   USING (public.is_admin());
 
+-- ---------- trips: admin UPDATE (close an orphaned active trip) ----------
+-- A trip normally closes only when ITS OWN driver taps End Trip
+-- ("Trips update" is USING (auth.uid() = driver_id)). An orphan - the app
+-- was killed mid-drive, or End Trip failed offline forever - can then be
+-- closed by nobody, and it sits in the admin Active Trips count (and the
+-- Active Trips detail sheet) as a permanent false positive.
+--
+-- Admin UPDATE lets the sheet's per-trip "Close trip" action mark the row
+-- completed. The driver-side policy is untouched, so a driver still
+-- cannot edit anyone else's trip.
+DROP POLICY IF EXISTS "Trips update" ON public.trips;
+CREATE POLICY "Trips update" ON public.trips
+  FOR UPDATE
+  USING (public.is_admin() OR auth.uid() = driver_id)
+  WITH CHECK (public.is_admin() OR auth.uid() = driver_id);
+
 -- Verify (as a logged-in admin):
 --   1. Insert a test route, then delete it from the dashboard.
 --   2. Rejecting a pending driver should REMOVE the row (and lock that
 --      email out of the app until it signs up again).
+--   3. Tap the Active Trips card, then "Close trip" on a stale row - the
+--      row disappears and the headline count drops.
 
 -- ---------- harden is_admin() ----------
 -- SECURITY DEFINER + a floating search_path: the `profiles` reference in

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -2257,6 +2259,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               onPressed: () =>
                                   _editProfileDialog(student, isDriver: false),
                             ),
+                            // Promote: a rejected/removed driver silently
+                            // re-registers as a student (safe default), and
+                            // there was no way back to driver except SQL.
+                            IconButton(
+                              icon: const Icon(Icons.upgrade,
+                                  color: Colors.teal),
+                              tooltip: 'Make driver',
+                              onPressed: () => _promoteToDriver(student),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.delete,
                                   color: Colors.red),
@@ -2488,6 +2499,76 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  /// Promote a student row back to driver. A rejected or removed driver
+  /// re-registers as a student on next login (the safe default for a
+  /// missing profile row), so without this the only way back to a driver
+  /// account was raw SQL. The new driver starts unapproved and must be
+  /// approved from the drivers list - same gate as a fresh signup.
+  Future<void> _promoteToDriver(Map<String, dynamic> student) async {
+    final name = '${student['name'] ?? ''}'.trim();
+    final label = name.isEmpty ? 'this student' : name;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Make $label a driver?'),
+        content: Text(
+          '$label will keep the same login, but switch to the driver '
+          'dashboard. They must be approved again from the Driver '
+          'Accounts list before they can drive.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              // Bounded override: the theme's full-width minimum
+              // wraps inside a dialog action row.
+              minimumSize: const Size(0, 40),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Make driver'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final id = student['id'];
+      if (id is! String) throw Exception('student row has no id');
+      final updated = await supabase
+          .from('profiles')
+          .update({'role': 'driver', 'is_approved': false})
+          .eq('id', id)
+          .select('id');
+      if (updated.isEmpty) {
+        // Row-verified miss: removed elsewhere between list and tap.
+        throw Exception('profile row no longer exists');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$label is now a pending driver - approve from the drivers '
+            'list.',
+          ),
+        ),
+      );
+      await _refreshAll();
+    } catch (e) {
+      debugPrint('[admin] promote to driver failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not promote $label. Pull to refresh and try '
+              'again.'),
+        ),
+      );
+    }
+  }
+
   /// Detail list behind the "Active Trips" stat card. The bare count told
   /// the admin nothing: an orphaned trip (app killed mid-drive, End Trip
   /// failed offline) sits at "active" forever and looks exactly like a bus
@@ -2517,12 +2598,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
 /// One row of the admin "Active Trips" detail list.
 class _ActiveTripRow {
   const _ActiveTripRow({
+    required this.id,
     required this.busLabel,
     required this.routeName,
     required this.driverLabel,
     required this.started,
     required this.lastSignal,
   });
+
+  /// trips.id - needed to close the row server-side.
+  final int id;
 
   final String busLabel;
   final String routeName;
@@ -2552,17 +2637,36 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
   bool _loading = true;
   String? _error;
 
+  /// Keeps the list honest while the sheet is open - a trip can be closed
+  /// by its driver on another phone at any moment, and the GPS badges age
+  /// in real time.
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _load(silent: true),
+    );
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  /// [silent] refreshes keep the current view up (no spinner flash) so the
+  /// sheet does not flicker every 15 seconds.
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       // Bus and route embed via their foreign keys on trips; start_time can
       // be NULL (rows written before defaults settled) - rendered as
@@ -2570,7 +2674,7 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
       final rows = await supabase
           .from('trips')
           .select(
-            'driver_id, bus_id, start_time, buses(bus_number), routes(route_name)',
+            'id, driver_id, bus_id, start_time, buses(bus_number), routes(route_name)',
           )
           .eq('status', 'active')
           .order('start_time', ascending: true);
@@ -2631,7 +2735,9 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
         final busId = t['bus_id'];
         final startedRaw = t['start_time'];
         final name = driverId is String ? names[driverId] : null;
+        final tripId = t['id'];
         return _ActiveTripRow(
+          id: tripId is int ? tripId : -1,
           busLabel: bus is Map && bus['bus_number'] != null
               ? 'Bus ${bus['bus_number']}'
               : 'Bus (deleted)',
@@ -2652,14 +2758,78 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
       setState(() {
         _trips = built;
         _loading = false;
+        // A silent pass that recovers from a transient error clears the
+        // banner by simply succeeding.
+        if (silent) _error = null;
       });
     } catch (e) {
       debugPrint('[admin] active trips load failed: $e');
       if (!mounted) return;
+      if (silent) return; // keep the last good view; retry next tick
       setState(() {
         _loading = false;
         _error = 'Could not load active trips. Check your connection.';
       });
+    }
+  }
+
+  /// Close an orphaned trip the driver's own app can no longer end (killed
+  /// mid-drive, End Trip failed offline). Only a driver can normally update
+  /// their own trip row - this relies on the admin policy from
+  /// supabase_admin_powers.sql.
+  Future<void> _closeTrip(_ActiveTripRow trip) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Close ${trip.busLabel}?'),
+        content: Text(
+          '${trip.driverLabel}' 's trip on ${trip.routeName} will be marked '
+          'completed with the distance unknown. Use this when the bus is '
+          'not actually driving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              // Bounded override: the theme's full-width minimum
+              // wraps inside a dialog action row.
+              minimumSize: const Size(0, 40),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Close trip'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final updated = await supabase
+          .from('trips')
+          .update({'status': 'completed', 'end_time': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', trip.id)
+          .eq('status', 'active') // never reopen a row closed elsewhere
+          .select('id');
+      if (updated.isEmpty) {
+        // Row-verified miss: the driver just ended it themselves.
+        debugPrint('[admin] trip ${trip.id} already closed elsewhere');
+      }
+      await _load(); // fresh list + count for the header
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Closed ${trip.busLabel} trip.')),
+      );
+    } catch (e) {
+      debugPrint('[admin] close trip failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not close that trip. Check your connection.'),
+        ),
+      );
     }
   }
 
@@ -2842,6 +3012,18 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
                                     _signalBadge(trip.lastSignal, now),
                                   ],
                                 ),
+                                // Orphan killer: end a trip the driver's own
+                                // app can no longer close.
+                                trailing: trip.id < 0
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Close trip',
+                                        icon: Icon(
+                                          Icons.stop_circle_outlined,
+                                          color: Colors.red.shade400,
+                                        ),
+                                        onPressed: () => _closeTrip(trip),
+                                      ),
                               );
                             },
                           ),
