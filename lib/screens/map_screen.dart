@@ -1439,6 +1439,16 @@ class _MapScreenState extends State<MapScreen> {
   bool _isStale(DateTime time) =>
       !_offlineMode && _freshnessNow().difference(time) >= _staleAfter;
 
+  /// ...but only while the snapshot itself is inside that window. A fix
+  /// cached 12 hours ago must not compute "arrives in 4 min": the banner
+  /// shows the age, yet the ETA text claimed live knowledge it does not
+  /// have. Young snapshots (a just-dropped connection) keep the ETA card
+  /// working - they are exactly as fresh as live data would be.
+  bool get _offlineTooOld =>
+      _offlineMode &&
+      (_offlineSnapshotAt == null ||
+          DateTime.now().difference(_offlineSnapshotAt!) >= _staleAfter);
+
   List<BusLocation> _freshBuses() =>
       _busLocations.where((loc) => !_isStale(loc.timestamp)).toList();
 
@@ -1589,6 +1599,13 @@ class _MapScreenState extends State<MapScreen> {
   void _updateETAInfo() {
     if (_busLocations.isEmpty || widget.pickupPoints.isEmpty) {
       _etaInfo = '';
+      return;
+    }
+
+    if (_offlineTooOld) {
+      _etaInfo = _offlineSnapshotAt == null
+          ? 'Offline - live arrival times unavailable'
+          : 'Offline - buses last seen ${_formatAge(_offlineSnapshotAt!)}';
       return;
     }
 
@@ -1990,7 +2007,10 @@ class _MapScreenState extends State<MapScreen> {
                                 // Row (RenderFlex overflow).
                                 Flexible(
                                   child: Text(
-                                    eta == null
+                                    _offlineTooOld
+                                        ? 'Offline - live arrival time '
+                                            'unavailable'
+                                        : eta == null
                                         ? 'The last bus has already passed this stop'
                                         : eta == 0
                                         ? 'Bus is at this stop now'

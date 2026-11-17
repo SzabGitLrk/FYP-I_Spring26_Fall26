@@ -25,11 +25,17 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
     _loadRoutes();
   }
 
-  Future<void> _loadRoutes() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  /// [silent] = pull-to-refresh: flipping _isLoading swaps the whole body
+  /// for a spinner, which UNMOUNTS the RefreshIndicator mid-gesture and
+  /// resets scroll to the top - the bug university_list's silent path
+  /// exists to avoid. The list stays mounted and updates in place.
+  Future<void> _loadRoutes({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final routes = await _service.getRoutesForUniversity(
@@ -44,11 +50,23 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
       setState(() {
         _routes = routes;
         _isLoading = false;
+        _error = null;
       });
     } catch (e) {
       if (!mounted) return;
       // Friendly copy for the screen; raw exception stays in the log.
       debugPrint('[routes] load failed: $e');
+      if (silent) {
+        // A blip during a pull must not replace working content with a
+        // full-screen error: keep the previous list and say so.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not refresh - showing previous routes.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
       setState(() {
         _error =
             'Could not load routes. Check your connection and try again.';
@@ -181,7 +199,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadRoutes,
+      onRefresh: () => _loadRoutes(silent: true),
       color: Colors.blue,
       child: ListView.builder(
         // Pull-to-refresh must work when the list is shorter than the

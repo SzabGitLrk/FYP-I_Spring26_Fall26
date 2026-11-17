@@ -42,8 +42,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
-  Future<void> _loadUserData() async {
-    setState(() => _isLoading = true);
+  /// [silent] = pull-to-refresh: flipping _isLoading swaps the body for a
+  /// spinner, unmounting the RefreshIndicator mid-gesture and resetting
+  /// scroll (the bug university_list's silent path exists to avoid).
+  Future<void> _loadUserData({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
 
     try {
       // Read the CURRENT signed-in user at load time - never a snapshot
@@ -173,6 +176,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // must not call setState on a disposed State.
       if (!mounted) return;
       debugPrint('[profile] load failed: $e');
+      if (silent) {
+        // Keep the rendered profile on screen: a blip during a pull must
+        // not replace working content with a full-screen error.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not refresh - showing previous data.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
       setState(() {
         // The error branch has no RefreshIndicator - point at what IS
         // there (the Retry button below) instead of a gesture that does
@@ -358,10 +372,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         if (role == 'driver' && oldName != null && oldName.isNotEmpty) {
           try {
-            await Supabase.instance.client
+            final affected = await Supabase.instance.client
                 .from('buses')
                 .update({'driver_name': newName})
-                .eq('driver_name', oldName);
+                .eq('driver_name', oldName)
+                .select('id');
+            // Row-verified: a zero-row write (RLS refused it, or the bus
+            // row already carries a different name) does NOT throw - the
+            // old code reported a green "Name updated" while the
+            // assignment still pointed at the old name, and the dashboard
+            // then said "no bus is assigned".
+            if (affected.isEmpty) assignmentUnlinked = true;
           } catch (e) {
             debugPrint('[profile] bus follow-rename refused: $e');
             assignmentUnlinked = true;
@@ -771,7 +792,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             )
           : RefreshIndicator(
-              onRefresh: _loadUserData,
+              onRefresh: () => _loadUserData(silent: true),
               color: primaryColor,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

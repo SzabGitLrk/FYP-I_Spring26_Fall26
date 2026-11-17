@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:university_point_locator/services/battery_optimization.dart';
 import 'package:university_point_locator/services/supabase_service.dart';
 import 'package:university_point_locator/models/route_model.dart';
 import 'package:university_point_locator/models/bus.dart';
@@ -16,7 +18,8 @@ class DriverDashboard extends StatefulWidget {
   State<DriverDashboard> createState() => _DriverDashboardState();
 }
 
-class _DriverDashboardState extends State<DriverDashboard> {
+class _DriverDashboardState extends State<DriverDashboard>
+    with WidgetsBindingObserver {
   final SupabaseService _service = SupabaseService();
   /// Read on access, never cached: a cached snapshot kept showing the OLD
   /// name in the Welcome card and the SOS payload after a Profile rename
@@ -105,19 +108,94 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// students may be seeing a frozen map.
   int _locationWriteFailures = 0;
 
+  /// Whether Android can still freeze trip tracking (battery optimisation).
+  /// Starts `true` (exempt) so no banner flashes before the async check.
+  bool _batteryExempt = true;
+
+  /// One-time-per-install key for the explanation dialog. The banner itself
+  /// persists afterwards; only the automatic pop-up is silenced.
+  static const String _batteryPromptedKey = 'battery_exempt_prompted';
+
+  /// Re-reads the battery-optimisation exemption into [_batteryExempt].
+  ///
+  /// [offerDialog] additionally shows the one-time "keep tracking alive"
+  /// explanation (first dashboard open on a fresh install only) and opens
+  /// the system dialog if the driver agrees. Resume calls stay silent - the
+  /// re-check alone clears the banner when the exemption was granted.
+  Future<void> _syncBatteryExemption({bool offerDialog = false}) async {
+    final exempt = await BatteryOptimization.isExempt();
+    if (!mounted) return;
+    setState(() => _batteryExempt = exempt);
+    if (exempt || !offerDialog) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    // getBool is synchronous (SharedPreferences is in-memory) - no await.
+    if (prefs.getBool(_batteryPromptedKey) ?? false) return;
+    if (!mounted) return;
+    final wantsIt = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Keep tracking alive?'),
+        content: const Text(
+          'Android battery optimisation can freeze the GPS in the middle '
+          'of a trip, so students see the bus stop moving while it is '
+          'still driving.\n\n'
+          'Allow this app to ignore battery optimisation for reliable '
+          'tracking?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              // Bounded override: the theme's full-width minimum wraps
+              // inside a dialog action row.
+              minimumSize: const Size(0, 40),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+    await prefs.setBool(_batteryPromptedKey, true);
+    if (wantsIt == true) await BatteryOptimization.requestExemption();
+    // The system dialog opens asynchronously, so this re-check usually still
+    // reads false here; the resume hook above clears the banner when the
+    // driver actually grants it.
+    final nowExempt = await BatteryOptimization.isExempt();
+    if (!mounted) return;
+    setState(() => _batteryExempt = nowExempt);
+  }
+
   @override
   void initState() {
     super.initState();
+    // Re-checked on every resume so returning from the system exemption
+    // dialog (or Settings) drops the banner without an app restart.
+    WidgetsBinding.instance.addObserver(this);
     _loadDriverData();
     _checkLocationPermissions();
     // Register the foreground-service options before any trip can start
     // (post-frame so plugin channel setup cannot race the first build).
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _initForegroundTask());
+    // Same tick: learn whether battery optimisation can still freeze the
+    // GPS stream, offering the one-time explanation on a fresh install.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initForegroundTask();
+      _syncBatteryExemption(offerDialog: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncBatteryExemption();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _positionSubscription?.cancel();
     _locationHeartbeatTimer?.cancel();
     // Clearing the flag FIRST stops the GPS listener/heartbeat from touching
@@ -653,6 +731,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
       }
       return;
     }
+    // A previous End Trip that FAILED offline keeps its id (its only retry
+    // used to be dispose() - invisible while the driver keeps driving).
+    // Close it here, in the background, BEFORE the setState below forgets
+    // the id and zeroes the distance: otherwise the next Start silently
+    // abandons that drive as a permanent "active" row and its real
+    // distance is lost. Only reachable when !_isTracking with a retained
+    // id - i.e. exactly the failed-End state.
+    final staleTripId = _currentTripId;
+    if (!_isTracking && staleTripId != null) {
+      final staleDistance = _totalDistance;
+      unawaited(
+        _service.endTrip(staleTripId, staleDistance).catchError((Object e) {
+          debugPrint('[driver] retained trip close on start failed: $e');
+        }),
+      );
+    }
     // Tracking state flips only NOW, once the trip row (or its honest
     // failure) is known: End Trip is gated on _isTracking, so it can no
     // longer be tapped while the INSERT is in flight - that race reported
@@ -663,6 +757,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
       _tripStartTime = DateTime.now();
       _totalDistance = 0.0;
       _pickupCount = 0;
+      // Fresh trip starts with a clean failure streak: a streak from the
+      // previous trip must not fire the "tracking failing" warning the
+      // moment this one begins.
+      _locationWriteFailures = 0;
       _lastPosition = null;
       // Drop the previous trip's last fix, otherwise the Live Tracking card
       // shows the OLD trip's coordinates until the first new fix arrives.
@@ -686,13 +784,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // Stops for arrival detection and the "Next stop" readout. Best-effort:
     // if this fails the trip still tracks - it just reports no pickups and no
     // next stop (both default to 0 = unknown), which beats dropping the fix.
+    // Stop-ownership: this field is written only AFTER the session check
+    // below. The old order assigned before checking, so a superseded
+    // session's late response overwrote the NEW trip's stops - arrivals
+    // then counted against the wrong route for the whole trip.
+    List<PickupPoint> stops = [];
     try {
-      _tripStops = await _service.getPickupPointsForRoute(route.id);
+      stops = await _service.getPickupPointsForRoute(route.id);
     } catch (_) {
-      _tripStops = [];
+      stops = [];
     }
 
     if (!mounted || session != _trackSession) return;
+    _tripStops = stops;
 
     // 10 m of movement still gets its own callback; a PARKED bus gets none
     // at all, so the stationary heartbeat below keeps re-sending the last
@@ -826,7 +930,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
         .catchError((Object e) {
           _locationWriteFailures++;
           debugPrint('[driver] bus location insert failed: $e');
-          if (_locationWriteFailures >= 5 && mounted) {
+          // _isTracking: queued writes can reject just AFTER End Trip, and
+          // telling the driver "students may not see your position" for a
+          // trip that already ended was pure confusion.
+          if (_locationWriteFailures >= 5 && mounted && _isTracking) {
             _locationWriteFailures = 0;
             _showErrorSnackBar(
               'Live tracking failing - students may not see your '
@@ -847,6 +954,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
       _,
     ) {
       if (!mounted || !_isTracking) return;
+      // Rebuild so the trip-duration chip keeps ticking while parked: the
+      // only other setState source is the GPS callback, and distanceFilter
+      // delivers NOTHING until the bus moves 10 m again - a 10-minute
+      // terminal wait froze the readout at the last fix.
+      setState(() {});
       final position = _currentPosition;
       // No fix yet - nothing honest to send.
       if (position == null) return;
@@ -1111,11 +1223,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
       return;
     }
+    // Stamp BEFORE the first await: the dialog can be reopened and sent
+    // again while _bestPosition()/the insert are still in flight, and the
+    // old check-then-set-AFTER-the-network order let both through (stacked
+    // duplicate alerts - exactly what this cooldown exists to prevent).
+    // Every failure path below clears the stamp so an immediate retry works.
+    _lastSosAt = DateTime.now();
 
     // Shared best-effort fix (stream -> OS cache -> one fresh reading);
     // the honest "no location" refusal below when all three fail.
     final position = await _bestPosition();
     if (position == null) {
+      _lastSosAt = null;
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -1130,6 +1249,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final account = user;
     if (account == null) {
+      _lastSosAt = null;
       messenger.showSnackBar(
         const SnackBar(
           content: Text('You must be logged in to send SOS'),
@@ -1178,6 +1298,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
     } catch (e) {
       debugPrint('[driver] SOS failed: $e');
+      _lastSosAt = null; // failed send must not hold the 30 s cooldown
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -1258,9 +1379,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
       return;
     }
+    // Same race as the SOS cooldown: stamp before the first await so a
+    // second tap while _bestPosition()/the insert is in flight is refused,
+    // cleared on every failure path below.
+    _lastIssueAt = DateTime.now();
 
     final position = await _bestPosition();
     if (position == null) {
+      _lastIssueAt = null;
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -1275,6 +1401,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final account = user;
     if (account == null) {
+      _lastIssueAt = null;
       messenger.showSnackBar(
         const SnackBar(
           content: Text('You must be logged in to send a report'),
@@ -1319,6 +1446,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
     } catch (e) {
       debugPrint('[driver] bus issue report failed: $e');
+      _lastIssueAt = null; // failed send must not hold the 30 s cooldown
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -1551,6 +1679,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Orange hint while battery optimisation can still freeze
+                  // the trip GPS. Disappears on its own once the driver
+                  // grants the exemption (re-checked on resume).
+                  if (!_batteryExempt)
+                    _BatteryExemptionBanner(
+                      onAllow: () async {
+                        await BatteryOptimization.requestExemption();
+                        final now = await BatteryOptimization.isExempt();
+                        if (!mounted) return;
+                        setState(() => _batteryExempt = now);
+                      },
+                    ),
                   // Welcome Card
                   Card(
                     elevation: 2,
@@ -1967,6 +2107,72 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
         Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ],
+    );
+  }
+}
+
+/// Orange card shown while Android can still freeze the driver's GPS stream
+/// mid-trip (battery optimisation / OEM killers). Offers the one-tap
+/// exemption request; the driver dashboard re-checks on resume and drops
+/// this card the moment the exemption is granted.
+class _BatteryExemptionBanner extends StatelessWidget {
+  const _BatteryExemptionBanner({required this.onAllow});
+
+  final Future<void> Function() onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.orange.shade50,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.orange.shade200),
+      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.battery_saver, color: Colors.orange.shade800),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Battery saver may pause tracking',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Android can freeze the GPS in the middle of a trip, so '
+              'students see the bus stop moving while it is still '
+              'driving. Allow this app to ignore battery optimisation '
+              'for reliable tracking.',
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: onAllow,
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              label: const Text('Keep tracking alive'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                // Bounded override: the theme's full-width minimum would
+                // stretch this banner button across the whole card.
+                minimumSize: const Size(0, 40),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

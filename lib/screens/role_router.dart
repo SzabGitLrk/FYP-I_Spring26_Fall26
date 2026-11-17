@@ -231,9 +231,19 @@ class _RoleRouterState extends State<RoleRouter> with WidgetsBindingObserver {
           .eq('id', userId)
           .maybeSingle();
       if (!mounted || _resolvedForUserId != userId) return;
+      if (created == null) {
+        // The insert did NOT produce a row (its policy never applied,
+        // network, permissions). Defaulting to 'student' here is the
+        // exact fail-open this method promises never to do: an admin or
+        // driver account would land in the student home screen with no
+        // error and no retry. Fail closed to the retryable error screen.
+        debugPrint('[role_router] profile row still missing after insert');
+        setState(() => _resolveFailed = true);
+        return;
+      }
       setState(() {
-        _resolvedRole = created?['role'] as String? ?? 'student';
-        _isApproved = created?['is_approved'] == true;
+        _resolvedRole = created['role'] as String? ?? 'student';
+        _isApproved = created['is_approved'] == true;
       });
     } catch (e) {
       // Fail closed: never GUESS a role from a failed lookup - and never

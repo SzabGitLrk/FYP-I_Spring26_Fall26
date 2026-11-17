@@ -983,14 +983,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required String driverName,
     required int busId,
   }) async {
-    await supabase
-        .from('buses')
-        .update({'driver_name': null})
-        .eq('driver_name', driverName)
-        .neq('id', busId);
-    // `.select('id')` returns the rows actually affected: write RLS
-    // filtered to zero rows (SQL not run) or a deleted bus must never
-    // report a green "assigned" over a no-op.
+    // New assignment FIRST, row-verified: the old order cleared every other
+    // bus before knowing this write would land, so a target that matched
+    // zero rows (bus deleted between dialog and save, RLS, dropped
+    // connection) left the driver unassigned from BOTH buses - an end state
+    // neither the admin nor the driver asked for.
     final changed = await supabase
         .from('buses')
         .update({'driver_name': driverName})
@@ -999,6 +996,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (changed.isEmpty) {
       throw StateError('assign affected no rows');
     }
+    // `.select('id')` returns the rows actually affected: write RLS
+    // filtered to zero rows (SQL not run) must never report a green
+    // "assigned" over a no-op. Only AFTER the target is safely written do
+    // we clear the driver's previous bus (one driver drives ONE bus - a
+    // stale second row would make the dashboard auto-pick whichever
+    // matched first).
+    await supabase
+        .from('buses')
+        .update({'driver_name': null})
+        .eq('driver_name', driverName)
+        .neq('id', busId);
   }
 
   /// Clears [driverName] from every bus. An empty result IS success here:
@@ -1175,6 +1183,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
 
     if (action == null || !mounted) return; // cancelled
+    // Assignment is keyed on the free-text driver_name (the driver_id
+    // migration is still pending): two drivers sharing a name would
+    // cross-link - assigning or clearing ONE silently hits the other's bus
+    // too, and both rows display the same assignment. Refuse before any
+    // write instead of silently picking a victim; renaming one disambiguates.
+    if (action is int || action == 'unassign') {
+      final sameName = await _countDriversNamed(driverName);
+      if (!mounted) return;
+      if (sameName > 1) {
+        _showError(
+          'Several drivers are named "$driverName". Rename one of them '
+          'first - otherwise this changes the bus of the wrong driver.',
+        );
+        return;
+      }
+    }
     try {
       if (action == 'unassign') {
         await _unassignDriver(driverName);
@@ -1208,6 +1232,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  /// How many driver-role profiles carry [name] - the cross-link guard for
+  /// name-keyed bus assignment. Returns 0 on any read failure: the write
+  /// path below still row-verifies, so a failed probe degrades to the old
+  /// behavior rather than blocking assignments forever.
+  Future<int> _countDriversNamed(String name) async {
+    try {
+      final rows = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'driver')
+          .eq('name', name);
+      return List<Map<String, dynamic>>.from(rows as List).length;
+    } catch (e) {
+      debugPrint('[admin] duplicate-name probe failed: $e');
+      return 0;
+    }
+  }
+
   /// Universities for the route dialog's dropdown (id + name only).
   /// Throws on purpose: every caller is [_guard]-wrapped or catches
   /// locally, so a swallowed failure here would render an empty dropdown
@@ -1237,13 +1279,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final descController =
         TextEditingController(text: '${route?['description'] ?? ''}');
 
+    var uniLoadFailed = false;
     if (universities.isEmpty) {
       // First-open path: the dialog may be opened before a full refresh
       // has ever succeeded - try once so the dropdown is not mysteriously
-      // empty. Failures stay quiet (the None option still works).
+      // empty. Failures stay quiet (the None option still works) - but see
+      // the guard below: quiet is only safe when nothing can be wiped.
       try {
         await _loadUniversities();
       } catch (e) {
+        uniLoadFailed = true;
         debugPrint('[admin] universities load for route dialog failed: $e');
       }
       if (!mounted) {
@@ -1260,6 +1305,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
     // A route whose university row was deleted degrades to "None" -
     // a stale id as initialValue would assert in the dropdown.
     final currentUniId = route?['university_id'];
+    // ...but when the LOAD failed, an absent id proves nothing: the
+    // dropdown would offer only "None" and Save would write null - erasing
+    // a link that still exists (the exact wipe the comment above
+    // describes, reintroduced through the failure path). Abort instead.
+    if (route != null &&
+        currentUniId is int &&
+        uniLoadFailed &&
+        !universities.any((u) => u['id'] == currentUniId)) {
+      nameController.dispose();
+      descController.dispose();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not load universities - saving now would drop this '
+            "route's university link. Pull to refresh and try again.",
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     int? universityId =
         currentUniId is int && universities.any((u) => u['id'] == currentUniId)
             ? currentUniId
@@ -2814,8 +2881,27 @@ class _ActiveTripsSheetState extends State<_ActiveTripsSheet> {
           .eq('status', 'active') // never reopen a row closed elsewhere
           .select('id');
       if (updated.isEmpty) {
-        // Row-verified miss: the driver just ended it themselves.
-        debugPrint('[admin] trip ${trip.id} already closed elsewhere');
+        // Row-verified miss. Distinguish "someone already closed it" from
+        // "the admin UPDATE policy is missing" (supabase_admin_powers.sql)
+        // before claiming anything - every other mutation here throws on an
+        // empty result, and reporting "Closed trip!" over a zero-row write
+        // told the admin an orphan was handled while it stayed active.
+        final row = await supabase
+            .from('trips')
+            .select('status')
+            .eq('id', trip.id)
+            .maybeSingle();
+        if (!mounted) return;
+        if (row == null || row['status'] != 'active') {
+          debugPrint('[admin] trip ${trip.id} already closed elsewhere');
+          await _load();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('That trip was already closed.')),
+          );
+          return;
+        }
+        throw StateError('close trip affected no rows');
       }
       await _load(); // fresh list + count for the header
       if (!mounted) return;

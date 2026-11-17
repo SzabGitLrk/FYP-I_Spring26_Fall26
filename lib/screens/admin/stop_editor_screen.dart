@@ -283,18 +283,37 @@ class _StopEditorScreenState extends State<StopEditorScreen> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              _error!,
-              style: const TextStyle(color: Colors.red),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+                const SizedBox(height: 4),
+                // A failed STOP load (routes still fine) had no retry at
+                // all: with one route in the dropdown onChanged could never
+                // re-fire, so the only recovery was leaving the screen -
+                // while it kept claiming the route had no stops.
+                TextButton.icon(
+                  onPressed: () => _select(_selected!),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry'),
+                ),
+              ],
             ),
           ),
         Expanded(
           child: _loadingStops
               ? const Center(child: CircularProgressIndicator())
               : _stops.isEmpty
-              ? const Center(
-                  child: Text('No stops on this route yet. Add one.'),
-                )
+              ? (_error != null
+                  // The error + Retry above own this state; claiming "no
+                  // stops" over rows that exist server-side was a lie.
+                  ? const SizedBox.shrink()
+                  : const Center(
+                      child: Text('No stops on this route yet. Add one.'),
+                    ))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
                   itemCount: _stops.length,

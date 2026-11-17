@@ -75,4 +75,11 @@
          to start a service of that type. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- Driver trip tracking is core foreground functionality: Android Doze
+         (and OEM battery killers) otherwise freeze the GPS stream mid-trip,
+         so students watch the bus stop moving while it is still driving.
+         Lets the app show the "stop optimising this app?" dialog; the code
+         also falls back to the plain allowlist settings screen if a device
+         refuses that dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 </manifest>

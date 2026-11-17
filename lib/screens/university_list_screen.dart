@@ -45,6 +45,24 @@ class _UniversityListScreenState extends State<UniversityListScreen> {
     try {
       final stops = await _service.getPickupPointsForRoute(my.routeId);
       if (!mounted) return;
+      // The route may have been deleted, or this stop removed from it,
+      // since the card was saved: pushing the map anyway opened a blank
+      // map (no stops, no polyline, no focus) with no explanation.
+      if (stops.isEmpty || !stops.any((s) => s.id == my.stopId)) {
+        await MyStopStore.instance.clear();
+        if (!mounted) return;
+        setState(() => _myStop = null);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Your saved stop no longer exists on this route - it has '
+              'been cleared.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
       final route = RouteModel(
         id: my.routeId,
         universityId: my.universityId,

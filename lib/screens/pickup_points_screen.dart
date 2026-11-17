@@ -28,11 +28,26 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
     _loadPickupPoints();
   }
 
-  Future<void> _loadPickupPoints() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  /// Compact age for the offline fallback copy: "3 min ago", "5 h ago".
+  static String _savedAgo(DateTime savedAt) {
+    final elapsed = DateTime.now().difference(savedAt);
+    if (elapsed.inMinutes < 1) return 'just now';
+    if (elapsed.inMinutes < 60) return '${elapsed.inMinutes} min ago';
+    if (elapsed.inHours < 24) return '${elapsed.inHours} h ago';
+    return '${elapsed.inDays} d ago';
+  }
+
+  /// [silent] = pull-to-refresh: flipping _isLoading would swap the body
+  /// for a spinner, unmounting the RefreshIndicator mid-gesture and
+  /// resetting scroll (the bug university_list's silent path exists to
+  /// avoid).
+  Future<void> _loadPickupPoints({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final points = await _service.getPickupPointsForRoute(widget.route.id);
@@ -46,6 +61,7 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
       setState(() {
         _pickupPoints = points;
         _isLoading = false;
+        _error = null;
       });
       // Refresh the offline copy (best-effort): a dead connection next time
       // still shows the stops and can open the map.
@@ -72,10 +88,25 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
           '[stops] offline: showing ${cached.points.length} cached stop(s) '
           'from ${cached.savedAt}',
         );
+        // The age matters: a list renamed/re-ordered after the snapshot is
+        // only safe to trust while the student can see how old it is.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Offline - showing saved stops (from ${_savedAgo(cached.savedAt)})',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      if (silent && _pickupPoints.isNotEmpty) {
+        // Keep the working list on screen instead of replacing it with a
+        // full-screen error over a one-off blip.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Offline - showing saved stops'),
-            backgroundColor: Colors.orange,
+            content: Text('Could not refresh - showing previous stops.'),
+            backgroundColor: Colors.red,
           ),
         );
         return;
@@ -256,7 +287,7 @@ class _PickupPointsScreenState extends State<PickupPointsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadPickupPoints,
+      onRefresh: () => _loadPickupPoints(silent: true),
       color: Colors.blue,
       child: ListView.builder(
         // Pull-to-refresh must work when the list is shorter than the

@@ -150,6 +150,25 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       )
                     : const Text('Update password'),
               ),
+              const SizedBox(height: 12),
+              // This screen is the navigator's home while the recovery
+              // latch is set, so there is no back button either - without
+              // an exit, opening the reset link by mistake trapped the
+              // user until they killed the app (and the latch only clears
+              // on a null session, i.e. by completing the reset). Sign-out
+              // clears it: RoleRouter sees null and returns to login.
+              TextButton(
+                onPressed: _isSubmitting
+                    ? null
+                    : () async {
+                        try {
+                          await Supabase.instance.client.auth.signOut();
+                        } catch (e) {
+                          debugPrint('[reset] sign-out failed: $e');
+                        }
+                      },
+                child: const Text('Cancel - sign out'),
+              ),
             ],
           ),
         ),

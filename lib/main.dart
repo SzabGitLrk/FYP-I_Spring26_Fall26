@@ -86,6 +86,42 @@ void main() async {
       debugPrint('⚠️ Session storage not ready ($e) - repairing...');
       await sessionStorage.initialize();
       await sessionStorage.hasAccessToken(); // verify before trusting it
+      // The failed attempt died INSIDE SupabaseAuth.initialize(): the
+      // client had marked itself initialized, but the package recovers the
+      // stored session and emits `initialSession` only AFTER
+      // _localStorage.initialize() - so neither ever happened. initialize()
+      // is skipped on retry (line 62), meaning nothing would ever push a
+      // value onto onAuthStateChange: RoleRouter's StreamBuilder would show
+      // its spinner forever - no login screen, no retry, until a force
+      // restart. Replicate what the package would have done, with public
+      // APIs: restore a stored session (emits tokenRefreshed), or emit the
+      // null-session event (signOut is local-only without a session).
+      final auth = Supabase.instance.client.auth;
+      String? stored;
+      try {
+        stored = await sessionStorage.accessToken();
+      } catch (e) {
+        debugPrint('⚠️ Stored session unreadable: $e');
+      }
+      if (auth.currentSession == null && stored != null) {
+        try {
+          await auth.recoverSession(stored);
+        } catch (e) {
+          // Non-retryable refresh failures emit signedOut inside gotrue;
+          // a retryable one (offline) leaves the stored session alone for
+          // the next launch - a fresh process runs full initialize() then.
+          debugPrint('⚠️ Stored session could not be restored: $e');
+        }
+      }
+      if (auth.currentSession == null && stored == null) {
+        // Nothing stored at all: push the null-session event the failed
+        // initialize() skipped so RoleRouter lands on the login screen.
+        try {
+          await auth.signOut();
+        } catch (e) {
+          debugPrint('⚠️ Initial sign-out event failed: $e');
+        }
+      }
     }
     initialized = true;
     debugPrint('✅ Supabase initialized!');
