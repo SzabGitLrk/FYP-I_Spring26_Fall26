@@ -1,0 +1,124 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Chandka Medical Hospital",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.555057442803196,
+    68.20061434146801
+  ],
+  "distance_meters": 755.5,
+  "duration_seconds": 73.6,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.558754,
+      68.200244
+    ],
+    [
+      27.558693,
+      68.20026
+    ],
+    [
+      27.558693,
+      68.200276
+    ],
+    [
+      27.558681,
+      68.200293
+    ],
+    [
+      27.558656,
+      68.200317
+    ],
+    [
+      27.557844,
+      68.200832
+    ],
+    [
+      27.557799,
+      68.200844
+    ],
+    [
+      27.557775,
+      68.200844
+    ],
+    [
+      27.557757,
+      68.200834
+    ],
+    [
+      27.557721,
+      68.200854
+    ],
+    [
+      27.557625,
+      68.200894
+    ],
+    [
+      27.55692,
+      68.200996
+    ],
+    [
+      27.555216,
+      68.201222
+    ],
+    [
+      27.554924,
+      68.201283
+    ],
+    [
+      27.55496,
+      68.201077
+    ],
+    [
+      27.555041,
+      68.20061
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 454 meters, turn right onto Shah Nawaz Road",
+      "distance": 454.4,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 68 meters, turn right",
+      "distance": 67.7,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": ""
+    }
+  ]
+}

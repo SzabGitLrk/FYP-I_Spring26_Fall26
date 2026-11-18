@@ -1,0 +1,150 @@
+{
+  "origin": "VIP Rd",
+  "destination": "Old Lahori Muhalla",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.56030889132802,
+    68.20968140428168
+  ],
+  "distance_meters": 1064.2,
+  "duration_seconds": 93.3,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.554058,
+      68.207467
+    ],
+    [
+      27.554292,
+      68.207616
+    ],
+    [
+      27.554523,
+      68.207775
+    ],
+    [
+      27.556042,
+      68.208823
+    ],
+    [
+      27.556322,
+      68.209013
+    ],
+    [
+      27.556564,
+      68.209144
+    ],
+    [
+      27.556945,
+      68.209246
+    ],
+    [
+      27.557001,
+      68.209259
+    ],
+    [
+      27.55771,
+      68.209405
+    ],
+    [
+      27.55809,
+      68.209483
+    ],
+    [
+      27.558784,
+      68.209612
+    ],
+    [
+      27.558858,
+      68.209618
+    ],
+    [
+      27.558863,
+      68.209679
+    ],
+    [
+      27.559203,
+      68.209911
+    ],
+    [
+      27.559593,
+      68.21019
+    ],
+    [
+      27.559574,
+      68.210356
+    ],
+    [
+      27.559558,
+      68.210463
+    ],
+    [
+      27.559764,
+      68.210464
+    ],
+    [
+      27.560475,
+      68.210016
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 232.6,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "Continue uturn for 590 meters onto وی آئی پی روڈ",
+      "distance": 589.8,
+      "type": "continue",
+      "modifier": "uturn",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 129 meters, turn right",
+      "distance": 128.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 23 meters, turn left",
+      "distance": 22.8,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 90 meters, keep slight left at the fork",
+      "distance": 90.4,
+      "type": "fork",
+      "modifier": "slight left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

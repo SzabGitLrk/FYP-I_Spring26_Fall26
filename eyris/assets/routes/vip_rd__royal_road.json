@@ -1,0 +1,158 @@
+{
+  "origin": "VIP Rd",
+  "destination": "Royal Road",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.552864553630165,
+    68.21293980821756
+  ],
+  "distance_meters": 1043.2,
+  "duration_seconds": 113.9,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.55414,
+      68.207699
+    ],
+    [
+      27.553981,
+      68.207798
+    ],
+    [
+      27.553903,
+      68.20787
+    ],
+    [
+      27.553837,
+      68.208315
+    ],
+    [
+      27.553732,
+      68.209108
+    ],
+    [
+      27.553638,
+      68.209822
+    ],
+    [
+      27.553503,
+      68.210862
+    ],
+    [
+      27.552785,
+      68.21058
+    ],
+    [
+      27.55256,
+      68.210492
+    ],
+    [
+      27.552296,
+      68.210388
+    ],
+    [
+      27.552118,
+      68.210319
+    ],
+    [
+      27.552033,
+      68.210651
+    ],
+    [
+      27.552025,
+      68.210681
+    ],
+    [
+      27.552014,
+      68.210726
+    ],
+    [
+      27.55181,
+      68.211373
+    ],
+    [
+      27.55179,
+      68.211511
+    ],
+    [
+      27.551808,
+      68.211667
+    ],
+    [
+      27.552016,
+      68.212593
+    ],
+    [
+      27.552186,
+      68.212721
+    ],
+    [
+      27.552287,
+      68.21277
+    ],
+    [
+      27.552799,
+      68.212935
+    ],
+    [
+      27.552862,
+      68.212953
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 204.5,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 342 meters, turn left",
+      "distance": 341.8,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 163 meters onto جیل روڈ",
+      "distance": 162.6,
+      "type": "end of road",
+      "modifier": "right",
+      "road": "جیل روڈ"
+    },
+    {
+      "text": "In 233 meters, turn left onto Larkana - Nasirabad Road",
+      "distance": 233.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Larkana - Nasirabad Road"
+    },
+    {
+      "text": "In 101 meters, turn left onto اسٹیشن روڈ",
+      "distance": 101.1,
+      "type": "turn",
+      "modifier": "left",
+      "road": "اسٹیشن روڈ"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": "اسٹیشن روڈ"
+    }
+  ]
+}

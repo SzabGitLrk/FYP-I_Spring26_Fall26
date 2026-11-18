@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_widgets.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key}); // Added super.key
+  const ForgotPasswordScreen({super.key});
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -12,54 +14,51 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final username = TextEditingController();
   final answer = TextEditingController();
   final newPassword = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
 
   String message = "";
-  Color messageColor = Colors.white;
+  Color messageColor = AppColors.textSecondary;
 
   void resetPassword() async {
-    // 1. Validation Check
-    if (username.text.trim().isEmpty || 
-        answer.text.trim().isEmpty || 
+    if (username.text.trim().isEmpty ||
+        answer.text.trim().isEmpty ||
         newPassword.text.trim().isEmpty) {
       setState(() {
         message = "Please fill all fields!";
-        messageColor = Colors.orangeAccent;
+        messageColor = AppColors.warning;
       });
       return;
     }
 
+    setState(() => _loading = true);
     final prefs = await SharedPreferences.getInstance();
-
     String savedUsername = prefs.getString('username') ?? "";
     String savedAnswer = prefs.getString('answer') ?? "";
 
-    // 2. Async Gap Guard: Check if widget is still mounted
     if (!mounted) return;
 
-    if (username.text.trim() == savedUsername && answer.text.trim() == savedAnswer) {
+    if (username.text.trim() == savedUsername &&
+        answer.text.trim() == savedAnswer) {
       await prefs.setString('password', newPassword.text.trim());
-
-      // ✅ 3. Async Gap Guard after another await
       if (!mounted) return;
-
       setState(() {
-        message = "Password Reset Successfully!";
-        messageColor = Colors.green;
-        // Fields clear karna reset ke baad
+        _loading = false;
+        message = "Password reset successfully!";
+        messageColor = AppColors.success;
         username.clear();
         answer.clear();
         newPassword.clear();
       });
-
     } else {
       setState(() {
-        message = "Wrong Username or Answer!";
-        messageColor = Colors.redAccent;
+        _loading = false;
+        message = "Wrong username or answer!";
+        messageColor = AppColors.danger;
       });
     }
   }
 
-  // Memory free karne ke liye controllers dispose karein
   @override
   void dispose() {
     username.dispose();
@@ -71,119 +70,111 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1E),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        title: const Text("Reset Password"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+      body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 40),
-
-              const Text(
-                "Reset Password",
-                style: TextStyle(
-                  color: Colors.white, 
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(height: AppSpacing.md),
+              Center(
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: AppDecorations.pill(AppColors.primary),
+                  child: const Icon(Icons.lock_reset_rounded,
+                      color: AppColors.primary, size: 36),
                 ),
               ),
-
-              const SizedBox(height: 30),
-
-              TextField(
-                controller: username,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: "Username",
-                  hintStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
+              const SizedBox(height: AppSpacing.md),
+              const Center(
+                  child: Text("Forgot Password?", style: AppText.heading)),
+              const SizedBox(height: 4),
+              const Center(
+                child: Text(
+                  "Verify your identity to reset it",
+                  style: AppText.bodySecondary,
                 ),
               ),
+              const SizedBox(height: AppSpacing.xl),
 
-              const SizedBox(height: 15),
+              _field("Username", username, Icons.person_outline,
+                  hint: "Your username"),
+              const SizedBox(height: AppSpacing.md),
+              _field("Security Question: Your pet name?", answer,
+                  Icons.shield_outlined,
+                  hint: "Your answer"),
+              const SizedBox(height: AppSpacing.md),
 
-              TextField(
-                controller: answer,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: "Your pet name?",
-                  hintStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 15),
-
+              const Text("New Password", style: AppText.label),
+              const SizedBox(height: AppSpacing.sm),
               TextField(
                 controller: newPassword,
-                obscureText: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: "New Password",
-                  hintStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 35),
-
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                obscureText: _obscure,
+                style: AppText.body,
+                decoration: InputDecoration(
+                  hintText: "Enter new password",
+                  prefixIcon: const Icon(Icons.lock_outline,
+                      color: AppColors.textMuted),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: AppColors.textMuted,
                     ),
-                  ),
-                  onPressed: resetPassword,
-                  child: const Text(
-                    "Reset Password",
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 25),
-
-              Text(
-                message,
-                style: TextStyle(
-                  color: messageColor, 
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: messageColor, fontWeight: FontWeight.w600),
                 ),
-                textAlign: TextAlign.center,
+              ],
+              const SizedBox(height: AppSpacing.xl),
+
+              AppPrimaryButton(
+                label: "Reset Password",
+                loading: _loading,
+                onPressed: resetPassword,
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController c, IconData icon,
+      {String? hint}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppText.label),
+        const SizedBox(height: AppSpacing.sm),
+        TextField(
+          controller: c,
+          style: AppText.body,
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon, color: AppColors.textMuted),
+          ),
+        ),
+      ],
     );
   }
 }

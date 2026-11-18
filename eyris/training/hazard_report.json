@@ -1,0 +1,70 @@
+{
+ "phone": {
+  "Pothole": {
+   "threshold": 0.6,
+   "right": 211,
+   "wrong": 41,
+   "objects": 513,
+   "precision": 0.8373015873015873,
+   "recall": 0.41130604288499023
+  },
+  "Speed breaker": {
+   "threshold": 0.35,
+   "right": 371,
+   "wrong": 15,
+   "objects": 428,
+   "precision": 0.961139896373057,
+   "recall": 0.866822429906542
+  },
+  "AC": {
+   "threshold": 0.6,
+   "right": 4,
+   "wrong": 0,
+   "objects": 11,
+   "precision": 1.0,
+   "recall": 0.36363636363636365
+  },
+  "Open drain": {
+   "threshold": 0.73,
+   "right": 70,
+   "wrong": 5,
+   "objects": 111,
+   "precision": 0.9333333333333333,
+   "recall": 0.6306306306306306
+  }
+ },
+ "esp32": {
+  "Pothole": {
+   "threshold": 0.6,
+   "right": 186,
+   "wrong": 35,
+   "objects": 513,
+   "precision": 0.8416289592760181,
+   "recall": 0.36257309941520466
+  },
+  "Speed breaker": {
+   "threshold": 0.35,
+   "right": 365,
+   "wrong": 21,
+   "objects": 428,
+   "precision": 0.9455958549222798,
+   "recall": 0.852803738317757
+  },
+  "AC": {
+   "threshold": 0.6,
+   "right": 4,
+   "wrong": 0,
+   "objects": 11,
+   "precision": 1.0,
+   "recall": 0.36363636363636365
+  },
+  "Open drain": {
+   "threshold": 0.73,
+   "right": 61,
+   "wrong": 4,
+   "objects": 111,
+   "precision": 0.9384615384615385,
+   "recall": 0.5495495495495496
+  }
+ }
+}

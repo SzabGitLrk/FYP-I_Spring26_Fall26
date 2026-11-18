@@ -1,0 +1,15 @@
+{
+ "_about": "Labels that tune_precision.py cannot settle from the boxed test photos. Each entry is [alone, backed] (null = not used) and replaces whatever was picked for that label in every model.",
+ "_Door": "Box matching says 17 of 22 right (phone) and 14 of 18 (ESP32 frames) at this confidence, short of the target. All detections counted wrong were looked at: on the phone set 4 of 5 show a real door that the photo's labels miss or box differently (an open door seen edge-on, a door at the frame edge, a doorway), 1 is a window wall; on the ESP32 set 4 of 4 are doors or doorways. By eye that is 21 of 22 and 18 of 18.",
+ "_AC": "Not working yet, kept so the label exists. At this confidence: 3 of 141 photos of standing ACs found, no false alarm on the 1,087 test photos through either camera. The open-vocabulary model's AC prompts fire on windows, cabinets and doors and are not used.",
+ "_Fan": "Only 4 fans in the held-out photos: 2 found, none wrong, through both cameras. Too few to call it measured.",
+ "_Speed breaker": "The model answers 'speed breaker' for the road itself (95 of 176 plain-road photos at 0.12, with a box over the whole carriageway). With the strip-shape rule in applySceneRules and this confidence: 1 of 128 speed-bump photos found, no false alarm on 3,003 other photos. Kept so the label exists; it will rarely speak until a model is trained on labelled speed-breaker photos.",
+ "scene": {
+  "Door": [0.60, null],
+  "AC": [0.25, null],
+  "Fan": [0.30, null]
+ },
+ "world": {
+  "Speed breaker": [0.20, null]
+ }
+}

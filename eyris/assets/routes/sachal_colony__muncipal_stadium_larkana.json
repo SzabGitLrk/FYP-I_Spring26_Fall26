@@ -1,0 +1,240 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Muncipal Stadium Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.560239944927805,
+    68.21333916921637
+  ],
+  "distance_meters": 2168.5,
+  "duration_seconds": 193.9,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.558754,
+      68.200244
+    ],
+    [
+      27.558693,
+      68.20026
+    ],
+    [
+      27.558693,
+      68.200276
+    ],
+    [
+      27.558681,
+      68.200293
+    ],
+    [
+      27.558656,
+      68.200317
+    ],
+    [
+      27.557844,
+      68.200832
+    ],
+    [
+      27.558328,
+      68.201628
+    ],
+    [
+      27.558919,
+      68.202672
+    ],
+    [
+      27.559478,
+      68.203686
+    ],
+    [
+      27.55966,
+      68.204017
+    ],
+    [
+      27.559787,
+      68.204255
+    ],
+    [
+      27.55987,
+      68.204414
+    ],
+    [
+      27.55989,
+      68.204593
+    ],
+    [
+      27.559901,
+      68.204629
+    ],
+    [
+      27.560116,
+      68.205046
+    ],
+    [
+      27.560819,
+      68.206337
+    ],
+    [
+      27.561123,
+      68.206935
+    ],
+    [
+      27.561046,
+      68.207107
+    ],
+    [
+      27.56099,
+      68.207263
+    ],
+    [
+      27.560869,
+      68.207468
+    ],
+    [
+      27.560471,
+      68.208111
+    ],
+    [
+      27.559958,
+      68.208939
+    ],
+    [
+      27.559757,
+      68.209191
+    ],
+    [
+      27.559509,
+      68.209436
+    ],
+    [
+      27.559187,
+      68.209594
+    ],
+    [
+      27.558863,
+      68.209679
+    ],
+    [
+      27.558778,
+      68.209672
+    ],
+    [
+      27.558081,
+      68.209543
+    ],
+    [
+      27.557697,
+      68.211128
+    ],
+    [
+      27.557683,
+      68.211182
+    ],
+    [
+      27.557466,
+      68.212047
+    ],
+    [
+      27.557347,
+      68.212474
+    ],
+    [
+      27.558379,
+      68.212794
+    ],
+    [
+      27.558785,
+      68.212885
+    ],
+    [
+      27.558975,
+      68.212927
+    ],
+    [
+      27.55967,
+      68.21317
+    ],
+    [
+      27.559778,
+      68.213209
+    ],
+    [
+      27.560227,
+      68.213381
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 127 meters, turn right onto Shah Nawaz Road",
+      "distance": 126.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 419 meters, turn left onto Allama Mashriqi Road",
+      "distance": 419.0,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Allama Mashriqi Road"
+    },
+    {
+      "text": "Continue slight right for 287 meters onto Allama Mashriqi Road",
+      "distance": 286.5,
+      "type": "continue",
+      "modifier": "slight right",
+      "road": "Allama Mashriqi Road"
+    },
+    {
+      "text": "In 470 meters, turn right onto وی آئی پی روڈ",
+      "distance": 470.3,
+      "type": "turn",
+      "modifier": "right",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 301 meters, turn left",
+      "distance": 300.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 332 meters, turn left",
+      "distance": 331.8,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": ""
+    }
+  ]
+}

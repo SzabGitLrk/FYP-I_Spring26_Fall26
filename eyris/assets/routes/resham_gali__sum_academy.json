@@ -1,0 +1,112 @@
+{
+  "origin": "Resham Gali",
+  "destination": "Sum Academy",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.554647425601672,
+    68.21787572099693
+  ],
+  "to_coords": [
+    27.551432273388578,
+    68.21655914571046
+  ],
+  "distance_meters": 486.6,
+  "duration_seconds": 48.8,
+  "polyline": [
+    [
+      27.554376,
+      68.218434
+    ],
+    [
+      27.55379,
+      68.218551
+    ],
+    [
+      27.553716,
+      68.218791
+    ],
+    [
+      27.553587,
+      68.218729
+    ],
+    [
+      27.552968,
+      68.218434
+    ],
+    [
+      27.552927,
+      68.218223
+    ],
+    [
+      27.552901,
+      68.217827
+    ],
+    [
+      27.55288,
+      68.217422
+    ],
+    [
+      27.552867,
+      68.217248
+    ],
+    [
+      27.552829,
+      68.217114
+    ],
+    [
+      27.552656,
+      68.216824
+    ],
+    [
+      27.552531,
+      68.216686
+    ],
+    [
+      27.552351,
+      68.216585
+    ],
+    [
+      27.552021,
+      68.216475
+    ],
+    [
+      27.551571,
+      68.216327
+    ],
+    [
+      27.551507,
+      68.216303
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 91.0,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 90 meters, turn right",
+      "distance": 90.1,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 306 meters, turn right onto Larkana Naudero Lakhi Highway",
+      "distance": 305.5,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Larkana Naudero Lakhi Highway"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": "Larkana Naudero Lakhi Highway"
+    }
+  ]
+}

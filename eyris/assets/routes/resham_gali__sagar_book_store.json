@@ -1,0 +1,161 @@
+{
+  "origin": "Resham Gali",
+  "destination": "Sagar Book Store",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.554647425601672,
+    68.21787572099693
+  ],
+  "to_coords": [
+    27.55564660019515,
+    68.21482797866736
+  ],
+  "distance_meters": 948.8,
+  "duration_seconds": 116.9,
+  "polyline": [
+    [
+      27.554376,
+      68.218434
+    ],
+    [
+      27.55379,
+      68.218551
+    ],
+    [
+      27.553716,
+      68.218791
+    ],
+    [
+      27.553587,
+      68.218729
+    ],
+    [
+      27.552968,
+      68.218434
+    ],
+    [
+      27.552927,
+      68.218223
+    ],
+    [
+      27.552901,
+      68.217827
+    ],
+    [
+      27.55288,
+      68.217422
+    ],
+    [
+      27.552867,
+      68.217248
+    ],
+    [
+      27.552829,
+      68.217114
+    ],
+    [
+      27.552656,
+      68.216824
+    ],
+    [
+      27.552531,
+      68.216686
+    ],
+    [
+      27.552565,
+      68.216584
+    ],
+    [
+      27.552644,
+      68.216216
+    ],
+    [
+      27.552718,
+      68.215873
+    ],
+    [
+      27.55284,
+      68.215302
+    ],
+    [
+      27.553366,
+      68.215421
+    ],
+    [
+      27.553842,
+      68.215529
+    ],
+    [
+      27.554896,
+      68.215767
+    ],
+    [
+      27.555674,
+      68.215943
+    ],
+    [
+      27.555429,
+      68.215337
+    ],
+    [
+      27.555403,
+      68.215049
+    ],
+    [
+      27.555447,
+      68.214786
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 91.0,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 90 meters, turn right",
+      "distance": 90.1,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 186 meters, turn right onto Larkana Naudero Lakhi Highway",
+      "distance": 185.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Larkana Naudero Lakhi Highway"
+    },
+    {
+      "text": "In 141 meters, turn right",
+      "distance": 141.0,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 320 meters, turn right onto Bunder Road",
+      "distance": 320.4,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Bunder Road"
+    },
+    {
+      "text": "In 121 meters, turn sharp left",
+      "distance": 120.7,
+      "type": "turn",
+      "modifier": "sharp left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

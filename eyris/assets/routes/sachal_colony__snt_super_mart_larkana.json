@@ -1,0 +1,85 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "SNT SUPER MART LARKANA",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.55952918373857,
+    68.19927235532954
+  ],
+  "distance_meters": 373.5,
+  "duration_seconds": 48,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.559116,
+      68.200123
+    ],
+    [
+      27.559167,
+      68.200106
+    ],
+    [
+      27.559284,
+      68.20001
+    ],
+    [
+      27.559441,
+      68.19988
+    ],
+    [
+      27.559509,
+      68.199799
+    ],
+    [
+      27.559567,
+      68.199667
+    ],
+    [
+      27.559603,
+      68.199497
+    ],
+    [
+      27.559627,
+      68.199286
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 140 meters, turn left onto Shah Nawaz Road",
+      "distance": 140.1,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    }
+  ]
+}

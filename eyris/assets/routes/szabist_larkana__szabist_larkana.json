@@ -1,0 +1,42 @@
+{
+  "origin": "SZABIST Larkana",
+  "destination": "SZABIST Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.565,
+    68.2264
+  ],
+  "to_coords": [
+    27.565,
+    68.2264
+  ],
+  "distance_meters": 0,
+  "duration_seconds": 0,
+  "polyline": [
+    [
+      27.564416,
+      68.226474
+    ],
+    [
+      27.564416,
+      68.226474
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading straight",
+      "distance": 0.0,
+      "type": "depart",
+      "modifier": "straight",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "straight",
+      "road": ""
+    }
+  ]
+}

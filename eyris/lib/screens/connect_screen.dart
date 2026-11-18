@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'home_screen.dart';
+import '../services/camera_settings.dart';
+import '../widgets/camera_settings_dialog.dart';
 
 class ConnectScreen extends StatefulWidget {
   const ConnectScreen({super.key});
@@ -15,7 +16,8 @@ class ConnectScreen extends StatefulWidget {
 class _ConnectScreenState extends State<ConnectScreen> {
   static const String deviceName = 'EYRIS Smart Glasses';
   static const String deviceId = 'ESP32-CAM-001';
-  static const String hardwareStatusUrl = 'http://192.168.4.1/status';
+  http.Client? _statusClient;
+  int _connectionGeneration = 0;
 
   bool isConnected = false;
   bool isConnecting = false;
@@ -45,6 +47,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   @override
   void dispose() {
     statusTimer?.cancel();
+    _connectionGeneration++;
+    _statusClient?.close();
     _flutterTts.stop();
     super.dispose();
   }
@@ -61,6 +65,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   // CONNECT LOGIC WITH VOICE FEEDBACK
   Future<void> connectSmartGlasses() async {
+    final generation = ++_connectionGeneration;
     setState(() {
       isConnecting = true;
       signal = 'Checking...';
@@ -68,25 +73,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
     _speak("Connecting to smart glasses");
 
-    final allowed = await requestPermissions();
-
-    if (!mounted) return;
-
-    if (!allowed) {
-      _speak("Permission denied. Please enable location permission");
-      showMessage('Permissions required');
-      setDisconnected();
-      return;
-    }
-
     try {
-      await Future.delayed(const Duration(seconds: 2));
-
-      if (!mounted) return;
-
       final hardwareReady = await checkHardware();
 
-      if (!mounted) return;
+      if (!mounted || generation != _connectionGeneration) return;
 
       if (!hardwareReady) {
         _speak("Hardware not responding. Check if glasses are powered on");
@@ -103,6 +93,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
       _speak("Glasses connected successfully");
       showMessage('Smart glasses connected.');
     } catch (e) {
+      if (!mounted || generation != _connectionGeneration) return;
       _speak("Connection failed. Please check your glasses and try again");
       setDisconnected();
       showMessage('Connection failed. Hardware check karein.');
@@ -110,27 +101,32 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Future<void> disconnectSmartGlasses() async {
+    _connectionGeneration++;
     statusTimer?.cancel();
+    _statusClient?.close();
     _speak("Disconnecting smart glasses");
     setDisconnected();
     _speak("Device disconnected");
     showMessage('Device disconnected.');
   }
 
-  Future<bool> requestPermissions() async {
-    final location = await Permission.location.request();
-    return location.isGranted;
-  }
-
   Future<bool> checkHardware() async {
+    final client = http.Client();
+    _statusClient?.close();
+    _statusClient = client;
     try {
-      final response = await http
-          .get(Uri.parse(hardwareStatusUrl))
+      final settings = await CameraSettings.load();
+      if (!mounted) return false;
+      final response = await client
+          .get(settings.statusUri)
           .timeout(const Duration(seconds: 4));
 
       return response.statusCode == 200;
     } catch (_) {
       return false;
+    } finally {
+      client.close();
+      if (identical(_statusClient, client)) _statusClient = null;
     }
   }
 
@@ -138,9 +134,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
     statusTimer?.cancel();
 
     statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      final generation = _connectionGeneration;
       final alive = await checkHardware();
 
-      if (!mounted) return;
+      if (!mounted || generation != _connectionGeneration) return;
 
       if (!alive) {
         _speak("Glasses disconnected. Connection lost");
@@ -187,41 +184,33 @@ class _ConnectScreenState extends State<ConnectScreen> {
             : const Color(0xFFFF5C6C);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF07101C),
+      backgroundColor: const Color(0xFF0A0F1E),
+      appBar: AppBar(
+        title: const Text(
+          "Device Connection",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF0A0F1E),
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Camera settings',
+              onPressed: () async {
+                await disconnectSmartGlasses();
+                if (!context.mounted) return;
+                await showCameraSettings(context);
+              })
+        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: _goBackToHome,
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // HEADER
-            Container(
-              height: 72,
-              color: const Color(0xFF1E2A3A),
-              child: Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: _goBackToHome,
-                    icon: const Icon(Icons.arrow_back, color: Colors.blue),
-                    label: const Text(
-                      'Back',
-                      style: TextStyle(color: Colors.blue, fontSize: 16),
-                    ),
-                  ),
-                  const Expanded(
-                    child: Center(
-                      child: Text(
-                        'Device Connection',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 80),
-                ],
-              ),
-            ),
-
             // STATUS BAR
             Container(
               height: 70,

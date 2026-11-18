@@ -1,0 +1,124 @@
+{
+  "origin": "VIP Rd",
+  "destination": "SIR SHAHNAWAZ BHUTTO MEMORIAL LIBRARY Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.548226506881516,
+    68.20474236914615
+  ],
+  "distance_meters": 982.6,
+  "duration_seconds": 62.2,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.553783,
+      68.207387
+    ],
+    [
+      27.55362,
+      68.20726
+    ],
+    [
+      27.553265,
+      68.20702
+    ],
+    [
+      27.552796,
+      68.206714
+    ],
+    [
+      27.55213,
+      68.206262
+    ],
+    [
+      27.55177,
+      68.206021
+    ],
+    [
+      27.55115,
+      68.205606
+    ],
+    [
+      27.55023,
+      68.205005
+    ],
+    [
+      27.549084,
+      68.204256
+    ],
+    [
+      27.549055,
+      68.204289
+    ],
+    [
+      27.549017,
+      68.204309
+    ],
+    [
+      27.548976,
+      68.204315
+    ],
+    [
+      27.548936,
+      68.204307
+    ],
+    [
+      27.548899,
+      68.204284
+    ],
+    [
+      27.548871,
+      68.20425
+    ],
+    [
+      27.548249,
+      68.204776
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 868.8,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 28 meters, enter the roundabout onto Shah Nawaz Road",
+      "distance": 27.6,
+      "type": "roundabout",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "Continue left for 86 meters onto Shah Nawaz Road",
+      "distance": 86.3,
+      "type": "exit roundabout",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": "Shah Nawaz Road"
+    }
+  ]
+}

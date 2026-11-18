@@ -1,0 +1,86 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "indus hospital and health network larkana office",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.557966584131552,
+    68.19466300121783
+  ],
+  "distance_meters": 334.4,
+  "duration_seconds": 63.1,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559932,
+      68.195423
+    ],
+    [
+      27.558134,
+      68.195349
+    ],
+    [
+      27.558132,
+      68.195422
+    ],
+    [
+      27.557806,
+      68.195416
+    ],
+    [
+      27.557823,
+      68.194659
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 16.9,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 199 meters, turn left",
+      "distance": 199.4,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 7 meters, turn left",
+      "distance": 7.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 36 meters, turn right",
+      "distance": 36.1,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 75 meters, turn right",
+      "distance": 74.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

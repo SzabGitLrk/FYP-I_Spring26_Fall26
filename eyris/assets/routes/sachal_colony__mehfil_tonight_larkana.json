@@ -1,0 +1,73 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Mehfil Tonight Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.5597164724164,
+    68.20240253566394
+  ],
+  "distance_meters": 469.3,
+  "duration_seconds": 55.1,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.55905,
+      68.200488
+    ],
+    [
+      27.559189,
+      68.200837
+    ],
+    [
+      27.559297,
+      68.201106
+    ],
+    [
+      27.559641,
+      68.20181
+    ],
+    [
+      27.5599,
+      68.202272
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 236 meters, turn slight left onto ھسپتال روڈ",
+      "distance": 235.9,
+      "type": "turn",
+      "modifier": "slight left",
+      "road": "ھسپتال روڈ"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": "ھسپتال روڈ"
+    }
+  ]
+}

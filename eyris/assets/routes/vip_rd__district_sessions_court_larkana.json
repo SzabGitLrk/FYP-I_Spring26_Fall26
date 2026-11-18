@@ -1,0 +1,88 @@
+{
+  "origin": "VIP Rd",
+  "destination": "District & Sessions Court Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.552555087460288,
+    68.20735243989066
+  ],
+  "distance_meters": 470.3,
+  "duration_seconds": 39.6,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.553783,
+      68.207387
+    ],
+    [
+      27.55362,
+      68.20726
+    ],
+    [
+      27.553265,
+      68.20702
+    ],
+    [
+      27.552796,
+      68.206714
+    ],
+    [
+      27.552487,
+      68.20731
+    ],
+    [
+      27.552491,
+      68.207368
+    ],
+    [
+      27.552532,
+      68.207396
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 391.1,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 74 meters, turn left",
+      "distance": 73.8,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 5 meters, turn left",
+      "distance": 5.3,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

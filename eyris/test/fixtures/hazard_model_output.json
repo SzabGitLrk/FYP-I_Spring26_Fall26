@@ -1,0 +1,30 @@
+{
+ "photo": "oma_000001_jpg.rf.393c193b30f84a7ccac2c3be200202c9.jpg",
+ "shape": [
+  1,
+  8,
+  3549
+ ],
+ "inputSize": 416,
+ "sourceWidth": 416,
+ "sourceHeight": 416,
+ "labels": [
+  "pothole",
+  "speed breaker",
+  "standing ac",
+  "open drain"
+ ],
+ "threshold": 0.3,
+ "expected": [
+  {
+   "label": "open drain",
+   "confidence": 0.517485,
+   "box": [
+    111.397,
+    325.041,
+    315.02,
+    415.943
+   ]
+  }
+ ]
+}

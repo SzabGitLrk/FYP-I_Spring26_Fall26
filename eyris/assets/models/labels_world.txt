@@ -1,0 +1,70 @@
+person
+car
+motorcycle
+bicycle
+truck
+bus
+tree
+palm tree
+tree trunk
+pole
+utility pole
+street light
+lamp post
+traffic sign
+road sign
+stop sign
+traffic light
+chair
+table
+desk
+dining table
+door
+closed door
+doorway
+stairs
+staircase
+steps
+wall
+bed
+sofa
+couch
+bottle
+dustbin
+trash can
+garbage bin
+backpack
+handbag
+suitcase
+laptop
+pothole
+speed bump
+speed breaker
+road hump
+sidewalk
+footpath
+pavement
+air conditioner
+floor standing air conditioner
+tower air conditioner
+floor
+ceiling
+window
+railing
+handrail
+curtain
+cabinet
+wardrobe
+shelf
+refrigerator
+television
+picture frame
+carpet
+building
+road
+sky
+fence
+bench
+ceiling fan
+pedestal fan
+pillar

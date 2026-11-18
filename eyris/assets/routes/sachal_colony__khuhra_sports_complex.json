@@ -1,0 +1,92 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Khuhra Sports Complex کھوڑا اسپورٹس کمپلیکس",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.556677660719707,
+    68.19601939950508
+  ],
+  "distance_meters": 389.2,
+  "duration_seconds": 63.6,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558185,
+      68.197268
+    ],
+    [
+      27.558083,
+      68.197264
+    ],
+    [
+      27.557782,
+      68.197253
+    ],
+    [
+      27.557642,
+      68.197247
+    ],
+    [
+      27.557384,
+      68.197238
+    ],
+    [
+      27.557005,
+      68.197223
+    ],
+    [
+      27.557005,
+      68.197167
+    ],
+    [
+      27.557018,
+      68.196024
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 55.5,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 215 meters, turn left",
+      "distance": 215.3,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 118 meters",
+      "distance": 118.4,
+      "type": "end of road",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

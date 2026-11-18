@@ -1,0 +1,106 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "indus hospital and health network larkana office",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.557966584131552,
+    68.19466300121783
+  ],
+  "distance_meters": 470.3,
+  "duration_seconds": 82.5,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558185,
+      68.197268
+    ],
+    [
+      27.558083,
+      68.197264
+    ],
+    [
+      27.557782,
+      68.197253
+    ],
+    [
+      27.557642,
+      68.197247
+    ],
+    [
+      27.557643,
+      68.197187
+    ],
+    [
+      27.557677,
+      68.195414
+    ],
+    [
+      27.557806,
+      68.195416
+    ],
+    [
+      27.557823,
+      68.194659
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 55.5,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 145 meters, turn left",
+      "distance": 144.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 181 meters, turn right",
+      "distance": 181.0,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 14 meters",
+      "distance": 14.3,
+      "type": "end of road",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 75 meters, turn left",
+      "distance": 74.8,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

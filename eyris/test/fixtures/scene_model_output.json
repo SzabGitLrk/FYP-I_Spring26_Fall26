@@ -1,0 +1,201 @@
+{
+ "photo": "ADE_val_00001309.jpg",
+ "shape": [
+  1,
+  39,
+  3024
+ ],
+ "inputSize": 384,
+ "sourceWidth": 640,
+ "sourceHeight": 561,
+ "labels": [
+  "person",
+  "car",
+  "motorcycle",
+  "bicycle",
+  "truck",
+  "bus",
+  "tree",
+  "pole",
+  "traffic light",
+  "chair",
+  "table",
+  "door",
+  "stairs",
+  "wall",
+  "bed",
+  "sofa",
+  "bottle",
+  "dustbin",
+  "bag",
+  "laptop",
+  "footpath",
+  "air conditioner",
+  "fan",
+  "floor",
+  "ceiling",
+  "window",
+  "railing",
+  "road",
+  "cabinet",
+  "curtain",
+  "signboard",
+  "building",
+  "plant",
+  "column",
+  "fence"
+ ],
+ "threshold": 0.3,
+ "expected": [
+  {
+   "label": "chair",
+   "confidence": 0.913647,
+   "box": [
+    270.398,
+    287.969,
+    412.821,
+    561
+   ]
+  },
+  {
+   "label": "floor",
+   "confidence": 0.887616,
+   "box": [
+    1.553,
+    311.305,
+    639.314,
+    561
+   ]
+  },
+  {
+   "label": "ceiling",
+   "confidence": 0.880927,
+   "box": [
+    250.101,
+    0.031,
+    637.747,
+    70.866
+   ]
+  },
+  {
+   "label": "wall",
+   "confidence": 0.852434,
+   "box": [
+    378.9,
+    22.123,
+    639.74,
+    384.28
+   ]
+  },
+  {
+   "label": "door",
+   "confidence": 0.782155,
+   "box": [
+    235.476,
+    136.354,
+    315.635,
+    320.001
+   ]
+  },
+  {
+   "label": "chair",
+   "confidence": 0.763568,
+   "box": [
+    424.829,
+    271.531,
+    557.29,
+    516.051
+   ]
+  },
+  {
+   "label": "table",
+   "confidence": 0.757224,
+   "box": [
+    272.681,
+    283.997,
+    551.387,
+    518.916
+   ]
+  },
+  {
+   "label": "chair",
+   "confidence": 0.75281,
+   "box": [
+    344.324,
+    255.99,
+    382.215,
+    306.89
+   ]
+  },
+  {
+   "label": "railing",
+   "confidence": 0.727616,
+   "box": [
+    44.965,
+    254.059,
+    222.836,
+    344.288
+   ]
+  },
+  {
+   "label": "curtain",
+   "confidence": 0.604513,
+   "box": [
+    396.55,
+    39.589,
+    640,
+    389.656
+   ]
+  },
+  {
+   "label": "wall",
+   "confidence": 0.547719,
+   "box": [
+    7.561,
+    0.654,
+    378.856,
+    328.298
+   ]
+  },
+  {
+   "label": "wall",
+   "confidence": 0.493721,
+   "box": [
+    44.012,
+    137.429,
+    111.485,
+    269.646
+   ]
+  },
+  {
+   "label": "window",
+   "confidence": 0.417581,
+   "box": [
+    241.822,
+    78.829,
+    313.107,
+    148.269
+   ]
+  },
+  {
+   "label": "door",
+   "confidence": 0.403411,
+   "box": [
+    480.217,
+    97.864,
+    604.914,
+    338.237
+   ]
+  },
+  {
+   "label": "window",
+   "confidence": 0.355607,
+   "box": [
+    42.54,
+    183.16,
+    79.502,
+    265.757
+   ]
+  }
+ ]
+}

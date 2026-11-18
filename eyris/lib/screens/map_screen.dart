@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +12,8 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/offline_place_service.dart';
 import '../services/offline_route_service.dart';
 import '../services/alert_service.dart';
+import '../services/speech_hub.dart';
+import 'home_screen.dart';
 
 /// Average speeds in km/h for duration estimation.
 /// These are realistic urban averages — adjust if your demo region differs.
@@ -50,7 +51,9 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
-  final FlutterTts _tts = FlutterTts();
+  // Route instructions go through the shared voice so they do not fight the
+  // camera's obstacle warnings.
+  final SpeechHub _voice = SpeechHub.instance;
   final OfflinePlaceService _placeService = OfflinePlaceService();
   final OfflineRouteService _routeService = OfflineRouteService();
   final AlertService _alertService = AlertService();
@@ -90,7 +93,6 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _bootstrap() async {
     await _placeService.loadPlaces();
     await _loadTiles();
-    await _initTts();
 
     if (_placeService.origins.isNotEmpty) {
       _selectedOrigin = _placeService.origins.first;
@@ -106,8 +108,7 @@ class _MapScreenState extends State<MapScreen> {
     final file = File('${dir.path}/pakistan-tiles.mbtiles');
     final bytes = await rootBundle.load('assets/maps/pakistan.mbtiles');
 
-    if (!await file.exists() ||
-        await file.length() != bytes.lengthInBytes) {
+    if (!await file.exists() || await file.length() != bytes.lengthInBytes) {
       await file.writeAsBytes(
         bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
         flush: true,
@@ -117,13 +118,7 @@ class _MapScreenState extends State<MapScreen> {
     _tileProvider = MbTilesTileProvider.fromPath(path: file.path);
   }
 
-  Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.5);
-    await _tts.setPitch(1.0);
-  }
-
-  Future<void> _speak(String text) async => _tts.speak(text);
+  Future<void> _speak(String text) => _voice.speakNavigation(text);
 
   Future<void> _startLocation() async {
     if (!await Geolocator.isLocationServiceEnabled()) return;
@@ -133,7 +128,9 @@ class _MapScreenState extends State<MapScreen> {
       perm = await Geolocator.requestPermission();
     }
     if (perm == LocationPermission.denied ||
-        perm == LocationPermission.deniedForever) return;
+        perm == LocationPermission.deniedForever) {
+      return;
+    }
 
     final pos = await Geolocator.getCurrentPosition();
     if (!mounted) return;
@@ -178,8 +175,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onSearchChanged(String text) {
     setState(() {
-      _searchSuggestions =
-          text.isEmpty ? [] : _placeService.searchPlaces(text);
+      _searchSuggestions = text.isEmpty ? [] : _placeService.searchPlaces(text);
     });
   }
 
@@ -381,7 +377,7 @@ class _MapScreenState extends State<MapScreen> {
       _instruction = 'Navigation stopped';
       _stationaryAlertActive = false;
     });
-    _tts.stop();
+    unawaited(_voice.stopNavigation());
   }
 
   // ---------- Stationary detection ----------
@@ -506,8 +502,7 @@ class _MapScreenState extends State<MapScreen> {
       // Fall back to typed exact match even if it was a low-quality one
       _selectPlace(exact);
     } else {
-      setState(() =>
-          _instruction = 'Place not found. Try a different name.');
+      setState(() => _instruction = 'Place not found. Try a different name.');
       _speak('Sorry, place not found.');
     }
   }
@@ -531,8 +526,7 @@ class _MapScreenState extends State<MapScreen> {
                   padding: EdgeInsets.all(12),
                   child: Text(
                     'Select Starting Point',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 ..._placeService.origins.map((o) {
@@ -587,10 +581,50 @@ class _MapScreenState extends State<MapScreen> {
   void dispose() {
     _cancelStationaryWatch();
     _positionStream?.cancel();
-    _tts.stop();
+    unawaited(_voice.stopNavigation());
     _tileProvider?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Auto / Manual step switch.
+  Widget _buildModeToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: InkWell(
+        onTap: () {
+          setState(() => _manualStepMode = !_manualStepMode);
+          _speak(_manualStepMode ? 'Manual mode' : 'Automatic mode');
+        },
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _manualStepMode ? Colors.orange : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _manualStepMode ? Icons.touch_app : Icons.gps_fixed,
+                size: 18,
+                color: _manualStepMode ? Colors.white : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _manualStepMode ? 'Manual' : 'Auto',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _manualStepMode ? Colors.white : Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -602,53 +636,19 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('EYRIS Navigation'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: InkWell(
-              onTap: () {
-                setState(() => _manualStepMode = !_manualStepMode);
-                _speak(_manualStepMode ? 'Manual mode' : 'Automatic mode');
-              },
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _manualStepMode
-                      ? Colors.orange
-                      : Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _manualStepMode
-                          ? Icons.touch_app
-                          : Icons.gps_fixed,
-                      size: 18,
-                      color: _manualStepMode
-                          ? Colors.white
-                          : Colors.black54,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _manualStepMode ? 'Manual' : 'Auto',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _manualStepMode
-                            ? Colors.white
-                            : Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            final homeState =
+                context.findAncestorStateOfType<HomeScreenState>();
+            if (homeState != null) {
+              homeState.changeTab(0);
+            } else {
+              Navigator.maybePop(context);
+            }
+          },
+        ),
+        actions: [_buildModeToggle()],
       ),
       body: Stack(
         children: [
@@ -659,7 +659,15 @@ class _MapScreenState extends State<MapScreen> {
               initialZoom: 13,
             ),
             children: [
-              TileLayer(tileProvider: _tileProvider!),
+              TileLayer(
+                tileProvider: _tileProvider!,
+                // Offline gaps at the edge of pakistan.mbtiles are normal;
+                // swallow them instead of spamming one log line per tile
+                // ("Tile could not be found in MBTiles (z:13, ...)").
+                // If the map stays blank here, regenerate the .mbtiles
+                // with zoom 13 coverage for this region.
+                errorTileCallback: (tile, error, stack) {},
+              ),
               if (_routePoints.isNotEmpty)
                 PolylineLayer(polylines: [
                   Polyline(
@@ -704,25 +712,35 @@ class _MapScreenState extends State<MapScreen> {
               InkWell(
                 onTap: _showOriginPicker,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(children: [
                     const Icon(Icons.trip_origin, color: Colors.green),
                     const SizedBox(width: 8),
                     const Text('From:',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _selectedOrigin?.name ?? 'Tap to select',
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.black87),
                       ),
                     ),
-                    const Icon(Icons.arrow_drop_down),
+                    const Icon(Icons.arrow_drop_down, color: Colors.black54),
                   ]),
                 ),
               ),
@@ -732,7 +750,14 @@ class _MapScreenState extends State<MapScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(children: [
                   IconButton(
@@ -744,9 +769,15 @@ class _MapScreenState extends State<MapScreen> {
                     child: TextField(
                       controller: _searchController,
                       onChanged: _onSearchChanged,
+                      style: const TextStyle(color: Colors.black87),
                       decoration: const InputDecoration(
                         hintText: 'Search destination...',
+                        hintStyle: TextStyle(color: Colors.black45),
+                        filled: false,
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
                   ),
@@ -759,11 +790,17 @@ class _MapScreenState extends State<MapScreen> {
               // Transport mode selector
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -775,24 +812,18 @@ class _MapScreenState extends State<MapScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: selected
-                              ? Colors.blue
-                              : Colors.transparent,
+                          color: selected ? Colors.blue : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(children: [
                           Icon(_transportIcons[m],
-                              color: selected
-                                  ? Colors.white
-                                  : Colors.black54,
+                              color: selected ? Colors.white : Colors.black54,
                               size: 22),
                           const SizedBox(width: 4),
                           Text(
                             _transportLabels[m] ?? m,
                             style: TextStyle(
-                              color: selected
-                                  ? Colors.white
-                                  : Colors.black54,
+                              color: selected ? Colors.white : Colors.black54,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -824,12 +855,23 @@ class _MapScreenState extends State<MapScreen> {
                           p.isCityLandmark
                               ? Icons.location_city
                               : Icons.location_on,
-                          color: p.isCityLandmark
-                              ? Colors.orange
-                              : Colors.blue,
+                          color: p.isCityLandmark ? Colors.orange : Colors.blue,
                         ),
-                        title: Text(p.name),
-                        subtitle: Text('${p.city} · ${p.category}'),
+                        title: Text(
+                          p.name,
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${p.city} · ${p.category}',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 12,
+                          ),
+                        ),
                         onTap: () => _selectPlace(p),
                       );
                     },
@@ -873,8 +915,7 @@ class _MapScreenState extends State<MapScreen> {
                         shape: const CircleBorder(),
                       ),
                       onPressed: _previousStepManual,
-                      child:
-                          const Icon(Icons.arrow_back, color: Colors.white),
+                      child: const Icon(Icons.arrow_back, color: Colors.white),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -940,27 +981,56 @@ class _MapScreenState extends State<MapScreen> {
             left: 16,
             right: 16,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: _navigationActive ? Colors.green : Colors.blue,
-                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: _navigationActive
+                      ? [const Color(0xFF16A34A), const Color(0xFF22C55E)]
+                      : [const Color(0xFF2563EB), const Color(0xFF6366F1)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 16,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.navigation, color: Colors.white),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.navigation_rounded,
+                          color: Colors.white, size: 18),
+                    ),
                     if (_navigationActive && _instructions.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Text(
-                        '${_currentInstructionIndex}/${_instructions.length}',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 13),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Step $_currentInstructionIndex of ${_instructions.length}',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
                       ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
                   _instruction,
                   textAlign: TextAlign.center,
@@ -968,6 +1038,7 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    height: 1.3,
                   ),
                 ),
               ]),

@@ -1,0 +1,49 @@
+package com.example.eyris;
+
+import android.os.Bundle;
+import androidx.appcompat.app.AppCompatActivity;
+
+import org.mapsforge.map.android.view.MapView;
+import org.mapsforge.map.layer.cache.TileCache;
+import org.mapsforge.map.android.util.AndroidUtil;
+import org.mapsforge.map.layer.renderer.TileRendererLayer;
+import org.mapsforge.map.reader.MapFile;
+import org.mapsforge.map.datastore.MapDataStore;
+import org.mapsforge.core.graphics.AndroidGraphicFactory;
+
+import java.io.File;
+
+public class MapActivity extends AppCompatActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        AndroidGraphicFactory.createInstance(getApplication());
+
+        setContentView(R.layout.activity_map);
+
+        MapView mapView = findViewById(R.id.mapView);
+
+        File mapFile = new File(getExternalFilesDir(null), "pakistan.map");
+
+        TileCache tileCache = AndroidUtil.createTileCache(
+                this, "mapcache",
+                mapView.getModel().displayModel.getTileSize(), 1f,
+                mapView.getModel().frameBufferModel.getOverdrawFactor()
+        );
+
+        MapDataStore mapDataStore = new MapFile(mapFile);
+
+        TileRendererLayer layer = new TileRendererLayer(
+                tileCache,
+                mapDataStore,
+                mapView.getModel().mapViewPosition,
+                AndroidGraphicFactory.INSTANCE
+        );
+
+        mapView.getLayerManager().getLayers().add(layer);
+
+        mapView.setCenter(new org.mapsforge.core.model.LatLong(24.8607, 67.0011)); // Karachi
+        mapView.setZoomLevel((byte) 12);
+    }
+}

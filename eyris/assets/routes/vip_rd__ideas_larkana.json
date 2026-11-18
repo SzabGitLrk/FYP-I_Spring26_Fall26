@@ -1,0 +1,231 @@
+{
+  "origin": "VIP Rd",
+  "destination": "Ideas - Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.54786567560632,
+    68.21073381119541
+  ],
+  "distance_meters": 2012.8,
+  "duration_seconds": 142.4,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.553783,
+      68.207387
+    ],
+    [
+      27.55362,
+      68.20726
+    ],
+    [
+      27.553265,
+      68.20702
+    ],
+    [
+      27.552796,
+      68.206714
+    ],
+    [
+      27.55213,
+      68.206262
+    ],
+    [
+      27.55177,
+      68.206021
+    ],
+    [
+      27.55115,
+      68.205606
+    ],
+    [
+      27.55023,
+      68.205005
+    ],
+    [
+      27.549084,
+      68.204256
+    ],
+    [
+      27.549055,
+      68.204289
+    ],
+    [
+      27.549017,
+      68.204309
+    ],
+    [
+      27.548976,
+      68.204315
+    ],
+    [
+      27.548936,
+      68.204307
+    ],
+    [
+      27.548899,
+      68.204284
+    ],
+    [
+      27.548871,
+      68.20425
+    ],
+    [
+      27.548055,
+      68.20494
+    ],
+    [
+      27.547324,
+      68.205625
+    ],
+    [
+      27.546931,
+      68.206036
+    ],
+    [
+      27.546369,
+      68.206708
+    ],
+    [
+      27.545715,
+      68.207499
+    ],
+    [
+      27.545615,
+      68.20762
+    ],
+    [
+      27.545486,
+      68.207797
+    ],
+    [
+      27.545334,
+      68.208001
+    ],
+    [
+      27.544828,
+      68.208778
+    ],
+    [
+      27.545103,
+      68.208961
+    ],
+    [
+      27.546478,
+      68.209431
+    ],
+    [
+      27.546837,
+      68.209552
+    ],
+    [
+      27.54717,
+      68.209663
+    ],
+    [
+      27.547914,
+      68.209815
+    ],
+    [
+      27.548068,
+      68.209881
+    ],
+    [
+      27.548128,
+      68.209927
+    ],
+    [
+      27.54805,
+      68.210195
+    ],
+    [
+      27.54796,
+      68.210164
+    ],
+    [
+      27.54785,
+      68.21073
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 868.8,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 28 meters, enter the roundabout onto Shah Nawaz Road",
+      "distance": 27.6,
+      "type": "roundabout",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "Continue left for 636 meters onto Shah Nawaz Road",
+      "distance": 636.1,
+      "type": "exit roundabout",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 195 meters, turn left onto Station Road",
+      "distance": 194.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Station Road"
+    },
+    {
+      "text": "Continue straight for 190 meters onto اسٹیشن روڈ",
+      "distance": 190.2,
+      "type": "new name",
+      "modifier": "straight",
+      "road": "اسٹیشن روڈ"
+    },
+    {
+      "text": "In 28 meters, turn right",
+      "distance": 27.9,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 10 meters, turn right",
+      "distance": 10.4,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 57 meters, turn left",
+      "distance": 57.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": ""
+    }
+  ]
+}

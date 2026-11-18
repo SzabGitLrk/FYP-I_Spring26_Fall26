@@ -1,0 +1,83 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Royal Taj Restaurant Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.558999070301713,
+    68.20134338073765
+  ],
+  "distance_meters": 363.1,
+  "duration_seconds": 62.4,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.55905,
+      68.200488
+    ],
+    [
+      27.559189,
+      68.200837
+    ],
+    [
+      27.558981,
+      68.200939
+    ],
+    [
+      27.559141,
+      68.201196
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 74 meters, turn slight left onto ھسپتال روڈ",
+      "distance": 73.6,
+      "type": "turn",
+      "modifier": "slight left",
+      "road": "ھسپتال روڈ"
+    },
+    {
+      "text": "In 25 meters, turn right",
+      "distance": 25.2,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 31 meters, turn left",
+      "distance": 31.0,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

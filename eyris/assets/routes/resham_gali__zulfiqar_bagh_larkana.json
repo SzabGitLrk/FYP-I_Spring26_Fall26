@@ -1,0 +1,235 @@
+{
+  "origin": "Resham Gali",
+  "destination": "Zulfiqar Bagh Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.554647425601672,
+    68.21787572099693
+  ],
+  "to_coords": [
+    27.55977381054552,
+    68.21648174145695
+  ],
+  "distance_meters": 1297.3,
+  "duration_seconds": 120,
+  "polyline": [
+    [
+      27.554376,
+      68.218434
+    ],
+    [
+      27.55379,
+      68.218551
+    ],
+    [
+      27.553716,
+      68.218791
+    ],
+    [
+      27.553587,
+      68.218729
+    ],
+    [
+      27.553419,
+      68.219184
+    ],
+    [
+      27.553579,
+      68.219397
+    ],
+    [
+      27.55375,
+      68.219549
+    ],
+    [
+      27.553934,
+      68.219694
+    ],
+    [
+      27.554023,
+      68.219764
+    ],
+    [
+      27.554163,
+      68.219875
+    ],
+    [
+      27.5543,
+      68.219983
+    ],
+    [
+      27.55468,
+      68.220238
+    ],
+    [
+      27.554927,
+      68.220403
+    ],
+    [
+      27.555082,
+      68.220495
+    ],
+    [
+      27.555148,
+      68.220534
+    ],
+    [
+      27.555412,
+      68.220648
+    ],
+    [
+      27.555642,
+      68.220748
+    ],
+    [
+      27.556153,
+      68.220838
+    ],
+    [
+      27.556254,
+      68.220856
+    ],
+    [
+      27.556575,
+      68.220852
+    ],
+    [
+      27.556952,
+      68.220788
+    ],
+    [
+      27.557159,
+      68.220693
+    ],
+    [
+      27.557574,
+      68.220329
+    ],
+    [
+      27.557671,
+      68.220329
+    ],
+    [
+      27.557793,
+      68.220358
+    ],
+    [
+      27.557931,
+      68.220407
+    ],
+    [
+      27.558095,
+      68.220474
+    ],
+    [
+      27.558326,
+      68.220515
+    ],
+    [
+      27.55884,
+      68.219644
+    ],
+    [
+      27.559129,
+      68.219044
+    ],
+    [
+      27.559187,
+      68.218907
+    ],
+    [
+      27.559274,
+      68.218699
+    ],
+    [
+      27.55945,
+      68.218721
+    ],
+    [
+      27.559579,
+      68.218737
+    ],
+    [
+      27.559724,
+      68.218716
+    ],
+    [
+      27.560287,
+      68.218548
+    ],
+    [
+      27.56012,
+      68.217281
+    ],
+    [
+      27.560009,
+      68.216442
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 91.0,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 16 meters, turn right",
+      "distance": 15.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 49 meters, turn left",
+      "distance": 48.6,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 523 meters, turn left onto Larkana Naudero Lakhi Highway",
+      "distance": 523.1,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Larkana Naudero Lakhi Highway"
+    },
+    {
+      "text": "In 86 meters, keep slight right at the fork onto لاڑکانہ - نوڈیرو - لاکھی روڈ",
+      "distance": 85.9,
+      "type": "fork",
+      "modifier": "slight right",
+      "road": "لاڑکانہ - نوڈیرو - لاکھی روڈ"
+    },
+    {
+      "text": "In 208 meters, turn left",
+      "distance": 208.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 115 meters, turn right onto Shah Nawaz Bhutto Road",
+      "distance": 114.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Shah Nawaz Bhutto Road"
+    },
+    {
+      "text": "In 210 meters, turn left onto Akil Road",
+      "distance": 210.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Akil Road"
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": "Akil Road"
+    }
+  ]
+}

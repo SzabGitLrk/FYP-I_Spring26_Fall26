@@ -1,0 +1,80 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "Ajwa Super Mart",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.56084195714555,
+    68.19810485192967
+  ],
+  "distance_meters": 354,
+  "duration_seconds": 49,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559913,
+      68.195817
+    ],
+    [
+      27.55988,
+      68.196454
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.560259,
+      68.197263
+    ],
+    [
+      27.560836,
+      68.197291
+    ],
+    [
+      27.560833,
+      68.197378
+    ],
+    [
+      27.560806,
+      68.198103
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 164.8,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 109 meters, turn left",
+      "distance": 109.0,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 80 meters, turn right",
+      "distance": 80.2,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": ""
+    }
+  ]
+}

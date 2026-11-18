@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import '../services/alert_service.dart';
 import '../models/alert_model.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_widgets.dart';
 import 'home_screen.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
 
   @override
-  State<AlertsScreen> createState() => _AlertsScreenState();
+  State<AlertsScreen> createState() => AlertsScreenState();
 }
 
-class _AlertsScreenState extends State<AlertsScreen> {
+// Public so HomeScreen can trigger a reload when this tab becomes visible.
+class AlertsScreenState extends State<AlertsScreen> {
   final AlertService _alertService = AlertService();
   List<AlertModel> _alerts = [];
   bool _isLoading = true;
@@ -18,10 +21,11 @@ class _AlertsScreenState extends State<AlertsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAlerts();
+    reload();
   }
 
-  Future<void> _loadAlerts() async {
+  /// Public reload — called on init and whenever the Alerts tab is opened.
+  Future<void> reload() async {
     final alerts = await _alertService.getAlerts();
     if (!mounted) return;
     setState(() {
@@ -30,8 +34,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     });
   }
 
-  /// This screen is embedded as a tab inside HomeScreen, so Navigator.pop
-  /// has nothing to pop. Switch back to tab 0 (Home) instead.
   void _goBackToHome() {
     final homeState = context.findAncestorStateOfType<HomeScreenState>();
     if (homeState != null) {
@@ -45,23 +47,23 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E2436),
-        title: const Text(
-          "Clear All Alerts",
-          style: TextStyle(color: Colors.white),
-        ),
+        backgroundColor: AppColors.surfaceLight,
+        title: const Text("Clear All Alerts",
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           "Are you sure you want to delete all alerts?",
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel",
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Clear", style: TextStyle(color: Colors.red)),
+            child: const Text("Clear",
+                style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -69,7 +71,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
     if (confirmed == true) {
       await _alertService.clearAlerts();
-      await _loadAlerts();
+      await reload();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("All alerts cleared")),
@@ -79,25 +81,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
   Future<void> _deleteAlert(String id) async {
     await _alertService.deleteAlert(id);
-    await _loadAlerts();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Alert deleted")),
-    );
+    await reload();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1E),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text(
-          "Alert History",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF0A0F1E),
-        elevation: 0,
-        centerTitle: true,
+        title: const Text("Alert History"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: _goBackToHome,
@@ -105,7 +97,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
         actions: [
           if (_alerts.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_sweep, color: Colors.red),
+              icon: const Icon(Icons.delete_sweep_rounded,
+                  color: AppColors.danger),
               onPressed: _clearAlerts,
               tooltip: "Clear all",
             ),
@@ -114,161 +107,92 @@ class _AlertsScreenState extends State<AlertsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _alerts.isEmpty
-              ? _buildEmptyState()
-              : _buildAlertsList(),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: const BoxDecoration(
-              color: Color(0xFF121A2F),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.notifications_none,
-              size: 40,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            "No Alerts Yet",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            "When obstacles are detected,\nthey will appear here.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAlertsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _alerts.length,
-      itemBuilder: (context, index) {
-        final alert = _alerts[index];
-        return Dismissible(
-          key: Key(alert.id),
-          direction: DismissDirection.endToStart,
-          background: _buildDismissBackground(),
-          onDismissed: (direction) => _deleteAlert(alert.id),
-          child: _buildAlertCard(alert),
-        );
-      },
-    );
-  }
-
-  Widget _buildDismissBackground() {
-    return Container(
-      alignment: Alignment.centerRight,
-      padding: const EdgeInsets.only(right: 20),
-      decoration: BoxDecoration(
-        color: Colors.red,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Icon(Icons.delete, color: Colors.white),
+              ? const AppEmptyState(
+                  icon: Icons.notifications_none_rounded,
+                  title: "No Alerts Yet",
+                  subtitle:
+                      "When obstacles are detected, they will appear here.",
+                )
+              : RefreshIndicator(
+                  onRefresh: reload,
+                  color: AppColors.primary,
+                  backgroundColor: AppColors.surface,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    itemCount: _alerts.length,
+                    itemBuilder: (context, index) {
+                      final alert = _alerts[index];
+                      return Dismissible(
+                        key: Key(alert.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: const Icon(Icons.delete_rounded,
+                              color: Colors.white),
+                        ),
+                        onDismissed: (_) => _deleteAlert(alert.id),
+                        child: _buildAlertCard(alert),
+                      );
+                    },
+                  ),
+                ),
     );
   }
 
   Widget _buildAlertCard(AlertModel alert) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF121A2F),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          // Icon Container
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: alert.color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Center(
-              child: Text(
-                alert.icon,
-                style: const TextStyle(fontSize: 24),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: AppCard(
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: alert.color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Center(
+                child: Text(alert.icon, style: const TextStyle(fontSize: 22)),
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          // Content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  alert.message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    alert.message,
+                    style: AppText.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 12,
-                      color: Colors.grey[500],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      alert.timestamp,
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 11,
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded,
+                          size: 12, color: AppColors.textMuted),
+                      const SizedBox(width: 4),
+                      Text(alert.timestamp, style: AppText.label),
+                      const SizedBox(width: 10),
+                      AppStatusPill(
+                        text: alert.type.toUpperCase(),
+                        color: alert.color,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: alert.color.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        alert.type.toUpperCase(),
-                        style: TextStyle(
-                          color: alert.color,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          // Chevron
-          Icon(Icons.chevron_right, color: Colors.grey[600]),
-        ],
+          ],
+        ),
       ),
     );
   }

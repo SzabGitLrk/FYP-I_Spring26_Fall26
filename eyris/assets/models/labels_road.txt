@@ -1,0 +1,20 @@
+person
+car
+motorcycle
+bicycle
+truck
+bus
+pothole
+tree
+pole
+traffic sign
+chair
+table
+door
+stairs
+bed
+sofa
+bottle
+dustbin
+bag
+laptop

@@ -1,0 +1,170 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Old Lahori Muhalla",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.56030889132802,
+    68.20968140428168
+  ],
+  "distance_meters": 1510,
+  "duration_seconds": 141.5,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.558754,
+      68.200244
+    ],
+    [
+      27.558693,
+      68.20026
+    ],
+    [
+      27.558693,
+      68.200276
+    ],
+    [
+      27.558681,
+      68.200293
+    ],
+    [
+      27.558656,
+      68.200317
+    ],
+    [
+      27.557844,
+      68.200832
+    ],
+    [
+      27.558328,
+      68.201628
+    ],
+    [
+      27.558919,
+      68.202672
+    ],
+    [
+      27.559478,
+      68.203686
+    ],
+    [
+      27.55966,
+      68.204017
+    ],
+    [
+      27.559787,
+      68.204255
+    ],
+    [
+      27.55987,
+      68.204414
+    ],
+    [
+      27.55989,
+      68.204593
+    ],
+    [
+      27.559901,
+      68.204629
+    ],
+    [
+      27.560116,
+      68.205046
+    ],
+    [
+      27.560819,
+      68.206337
+    ],
+    [
+      27.561123,
+      68.206935
+    ],
+    [
+      27.561289,
+      68.207322
+    ],
+    [
+      27.561624,
+      68.20801
+    ],
+    [
+      27.561755,
+      68.208261
+    ],
+    [
+      27.561979,
+      68.208686
+    ],
+    [
+      27.562149,
+      68.208995
+    ],
+    [
+      27.560787,
+      68.20982
+    ],
+    [
+      27.560475,
+      68.210016
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 127 meters, turn right onto Shah Nawaz Road",
+      "distance": 126.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 419 meters, turn left onto Allama Mashriqi Road",
+      "distance": 419.0,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Allama Mashriqi Road"
+    },
+    {
+      "text": "Continue slight right for 520 meters onto Allama Mashriqi Road",
+      "distance": 519.7,
+      "type": "continue",
+      "modifier": "slight right",
+      "road": "Allama Mashriqi Road"
+    },
+    {
+      "text": "In 211 meters, turn right",
+      "distance": 211.1,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

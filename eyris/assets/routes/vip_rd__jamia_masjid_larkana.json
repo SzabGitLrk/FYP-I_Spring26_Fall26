@@ -1,0 +1,154 @@
+{
+  "origin": "VIP Rd",
+  "destination": "Jamia Masjid Larkana",
+  "kind": "inter-anchor",
+  "profile": "driving",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.5575,
+    68.2135
+  ],
+  "distance_meters": 1177.9,
+  "duration_seconds": 84,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.554058,
+      68.207467
+    ],
+    [
+      27.554292,
+      68.207616
+    ],
+    [
+      27.554523,
+      68.207775
+    ],
+    [
+      27.556042,
+      68.208823
+    ],
+    [
+      27.556322,
+      68.209013
+    ],
+    [
+      27.556564,
+      68.209144
+    ],
+    [
+      27.556945,
+      68.209246
+    ],
+    [
+      27.557001,
+      68.209259
+    ],
+    [
+      27.55771,
+      68.209405
+    ],
+    [
+      27.55809,
+      68.209483
+    ],
+    [
+      27.558081,
+      68.209543
+    ],
+    [
+      27.557697,
+      68.211128
+    ],
+    [
+      27.557683,
+      68.211182
+    ],
+    [
+      27.557466,
+      68.212047
+    ],
+    [
+      27.557347,
+      68.212474
+    ],
+    [
+      27.55729,
+      68.212699
+    ],
+    [
+      27.557258,
+      68.21282
+    ],
+    [
+      27.557145,
+      68.213338
+    ],
+    [
+      27.557509,
+      68.213451
+    ],
+    [
+      27.557497,
+      68.213499
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 232.6,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "Continue uturn for 504 meters onto وی آئی پی روڈ",
+      "distance": 503.6,
+      "type": "continue",
+      "modifier": "uturn",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 395 meters, turn right",
+      "distance": 394.9,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 42 meters, turn left",
+      "distance": 41.9,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 5 meters, turn right",
+      "distance": 4.9,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "",
+      "road": ""
+    }
+  ]
+}

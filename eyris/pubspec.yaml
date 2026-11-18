@@ -1,7 +1,7 @@
 name: eyris_app
 description: "EYRIS - AI Navigation System for Visually Impaired"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.6+12
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -36,7 +36,6 @@ dependencies:
   intl: ^0.19.0
 
   # DEVICE
-  battery_plus: ^4.0.0
   device_info_plus: ^9.1.1
   provider: ^6.1.1
 
@@ -52,6 +51,15 @@ flutter:
   assets:
     - assets/maps/pakistan.mbtiles
     - assets/places.json
+    - assets/images/
     - assets/routes/
-    - assets/models/labels.txt
-    - assets/models/yolov8n_float32.tflite
+    # Detection models (see lib/services/detection_models.dart). Each model
+    # ships with the list of its own class names, in the model's order.
+    - assets/models/eyris_scene.tflite
+    - assets/models/labels_scene.txt
+    - assets/models/eyris_world.tflite
+    - assets/models/labels_world.txt
+    - assets/models/eyris_road.tflite
+    - assets/models/labels_road.txt
+    - assets/models/eyris_hazard.tflite
+    - assets/models/labels_hazard.txt

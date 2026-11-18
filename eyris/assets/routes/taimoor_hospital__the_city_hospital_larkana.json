@@ -1,0 +1,95 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "The City Hospital Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.56026270454559,
+    68.19843608053752
+  ],
+  "distance_meters": 341.1,
+  "duration_seconds": 54,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559913,
+      68.195817
+    ],
+    [
+      27.55988,
+      68.196454
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.559854,
+      68.197339
+    ],
+    [
+      27.559789,
+      68.197333
+    ],
+    [
+      27.559755,
+      68.197971
+    ],
+    [
+      27.559716,
+      68.19803
+    ],
+    [
+      27.559685,
+      68.198294
+    ],
+    [
+      27.560268,
+      68.198325
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 164.8,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 15 meters",
+      "distance": 14.9,
+      "type": "end of road",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 97 meters, turn left onto Shah Nawaz Road",
+      "distance": 96.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 65 meters, turn left",
+      "distance": 64.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

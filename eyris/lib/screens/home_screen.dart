@@ -4,10 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import '../theme/app_theme.dart';
+import '../theme/app_widgets.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
 import 'camera_screen.dart';
-import 'battery_screen.dart';
 import 'alerts_screen.dart';
 import 'connect_screen.dart';
 import '../services/offline_place_service.dart';
@@ -19,28 +20,25 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-// Public (no underscore) so tab screens like BatteryScreen can find this state
-// via context.findAncestorStateOfType<HomeScreenState>() and call changeTab().
 class HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  // The camera starts the first time its tab is opened (so the camera
+  // hardware never starts before the user asks for it) and then stays alive.
+  bool _cameraOpened = false;
   String currentLocation = "Tap to get location";
 
-  // Voice command
   final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
+  bool isListening = false;
 
-  // Used to convert GPS coords into a known place name
   final OfflinePlaceService _placeService = OfflinePlaceService();
   bool _placesLoaded = false;
 
-  final List<Widget> _screens = [
-    const HomeContent(),
-    const MapScreen(),
-    const CameraScreen(),
-    const AlertsScreen(),
-    const BatteryScreen(),
-    const ConnectScreen(),
-  ];
+  // Key to reach the AlertsScreen state and reload it when its tab opens.
+  final GlobalKey<AlertsScreenState> _alertsKey =
+      GlobalKey<AlertsScreenState>();
+
+  // Built fresh in build() so HomeContent rebuilds when state changes
+  // (e.g. currentLocation updating). Do NOT cache as a const field.
 
   @override
   void initState() {
@@ -54,6 +52,9 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> getLocation() async {
+    if (!mounted) return;
+    setState(() => currentLocation = "Getting location...");
+
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (!mounted) return;
@@ -65,25 +66,26 @@ class HomeScreenState extends State<HomeScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    if (permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.deniedForever ||
+        permission == LocationPermission.denied) {
       if (!mounted) return;
       setState(() => currentLocation = "Location permission denied");
       return;
     }
 
-    const settings = LocationSettings(accuracy: LocationAccuracy.high);
-    final position =
-        await Geolocator.getCurrentPosition(locationSettings: settings);
-    if (!mounted) return;
-
-    setState(() =>
-        currentLocation = _formatLocation(position.latitude, position.longitude));
+    try {
+      const settings = LocationSettings(accuracy: LocationAccuracy.high);
+      final position =
+          await Geolocator.getCurrentPosition(locationSettings: settings);
+      if (!mounted) return;
+      setState(() => currentLocation =
+          _formatLocation(position.latitude, position.longitude));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => currentLocation = "Could not get location. Try again.");
+    }
   }
 
-  /// Resolves coordinates to a friendly name. Falls back to lat/lng.
-  ///   - "Near <place>" if a known place is within 1 km
-  ///   - "<origin_name> area" if an origin is within 50 km
-  ///   - "lat, lng" as final fallback
   String _formatLocation(double lat, double lng) {
     if (!_placesLoaded) {
       return "${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}";
@@ -126,6 +128,32 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surfaceLight,
+        title: const Text("Log out", style: TextStyle(color: Colors.white)),
+        content: const Text(
+          "Are you sure you want to log out?",
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel",
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Log out",
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('login', false);
     if (!mounted) return;
@@ -149,36 +177,40 @@ class HomeScreenState extends State<HomeScreen> {
           } else if (command.contains("camera")) {
             changeTab(2);
             _showMessage("Opening camera");
-          } else if (command.contains("battery")) {
-            changeTab(4);
-            _showMessage("Opening battery status");
           } else if (command.contains("alerts") ||
               command.contains("history")) {
             changeTab(3);
             _showMessage("Opening alert history");
           } else if (command.contains("connect") ||
               command.contains("glasses")) {
-            changeTab(5);
+            changeTab(4);
             _showMessage("Opening device connection");
           } else if (command.contains("home")) {
             changeTab(0);
             _showMessage("Going home");
           } else {
-            _showMessage("Say Navigation, Camera, Battery, Alerts, or Connect");
+            _showMessage("Say Navigation, Camera, Alerts, or Connect");
           }
-          setState(() => _isListening = false);
+          setState(() => isListening = false);
         },
         listenFor: const Duration(seconds: 3),
       );
-      setState(() => _isListening = true);
+      setState(() => isListening = true);
     } else {
       _showMessage("Speech recognition not available");
     }
   }
 
-  /// Public method so other tab screens can switch tabs.
   void changeTab(int index) {
-    setState(() => _currentIndex = index);
+    setState(() {
+      _currentIndex = index;
+      if (index == 2) _cameraOpened = true;
+    });
+    // Reload alerts each time the Alerts tab (index 3) is opened,
+    // so newly-saved alerts from the camera appear immediately.
+    if (index == 3) {
+      _alertsKey.currentState?.reload();
+    }
   }
 
   void _showMessage(String text) {
@@ -189,186 +221,228 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1E),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: logout,
-            icon: const Icon(Icons.logout, color: Colors.white),
-          ),
-        ],
+    // Navigation and the camera are separate pages, but both stay alive in
+    // this IndexedStack: route directions keep being spoken while the camera
+    // page is open, and the camera keeps watching for obstacles while the
+    // map page is open. (Their voices share one speaker, see SpeechHub.)
+    final screens = [
+      HomeContent(
+        currentLocation: currentLocation,
+        isListening: isListening,
       ),
-      body: _screens[_currentIndex],
+      const MapScreen(),
+      _cameraOpened ? const CameraScreen() : const SizedBox.shrink(),
+      AlertsScreen(key: _alertsKey),
+      const ConnectScreen(),
+    ];
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: screens,
+      ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: const BoxDecoration(
-          color: Color(0xFF121A2F),
-          border: Border(top: BorderSide(color: Colors.white10)),
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.surfaceBorder)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _navItem(Icons.home, "Home", 0),
-            _navItem(Icons.navigation, "Navigate", 1),
-            _navItem(Icons.camera_alt, "Camera", 2),
-            _navItem(Icons.notifications, "Alerts", 3),
-            _navItem(Icons.battery_full, "Battery", 4),
-            _navItem(Icons.wifi, "Connect", 5),
-          ],
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _navItem(Icons.home_rounded, "Home", 0),
+              _navItem(Icons.navigation_rounded, "Navigate", 1),
+              _navItem(Icons.camera_alt_rounded, "Camera", 2),
+              _navItem(Icons.notifications_rounded, "Alerts", 3),
+              _navItem(Icons.wifi_rounded, "Connect", 4),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _navItem(IconData icon, String label, int index) {
+    final selected = _currentIndex == index;
     return GestureDetector(
       onTap: () => changeTab(index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: _currentIndex == index ? Colors.blue : Colors.grey),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: _currentIndex == index ? Colors.blue : Colors.grey,
-              fontSize: 11,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: selected ? AppColors.primary : AppColors.textMuted,
+              size: selected ? 26 : 24,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? AppColors.primary : AppColors.textMuted,
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Home Content with Voice Command Button
+// ---------------- Home tab content ----------------
+
 class HomeContent extends StatelessWidget {
-  const HomeContent({super.key});
+  final String currentLocation;
+  final bool isListening;
+
+  const HomeContent({
+    super.key,
+    required this.currentLocation,
+    required this.isListening,
+  });
 
   @override
   Widget build(BuildContext context) {
     final homeState = context.findAncestorStateOfType<HomeScreenState>();
     return SafeArea(
       child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              const CircleAvatar(
-                radius: 40,
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.wifi, color: Colors.white, size: 30),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "EYRIS",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text("Welcome to", style: AppText.bodySecondary),
+                    Text("EYRIS", style: AppText.display),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 30),
+                IconButton(
+                  onPressed: () => homeState?.logout(),
+                  icon: const Icon(Icons.logout_rounded,
+                      color: AppColors.textSecondary),
+                  tooltip: "Log out",
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xl),
 
-              // Location Card
-              GestureDetector(
-                onTap: () => homeState?.getLocation(),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF121A2F),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white10),
+            const Center(child: EyrisLogo(size: 150, emblemOnly: true)),
+            const SizedBox(height: AppSpacing.sm),
+            const Center(
+              child: Text("AI Navigation Assistant",
+                  style: AppText.bodySecondary),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            AppCard(
+              onTap: () => homeState?.getLocation(),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: AppDecorations.pill(AppColors.primary),
+                    child: const Icon(Icons.location_on_rounded,
+                        color: AppColors.primary),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Colors.blue),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Current Location",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              homeState?.currentLocation ??
-                                  "Tap to get location",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Current Location", style: AppText.label),
+                        const SizedBox(height: 4),
+                        Text(
+                          currentLocation,
+                          style: AppText.body,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // Start Navigation Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
+                      ],
                     ),
                   ),
-                  onPressed: () => homeState?.changeTab(1),
-                  child: const Text(
-                    "Start Navigation",
-                    style: TextStyle(fontSize: 18, color: Colors.white),
-                  ),
-                ),
+                  const Icon(Icons.refresh_rounded,
+                      color: AppColors.textMuted, size: 20),
+                ],
               ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
 
-              const SizedBox(height: 15),
+            AppPrimaryButton(
+              label: "Start Navigation",
+              icon: Icons.navigation_rounded,
+              onPressed: () => homeState?.changeTab(1),
+            ),
+            const SizedBox(height: AppSpacing.md),
 
-              // Voice Command Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  onPressed: () => homeState?.startVoiceCommand(),
-                  icon: Icon(
-                    homeState?._isListening == true
-                        ? Icons.mic
-                        : Icons.mic_none,
-                    color: Colors.white,
-                  ),
-                  label: Text(
-                    homeState?._isListening == true
-                        ? "Listening..."
-                        : "Voice Command",
-                    style: const TextStyle(fontSize: 18, color: Colors.white),
-                  ),
-                ),
-              ),
+            AppSecondaryButton(
+              label: isListening ? "Listening..." : "Voice Command",
+              icon: isListening
+                  ? Icons.mic_rounded
+                  : Icons.mic_none_rounded,
+              color: AppColors.accent,
+              onPressed: () => homeState?.startVoiceCommand(),
+            ),
+            const SizedBox(height: AppSpacing.xl),
 
-              const SizedBox(height: 20),
-            ],
-          ),
+            const AppSectionHeader(title: "Quick Access"),
+            const SizedBox(height: AppSpacing.sm),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: AppSpacing.md,
+              crossAxisSpacing: AppSpacing.md,
+              childAspectRatio: 2.1,
+              children: [
+                _quickTile(homeState, Icons.camera_alt_rounded, "Camera",
+                    AppColors.info, 2),
+                _quickTile(homeState, Icons.notifications_rounded, "Alerts",
+                    AppColors.warning, 3),
+                _quickTile(homeState, Icons.wifi_rounded, "Connect",
+                    AppColors.accent, 4),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _quickTile(HomeScreenState? state, IconData icon, String label,
+      Color color, int tabIndex) {
+    return AppCard(
+      onTap: () => state?.changeTab(tabIndex),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: AppDecorations.pill(color),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              label,
+              style: AppText.subheading,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

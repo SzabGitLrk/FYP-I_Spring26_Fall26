@@ -1,0 +1,185 @@
+{
+  "origin": "Resham Gali",
+  "destination": "Sabzi mandi 02, Larkana, Pakistan",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.554647425601672,
+    68.21787572099693
+  ],
+  "to_coords": [
+    27.558147345649747,
+    68.22147064983226
+  ],
+  "distance_meters": 824.9,
+  "duration_seconds": 86.1,
+  "polyline": [
+    [
+      27.554376,
+      68.218434
+    ],
+    [
+      27.55379,
+      68.218551
+    ],
+    [
+      27.553716,
+      68.218791
+    ],
+    [
+      27.553587,
+      68.218729
+    ],
+    [
+      27.553419,
+      68.219184
+    ],
+    [
+      27.553579,
+      68.219397
+    ],
+    [
+      27.55375,
+      68.219549
+    ],
+    [
+      27.553934,
+      68.219694
+    ],
+    [
+      27.554023,
+      68.219764
+    ],
+    [
+      27.554163,
+      68.219875
+    ],
+    [
+      27.5543,
+      68.219983
+    ],
+    [
+      27.55468,
+      68.220238
+    ],
+    [
+      27.554927,
+      68.220403
+    ],
+    [
+      27.555082,
+      68.220495
+    ],
+    [
+      27.555148,
+      68.220534
+    ],
+    [
+      27.555412,
+      68.220648
+    ],
+    [
+      27.555642,
+      68.220748
+    ],
+    [
+      27.556153,
+      68.220838
+    ],
+    [
+      27.556254,
+      68.220856
+    ],
+    [
+      27.556575,
+      68.220852
+    ],
+    [
+      27.556952,
+      68.220788
+    ],
+    [
+      27.557159,
+      68.220693
+    ],
+    [
+      27.557574,
+      68.220329
+    ],
+    [
+      27.557671,
+      68.220329
+    ],
+    [
+      27.557793,
+      68.220358
+    ],
+    [
+      27.557771,
+      68.220833
+    ],
+    [
+      27.557855,
+      68.221136
+    ],
+    [
+      27.557967,
+      68.221359
+    ],
+    [
+      27.558047,
+      68.221517
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 91.0,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 16 meters, turn right",
+      "distance": 15.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 49 meters, turn left",
+      "distance": 48.6,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 523 meters, turn left onto Larkana Naudero Lakhi Highway",
+      "distance": 523.1,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Larkana Naudero Lakhi Highway"
+    },
+    {
+      "text": "In 25 meters, keep slight right at the fork onto لاڑکانہ - نوڈیرو - لاکھی روڈ",
+      "distance": 24.6,
+      "type": "fork",
+      "modifier": "slight right",
+      "road": "لاڑکانہ - نوڈیرو - لاکھی روڈ"
+    },
+    {
+      "text": "In 122 meters, turn right",
+      "distance": 122.0,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

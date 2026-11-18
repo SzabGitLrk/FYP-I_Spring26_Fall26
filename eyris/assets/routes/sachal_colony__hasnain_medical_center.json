@@ -1,0 +1,68 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Hasnain medical center",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.55818584190271,
+    68.19805878871492
+  ],
+  "distance_meters": 217.9,
+  "duration_seconds": 42,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558185,
+      68.197268
+    ],
+    [
+      27.558136,
+      68.198055
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 55.5,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 85 meters, turn left",
+      "distance": 84.5,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 78 meters, turn left",
+      "distance": 77.9,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

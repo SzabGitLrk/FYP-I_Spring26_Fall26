@@ -1,23 +1,32 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/alerts_screen.dart';   // ✅ Import AlertsScreen for navigation
-import 'package:flutter/services.dart';
+import 'screens/alerts_screen.dart';
+import 'services/camera_route_observer.dart';
 
+void main() {
+  // Both ensureInitialized AND runApp must run in the SAME zone, otherwise
+  // BindingBase.debugCheckZone throws "Zone mismatch" (seen on Pixel 7a).
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  final prefs = await SharedPreferences.getInstance();
-  final isLoggedIn = prefs.getBool('login') ?? false;
-  
-  runApp(EyrisApp(isLoggedIn: isLoggedIn));
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('login') ?? false;
+    runApp(EyrisApp(isLoggedIn: isLoggedIn));
+  }, (error, stack) {
+    debugPrint('[Global] Unhandled exception: $error');
+    debugPrint('[Global] Stack: $stack');
+    // Silently log to prevent crashes from propagating
+  });
 }
 
 class EyrisApp extends StatelessWidget {
   final bool isLoggedIn;
-  
+
   const EyrisApp({super.key, required this.isLoggedIn});
 
   @override
@@ -25,34 +34,12 @@ class EyrisApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'EYRIS',
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF0A0F1E),
-        useMaterial3: true,
-      ),
+      navigatorObservers: [cameraRouteObserver],
+      theme: AppTheme.dark,
       home: isLoggedIn ? const HomeScreen() : const LoginScreen(),
-      // ✅ Optional: Named routes for direct navigation
       routes: {
         '/alerts': (context) => const AlertsScreen(),
       },
     );
-  }
-}
-
-class GraphService {
-  static const platform = MethodChannel('graphhopper_channel');
-
-  static Future initGraph() async {
-    return await platform.invokeMethod("initGraph");
-  }
-
-  static Future<List> getRoute() async {
-    final result = await platform.invokeMethod("getRoute", {
-      "startLat": 24.8607,
-      "startLng": 67.0011,
-      "endLat": 24.8820,
-      "endLng": 67.0670,
-    });
-
-    return result;
   }
 }

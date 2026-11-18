@@ -3,13 +3,13 @@ import 'dart:io';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 
-/// Generates routes:
-///   - Intra-city: origin → place (city inferred from nearest origin if missing)
-///   - Inter-anchor: origin → other origin
-///   - Origin → city_landmark
-///
-/// File naming: <origin_slug>__<dest_slug>.json
-/// Run: dart run scripts/generate_routes.dart
+// Generates routes:
+//   - Intra-city: origin → place (city inferred from nearest origin if missing)
+//   - Inter-anchor: origin → other origin
+//   - Origin → city_landmark
+//
+// File naming: <origin_slug>__<dest_slug>.json
+// Run: dart run scripts/generate_routes.dart
 void main() async {
   final placesFile = File('assets/places.json');
   if (!placesFile.existsSync()) {

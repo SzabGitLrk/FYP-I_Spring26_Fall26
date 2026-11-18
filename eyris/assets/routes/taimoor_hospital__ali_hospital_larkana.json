@@ -1,0 +1,151 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "Ali Hospital Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.5639917652328,
+    68.19883347043249
+  ],
+  "distance_meters": 1289.2,
+  "duration_seconds": 106.9,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559913,
+      68.195817
+    ],
+    [
+      27.55988,
+      68.196454
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.560259,
+      68.197263
+    ],
+    [
+      27.560836,
+      68.197291
+    ],
+    [
+      27.5617,
+      68.197318
+    ],
+    [
+      27.562014,
+      68.19732
+    ],
+    [
+      27.562647,
+      68.197352
+    ],
+    [
+      27.563187,
+      68.197377
+    ],
+    [
+      27.563248,
+      68.197379
+    ],
+    [
+      27.563969,
+      68.197366
+    ],
+    [
+      27.564089,
+      68.197368
+    ],
+    [
+      27.564159,
+      68.197368
+    ],
+    [
+      27.564169,
+      68.19749
+    ],
+    [
+      27.564213,
+      68.198149
+    ],
+    [
+      27.564346,
+      68.199855
+    ],
+    [
+      27.564436,
+      68.200998
+    ],
+    [
+      27.56445,
+      68.201215
+    ],
+    [
+      27.564448,
+      68.201348
+    ],
+    [
+      27.564405,
+      68.201232
+    ],
+    [
+      27.564379,
+      68.200994
+    ],
+    [
+      27.564294,
+      68.199847
+    ],
+    [
+      27.564206,
+      68.19881
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 164.8,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 470 meters, turn left",
+      "distance": 469.6,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 402 meters, turn right",
+      "distance": 402.1,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 253 meters, turn sharp right",
+      "distance": 252.6,
+      "type": "turn",
+      "modifier": "sharp right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

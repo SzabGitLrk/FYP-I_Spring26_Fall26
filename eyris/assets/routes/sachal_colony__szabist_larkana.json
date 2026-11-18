@@ -1,0 +1,126 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "SZABIST Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.560981946211456,
+    68.19515865767235
+  ],
+  "distance_meters": 543.9,
+  "duration_seconds": 89.4,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558555,
+      68.197216
+    ],
+    [
+      27.558942,
+      68.197228
+    ],
+    [
+      27.559341,
+      68.197241
+    ],
+    [
+      27.559545,
+      68.197247
+    ],
+    [
+      27.559637,
+      68.19725
+    ],
+    [
+      27.559709,
+      68.197252
+    ],
+    [
+      27.559794,
+      68.19726
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.560259,
+      68.197263
+    ],
+    [
+      27.560287,
+      68.196755
+    ],
+    [
+      27.560354,
+      68.195441
+    ],
+    [
+      27.560913,
+      68.195458
+    ],
+    [
+      27.560975,
+      68.19546
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 55.5,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 44 meters, turn left",
+      "distance": 43.9,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "Continue uturn for 195 meters",
+      "distance": 195.4,
+      "type": "continue",
+      "modifier": "uturn",
+      "road": ""
+    },
+    {
+      "text": "In 180 meters, turn left",
+      "distance": 180.2,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 69 meters, turn right",
+      "distance": 68.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

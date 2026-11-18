@@ -1,0 +1,35 @@
+person
+car
+motorcycle
+bicycle
+truck
+bus
+tree
+pole
+traffic light
+chair
+table
+door
+stairs
+wall
+bed
+sofa
+bottle
+dustbin
+bag
+laptop
+footpath
+air conditioner
+fan
+floor
+ceiling
+window
+railing
+road
+cabinet
+curtain
+signboard
+building
+plant
+column
+fence

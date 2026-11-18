@@ -1,0 +1,61 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "SZABIST Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.560981946211456,
+    68.19515865767235
+  ],
+  "distance_meters": 132.5,
+  "duration_seconds": 21,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559932,
+      68.195423
+    ],
+    [
+      27.560354,
+      68.195441
+    ],
+    [
+      27.560913,
+      68.195458
+    ],
+    [
+      27.560975,
+      68.19546
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 16.9,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 116 meters, turn right",
+      "distance": 115.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

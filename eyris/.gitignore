@@ -11,11 +11,6 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-*.bak
-*.orig
 
 # IntelliJ related
 *.iml
@@ -23,20 +18,20 @@ Desktop.ini
 *.iws
 .idea/
 
-# VS Code (uncomment if you don't want to share VS Code config)
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
 #.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
-.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
 /coverage/
-build/
 
 # Symbolication related
 app.*.symbols
@@ -44,19 +39,7 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio build artifacts
+# Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
-android/.gradle/
-android/local.properties
-android/key.properties
-
-# iOS (not targeting iOS)
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework/
-ios/Flutter/Flutter.podspec
-
-# Large generated files - EYRIS specific
-assets/maps/*.mbtiles

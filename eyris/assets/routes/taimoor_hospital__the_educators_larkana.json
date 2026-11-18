@@ -1,0 +1,75 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "The Educators Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.56071043509395,
+    68.1947562516789
+  ],
+  "distance_meters": 199.7,
+  "duration_seconds": 37.8,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559932,
+      68.195423
+    ],
+    [
+      27.560354,
+      68.195441
+    ],
+    [
+      27.560408,
+      68.194417
+    ],
+    [
+      27.560721,
+      68.194431
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 16.9,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 47 meters, turn right",
+      "distance": 46.8,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 101 meters, turn left",
+      "distance": 101.3,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 35 meters, turn right",
+      "distance": 34.7,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

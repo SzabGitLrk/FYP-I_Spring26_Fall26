@@ -1,0 +1,76 @@
+{
+  "origin": "VIP Rd",
+  "destination": "Govt. Pilot Higher Secondary School Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.55578913530727,
+    68.20881156148
+  ],
+  "to_coords": [
+    27.555776210256095,
+    68.2073443862017
+  ],
+  "distance_meters": 411.3,
+  "duration_seconds": 42.8,
+  "polyline": [
+    [
+      27.55582,
+      68.208755
+    ],
+    [
+      27.554244,
+      68.207678
+    ],
+    [
+      27.554024,
+      68.207535
+    ],
+    [
+      27.554058,
+      68.207467
+    ],
+    [
+      27.554292,
+      68.207616
+    ],
+    [
+      27.554523,
+      68.207775
+    ],
+    [
+      27.555063,
+      68.206827
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left onto وی آئی پی روڈ",
+      "distance": 232.6,
+      "type": "depart",
+      "modifier": "left",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "Continue uturn for 68 meters onto وی آئی پی روڈ",
+      "distance": 67.5,
+      "type": "continue",
+      "modifier": "uturn",
+      "road": "وی آئی پی روڈ"
+    },
+    {
+      "text": "In 111 meters, turn left",
+      "distance": 111.1,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}

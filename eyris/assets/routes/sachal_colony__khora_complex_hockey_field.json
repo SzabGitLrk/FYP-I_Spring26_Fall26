@@ -1,0 +1,92 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "Khora Complex Hockey Field",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.556843971667114,
+    68.19676026757435
+  ],
+  "distance_meters": 316.4,
+  "duration_seconds": 53,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558185,
+      68.197268
+    ],
+    [
+      27.558083,
+      68.197264
+    ],
+    [
+      27.557782,
+      68.197253
+    ],
+    [
+      27.557642,
+      68.197247
+    ],
+    [
+      27.557384,
+      68.197238
+    ],
+    [
+      27.557005,
+      68.197223
+    ],
+    [
+      27.557005,
+      68.197167
+    ],
+    [
+      27.557009,
+      68.196762
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 55.5,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 215 meters, turn left",
+      "distance": 215.3,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 46 meters",
+      "distance": 45.5,
+      "type": "end of road",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

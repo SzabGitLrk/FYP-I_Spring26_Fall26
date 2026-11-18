@@ -1,0 +1,104 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "Hasnain medical center",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.55818584190271,
+    68.19805878871492
+  ],
+  "distance_meters": 435.5,
+  "duration_seconds": 69.1,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559913,
+      68.195817
+    ],
+    [
+      27.55988,
+      68.196454
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.559854,
+      68.197339
+    ],
+    [
+      27.559789,
+      68.197333
+    ],
+    [
+      27.559709,
+      68.197326
+    ],
+    [
+      27.559628,
+      68.197323
+    ],
+    [
+      27.559535,
+      68.197319
+    ],
+    [
+      27.559336,
+      68.197312
+    ],
+    [
+      27.558947,
+      68.197297
+    ],
+    [
+      27.558551,
+      68.197282
+    ],
+    [
+      27.558185,
+      68.197268
+    ],
+    [
+      27.558136,
+      68.198055
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 164.8,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 193 meters",
+      "distance": 192.8,
+      "type": "end of road",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 78 meters, turn left",
+      "distance": 77.9,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "left",
+      "road": ""
+    }
+  ]
+}

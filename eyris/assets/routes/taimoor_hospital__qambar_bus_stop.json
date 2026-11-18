@@ -1,0 +1,185 @@
+{
+  "origin": "Taimoor Hospital",
+  "destination": "Qambar Bus Stop",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.559867356180902,
+    68.19559105103237
+  ],
+  "to_coords": [
+    27.56470509201787,
+    68.20251346091148
+  ],
+  "distance_meters": 1367.2,
+  "duration_seconds": 126.4,
+  "polyline": [
+    [
+      27.559924,
+      68.195594
+    ],
+    [
+      27.559913,
+      68.195817
+    ],
+    [
+      27.55988,
+      68.196454
+    ],
+    [
+      27.559853,
+      68.197261
+    ],
+    [
+      27.560259,
+      68.197263
+    ],
+    [
+      27.560836,
+      68.197291
+    ],
+    [
+      27.5617,
+      68.197318
+    ],
+    [
+      27.562014,
+      68.19732
+    ],
+    [
+      27.562647,
+      68.197352
+    ],
+    [
+      27.563187,
+      68.197377
+    ],
+    [
+      27.563248,
+      68.197379
+    ],
+    [
+      27.563969,
+      68.197366
+    ],
+    [
+      27.564089,
+      68.197368
+    ],
+    [
+      27.564159,
+      68.197368
+    ],
+    [
+      27.564169,
+      68.19749
+    ],
+    [
+      27.564213,
+      68.198149
+    ],
+    [
+      27.564346,
+      68.199855
+    ],
+    [
+      27.564436,
+      68.200998
+    ],
+    [
+      27.56445,
+      68.201215
+    ],
+    [
+      27.564448,
+      68.201348
+    ],
+    [
+      27.564478,
+      68.201519
+    ],
+    [
+      27.564513,
+      68.201601
+    ],
+    [
+      27.564626,
+      68.201749
+    ],
+    [
+      27.564179,
+      68.202439
+    ],
+    [
+      27.564161,
+      68.20247
+    ],
+    [
+      27.56396,
+      68.202799
+    ],
+    [
+      27.563848,
+      68.202956
+    ],
+    [
+      27.564343,
+      68.20337
+    ],
+    [
+      27.564715,
+      68.202801
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading right",
+      "distance": 164.8,
+      "type": "depart",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "In 470 meters, turn left",
+      "distance": 469.6,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 448 meters, turn right",
+      "distance": 447.6,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "Continue right for 147 meters onto Qambar Road",
+      "distance": 147.1,
+      "type": "end of road",
+      "modifier": "right",
+      "road": "Qambar Road"
+    },
+    {
+      "text": "In 68 meters, turn left",
+      "distance": 68.4,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 70 meters, turn left",
+      "distance": 69.7,
+      "type": "turn",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "straight",
+      "road": ""
+    }
+  ]
+}

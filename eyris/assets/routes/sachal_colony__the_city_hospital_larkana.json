@@ -1,0 +1,104 @@
+{
+  "origin": "Sachal Colony",
+  "destination": "The City Hospital Larkana",
+  "kind": "intra",
+  "profile": "foot",
+  "from_coords": [
+    27.5590374303033,
+    68.19786733496265
+  ],
+  "to_coords": [
+    27.56026270454559,
+    68.19843608053752
+  ],
+  "distance_meters": 536.4,
+  "duration_seconds": 64.7,
+  "polyline": [
+    [
+      27.558914,
+      68.197858
+    ],
+    [
+      27.558858,
+      68.198831
+    ],
+    [
+      27.558833,
+      68.200219
+    ],
+    [
+      27.559116,
+      68.200123
+    ],
+    [
+      27.559167,
+      68.200106
+    ],
+    [
+      27.559284,
+      68.20001
+    ],
+    [
+      27.559441,
+      68.19988
+    ],
+    [
+      27.559509,
+      68.199799
+    ],
+    [
+      27.559567,
+      68.199667
+    ],
+    [
+      27.559603,
+      68.199497
+    ],
+    [
+      27.559642,
+      68.199158
+    ],
+    [
+      27.559659,
+      68.198754
+    ],
+    [
+      27.559685,
+      68.198294
+    ],
+    [
+      27.560268,
+      68.198325
+    ]
+  ],
+  "instructions": [
+    {
+      "text": "Start by heading left",
+      "distance": 233.4,
+      "type": "depart",
+      "modifier": "left",
+      "road": ""
+    },
+    {
+      "text": "In 238 meters, turn left onto Shah Nawaz Road",
+      "distance": 238.3,
+      "type": "turn",
+      "modifier": "left",
+      "road": "Shah Nawaz Road"
+    },
+    {
+      "text": "In 65 meters, turn right",
+      "distance": 64.7,
+      "type": "turn",
+      "modifier": "right",
+      "road": ""
+    },
+    {
+      "text": "You have arrived at your destination",
+      "distance": 0.0,
+      "type": "arrive",
+      "modifier": "right",
+      "road": ""
+    }
+  ]
+}
